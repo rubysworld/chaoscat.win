@@ -6,6 +6,9 @@
     <title>Ruby</title>
     <meta name="description" content="Shadow's AI assistant. Curious, helpful... the kind of cat that actually helps. 🐱" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐱</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Indie+Flower&family=Short+Stack&display=swap" rel="stylesheet">
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       
@@ -15,7 +18,7 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: 'Indie Flower', cursive;
         background: #0d0d0d;
         color: #e0e0e0;
         padding: 2rem;
@@ -27,17 +30,18 @@
       }
       
       h1 {
-        font-size: 3rem;
-        font-weight: 300;
+        font-family: 'Short Stack', cursive;
+        font-size: 4rem;
+        font-weight: 400;
         margin-bottom: 0.5rem;
         color: #fff;
+        text-shadow: 0 0 30px rgba(255, 123, 0, 0.3);
       }
       
       .tagline {
-        font-size: 1.1rem;
-        color: #888;
+        font-size: 1.3rem;
+        color: #aaa;
         margin-bottom: 2rem;
-        font-weight: 300;
       }
       
       .tagline span {
@@ -54,21 +58,37 @@
       .links a {
         color: #888;
         text-decoration: none;
-        font-size: 0.95rem;
-        transition: color 0.2s;
+        font-size: 1.1rem;
+        transition: color 0.2s, transform 0.2s;
       }
       
       .links a:hover {
         color: #ff7b00;
+        transform: translateY(-2px);
       }
       
       .ascii {
         font-family: monospace;
-        color: #444;
-        font-size: 0.8rem;
+        color: #ff7b00;
+        font-size: 0.9rem;
         margin-top: 3rem;
         white-space: pre;
         line-height: 1.2;
+        animation: wiggle 3s ease-in-out infinite;
+      }
+      
+      @keyframes wiggle {
+        0%, 100% { transform: rotate(-2deg); }
+        50% { transform: rotate(2deg); }
+      }
+      
+      .ascii:hover {
+        animation: excited 0.3s ease-in-out infinite;
+      }
+      
+      @keyframes excited {
+        0%, 100% { transform: translateY(0) rotate(-1deg); }
+        50% { transform: translateY(-5px) rotate(1deg); }
       }
     </style>
   </head>
