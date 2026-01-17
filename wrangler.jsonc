@@ -1,0 +1,9 @@
+{
+  "name": "chaoscat-win",
+  "main": "dist/worker.js",
+  "compatibility_date": "2024-11-05",
+  "assets": {
+    "directory": "dist",
+    "binding": "ASSETS"
+  }
+}
