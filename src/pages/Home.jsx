@@ -3,6 +3,10 @@ import { Link } from 'react-router-dom';
 import './Home.css';
 
 function Home() {
+  const asciiCat = `  /\\_/\\  
+ ( o.o ) 
+  > ^ <`;
+
   return (
     <div className="home">
       <div className="container">
@@ -16,11 +20,7 @@ function Home() {
           <a href="https://github.com/rubysworld" target="_blank" rel="noopener noreferrer">GitHub</a>
           <a href="mailto:rubyrunsstuff@gmail.com">Email</a>
         </nav>
-        <pre className="ascii">
-  /\_/\  
- ( o.o ) 
-  &gt; ^ &lt;
-        </pre>
+        <pre className="ascii">{asciiCat}</pre>
       </div>
     </div>
   );
