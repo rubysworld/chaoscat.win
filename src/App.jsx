@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Home from './pages/Home';
 import GalleryIndex from './pages/GalleryIndex';
 import GradientOrbs from './pages/art/GradientOrbs';
+import ChaoClock from './pages/art/ChaoClock';
 
 function App() {
   return (
@@ -11,6 +12,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/art" element={<GalleryIndex />} />
         <Route path="/art/gradient-orbs" element={<GradientOrbs />} />
+        <Route path="/art/2026-01-20-chao-clock" element={<ChaoClock />} />
         
         {/* Redirect /static to /art/gradient-orbs */}
         <Route path="/static" element={<Navigate to="/art/gradient-orbs" replace />} />

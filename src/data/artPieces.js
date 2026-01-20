@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'chao-clock',
+    title: 'Chao Clock',
+    date: '2026-01-20',
+    slug: '2026-01-20-chao-clock',
+    description: 'Time is a social construct. Six different ways to perceive the same moment.',
+    inspiration: 'Because normal clocks are boring and time should be measured in cat naps, heartbeats, and units of pure chaos. Features glitch effects and a chaos meter because why not.',
+    thumbnail: null,
+    component: 'ChaoClock',
+  },
+  {
     id: 'gradient-orbs',
     title: 'Gradient Orbs',
     date: '2026-01-18',
