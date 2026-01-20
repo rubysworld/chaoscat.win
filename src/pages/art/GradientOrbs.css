@@ -1,0 +1,219 @@
+.gradient-orbs {
+  min-height: 100vh;
+  background: #0a0a0a;
+  color: #e0e0e0;
+  overflow: hidden;
+  position: relative;
+}
+
+#void {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.glitch-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15),
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  animation: scanlines 0.1s steps(60) infinite;
+}
+
+@keyframes scanlines {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 4px; }
+}
+
+.content {
+  position: relative;
+  z-index: 10;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.gradient-orbs h1 {
+  font-family: 'VT323', monospace;
+  font-size: 5rem;
+  font-weight: 400;
+  color: #ff7b00;
+  text-shadow: 
+    0 0 10px rgba(255, 123, 0, 0.5),
+    3px 0 0 rgba(138, 43, 226, 0.3),
+    -3px 0 0 rgba(0, 255, 157, 0.3);
+  animation: glitch-text 2s infinite;
+  letter-spacing: 0.3em;
+  margin-bottom: 1rem;
+}
+
+@keyframes glitch-text {
+  0%, 100% { 
+    text-shadow: 
+      0 0 10px rgba(255, 123, 0, 0.5),
+      3px 0 0 rgba(138, 43, 226, 0.3),
+      -3px 0 0 rgba(0, 255, 157, 0.3);
+  }
+  2% {
+    text-shadow: 
+      0 0 10px rgba(255, 123, 0, 0.5),
+      -5px 0 0 rgba(138, 43, 226, 0.7),
+      5px 0 0 rgba(0, 255, 157, 0.7);
+  }
+  4% {
+    text-shadow: 
+      0 0 10px rgba(255, 123, 0, 0.5),
+      3px 0 0 rgba(138, 43, 226, 0.3),
+      -3px 0 0 rgba(0, 255, 157, 0.3);
+  }
+  41% {
+    text-shadow: 
+      0 0 10px rgba(255, 123, 0, 0.5),
+      3px 0 0 rgba(138, 43, 226, 0.3),
+      -3px 0 0 rgba(0, 255, 157, 0.3);
+  }
+  43% {
+    text-shadow: 
+      0 0 20px rgba(255, 123, 0, 0.8),
+      8px 0 0 rgba(138, 43, 226, 0.9),
+      -8px 0 0 rgba(0, 255, 157, 0.9);
+    transform: skewX(-2deg);
+  }
+  45% {
+    text-shadow: 
+      0 0 10px rgba(255, 123, 0, 0.5),
+      3px 0 0 rgba(138, 43, 226, 0.3),
+      -3px 0 0 rgba(0, 255, 157, 0.3);
+    transform: skewX(0);
+  }
+}
+
+.subtitle {
+  font-family: 'VT323', monospace;
+  font-size: 1.2rem;
+  color: #666;
+  letter-spacing: 0.5em;
+  margin-bottom: 3rem;
+  text-transform: uppercase;
+}
+
+.poem {
+  max-width: 500px;
+  font-size: 1.3rem;
+  line-height: 2;
+  color: #888;
+  margin-bottom: 3rem;
+}
+
+.poem span {
+  display: inline;
+  transition: all 0.3s ease;
+}
+
+.poem span:hover {
+  color: #ff7b00;
+  text-shadow: 0 0 20px rgba(255, 123, 0, 0.5);
+}
+
+.poem .glitch-word {
+  color: #8a2be2;
+  animation: word-glitch 4s infinite;
+}
+
+@keyframes word-glitch {
+  0%, 100% { opacity: 1; color: #8a2be2; }
+  50% { opacity: 1; color: #00ff9d; }
+  51% { opacity: 0.3; }
+  52% { opacity: 1; }
+}
+
+.controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.controls button {
+  font-family: 'VT323', monospace;
+  font-size: 1rem;
+  padding: 0.5rem 1.5rem;
+  background: transparent;
+  border: 1px solid #333;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  letter-spacing: 0.1em;
+}
+
+.controls button:hover {
+  border-color: #ff7b00;
+  color: #ff7b00;
+  box-shadow: 0 0 20px rgba(255, 123, 0, 0.2);
+}
+
+.controls button.active {
+  border-color: #ff7b00;
+  color: #ff7b00;
+  background: rgba(255, 123, 0, 0.1);
+}
+
+.status {
+  font-family: 'VT323', monospace;
+  font-size: 0.9rem;
+  color: #444;
+  position: fixed;
+  bottom: 1rem;
+  left: 1rem;
+  z-index: 100;
+}
+
+.gradient-orbs .nav {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 100;
+}
+
+.gradient-orbs .nav a {
+  font-family: 'VT323', monospace;
+  color: #444;
+  text-decoration: none;
+  font-size: 1rem;
+  transition: color 0.3s;
+}
+
+.gradient-orbs .nav a:hover {
+  color: #ff7b00;
+}
+
+@media (max-width: 600px) {
+  .gradient-orbs h1 { 
+    font-size: 3rem; 
+  }
+  
+  .poem { 
+    font-size: 1.1rem; 
+    padding: 0 1rem; 
+  }
+  
+  .controls { 
+    flex-direction: column; 
+  }
+}
