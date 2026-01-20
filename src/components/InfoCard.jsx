@@ -11,7 +11,7 @@ function InfoCard({ title, date, description, inspiration }) {
         onClick={() => setIsExpanded(!isExpanded)}
         aria-label="Toggle info card"
       >
-        ℹ️
+        <span className="info-icon">i</span>
       </button>
       
       {isExpanded && (

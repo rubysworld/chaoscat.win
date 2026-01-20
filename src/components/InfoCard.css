@@ -7,13 +7,12 @@
 }
 
 .info-toggle {
-  width: 50px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  background: rgba(26, 26, 26, 0.9);
-  border: 2px solid #ff7b00;
+  background: rgba(20, 20, 20, 0.85);
+  border: 2px solid rgba(255, 123, 0, 0.6);
   color: #ff7b00;
-  font-size: 1.5rem;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -23,27 +22,37 @@
   backdrop-filter: blur(10px);
 }
 
+.info-icon {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.4rem;
+  font-style: italic;
+  font-weight: bold;
+  line-height: 1;
+}
+
 .info-toggle:hover {
-  background: rgba(255, 123, 0, 0.2);
-  box-shadow: 0 0 30px rgba(255, 123, 0, 0.4);
-  transform: scale(1.1);
+  background: rgba(255, 123, 0, 0.15);
+  border-color: #ff7b00;
+  box-shadow: 0 0 20px rgba(255, 123, 0, 0.3);
+  transform: scale(1.05);
 }
 
 .info-card.expanded .info-toggle {
   background: #ff7b00;
   color: #0a0a0a;
+  border-color: #ff7b00;
 }
 
 .info-content {
   position: absolute;
-  bottom: 60px;
+  bottom: 55px;
   right: 0;
-  background: rgba(26, 26, 26, 0.95);
-  border: 1px solid #ff7b00;
+  background: rgba(20, 20, 20, 0.95);
+  border: 1px solid rgba(255, 123, 0, 0.5);
   border-radius: 12px;
   padding: 1.5rem;
-  min-width: 300px;
-  max-width: 400px;
+  min-width: 280px;
+  max-width: 380px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(10px);
   animation: slideIn 0.3s ease-out;
@@ -62,7 +71,7 @@
 
 .info-content h3 {
   font-family: 'Short Stack', cursive;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   color: #ff7b00;
   margin-bottom: 0.5rem;
 }
@@ -71,12 +80,12 @@
   display: block;
   font-family: 'VT323', monospace;
   font-size: 0.9rem;
-  color: #888;
+  color: #666;
   margin-bottom: 1rem;
 }
 
 .info-content p {
-  color: #ccc;
+  color: #bbb;
   line-height: 1.6;
   margin-bottom: 0.75rem;
 }
@@ -86,8 +95,8 @@
 }
 
 .inspiration {
-  font-size: 0.95rem;
-  color: #aaa;
+  font-size: 0.9rem;
+  color: #888;
   font-style: italic;
 }
 
