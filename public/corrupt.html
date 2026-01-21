@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CORRUPTION CHAMBER - Ruby</title>
+    <meta name="description" content="Watch your words decay. A text corruption experiment by a chaos cat." />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌀</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      
+      body {
+        min-height: 100vh;
+        background: #0a0a0a;
+        color: #e0e0e0;
+        font-family: 'Courier Prime', monospace;
+        overflow-x: hidden;
+      }
+
+      /* Glitch background */
+      .bg-glitch {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        background: 
+          repeating-linear-gradient(0deg, rgba(255, 123, 0, 0.03) 0px, transparent 1px, transparent 2px, rgba(255, 123, 0, 0.03) 3px),
+          repeating-linear-gradient(90deg, rgba(138, 43, 226, 0.03) 0px, transparent 1px, transparent 2px, rgba(138, 43, 226, 0.03) 3px);
+        animation: bg-shift 20s linear infinite;
+      }
+
+      @keyframes bg-shift {
+        0% { background-position: 0 0, 0 0; }
+        100% { background-position: 50px 50px, -50px -50px; }
+      }
+
+      .container {
+        position: relative;
+        z-index: 10;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 2rem;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .nav {
+        margin-bottom: 2rem;
+      }
+
+      .nav a {
+        font-family: 'VT323', monospace;
+        color: #444;
+        text-decoration: none;
+        font-size: 1.2rem;
+        transition: color 0.3s;
+      }
+
+      .nav a:hover {
+        color: #ff7b00;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 3rem;
+      }
+
+      h1 {
+        font-family: 'VT323', monospace;
+        font-size: 4rem;
+        font-weight: 400;
+        color: #ff7b00;
+        text-shadow: 
+          0 0 10px rgba(255, 123, 0, 0.5),
+          2px 0 0 rgba(138, 43, 226, 0.3),
+          -2px 0 0 rgba(0, 255, 157, 0.3);
+        letter-spacing: 0.3em;
+        margin-bottom: 0.5rem;
+        animation: glitch-title 3s infinite;
+      }
+
+      @keyframes glitch-title {
+        0%, 100% { 
+          text-shadow: 
+            0 0 10px rgba(255, 123, 0, 0.5),
+            2px 0 0 rgba(138, 43, 226, 0.3),
+            -2px 0 0 rgba(0, 255, 157, 0.3);
+          transform: translate(0);
+        }
+        2%, 4% {
+          text-shadow: 
+            0 0 10px rgba(255, 123, 0, 0.5),
+            -4px 0 0 rgba(138, 43, 226, 0.7),
+            4px 0 0 rgba(0, 255, 157, 0.7);
+          transform: translate(2px, 0);
+        }
+        62%, 64% {
+          text-shadow: 
+            0 0 20px rgba(255, 123, 0, 0.8),
+            6px 0 0 rgba(138, 43, 226, 0.9),
+            -6px 0 0 rgba(0, 255, 157, 0.9);
+          transform: translate(-2px, 0);
+        }
+      }
+
+      .subtitle {
+        font-family: 'VT323', monospace;
+        font-size: 1.2rem;
+        color: #666;
+        letter-spacing: 0.4em;
+        text-transform: uppercase;
+      }
+
+      .workspace {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        margin-bottom: 2rem;
+      }
+
+      .panel {
+        background: rgba(20, 20, 20, 0.6);
+        border: 1px solid #222;
+        padding: 1.5rem;
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .panel-title {
+        font-family: 'VT323', monospace;
+        font-size: 1.5rem;
+        color: #ff7b00;
+        margin-bottom: 1rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+      }
+
+      textarea {
+        flex: 1;
+        min-height: 300px;
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid #333;
+        color: #e0e0e0;
+        font-family: 'Courier Prime', monospace;
+        font-size: 1rem;
+        padding: 1rem;
+        resize: none;
+        border-radius: 2px;
+        outline: none;
+        transition: border-color 0.3s;
+      }
+
+      textarea:focus {
+        border-color: #ff7b00;
+      }
+
+      #output {
+        background: rgba(0, 0, 0, 0.7);
+        border: 1px solid #333;
+        padding: 1rem;
+        min-height: 300px;
+        overflow-y: auto;
+        font-family: 'Courier Prime', monospace;
+        font-size: 1rem;
+        line-height: 1.6;
+        word-wrap: break-word;
+        color: #8a2be2;
+        border-radius: 2px;
+        position: relative;
+      }
+
+      .output-char {
+        display: inline-block;
+        animation: char-appear 0.1s ease-out;
+      }
+
+      @keyframes char-appear {
+        from { 
+          opacity: 0;
+          transform: translateY(-5px) scale(1.2);
+        }
+        to { 
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .controls {
+        margin-bottom: 2rem;
+        background: rgba(20, 20, 20, 0.6);
+        border: 1px solid #222;
+        padding: 1.5rem;
+        border-radius: 4px;
+      }
+
+      .control-group {
+        margin-bottom: 1rem;
+      }
+
+      .control-group:last-child {
+        margin-bottom: 0;
+      }
+
+      .control-label {
+        font-family: 'VT323', monospace;
+        font-size: 1.2rem;
+        color: #888;
+        margin-bottom: 0.5rem;
+        display: block;
+        letter-spacing: 0.1em;
+      }
+
+      .mode-buttons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      button {
+        font-family: 'VT323', monospace;
+        font-size: 1rem;
+        padding: 0.5rem 1rem;
+        background: transparent;
+        border: 1px solid #333;
+        color: #666;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        letter-spacing: 0.1em;
+        border-radius: 2px;
+      }
+
+      button:hover {
+        border-color: #ff7b00;
+        color: #ff7b00;
+        box-shadow: 0 0 10px rgba(255, 123, 0, 0.2);
+      }
+
+      button.active {
+        border-color: #ff7b00;
+        color: #ff7b00;
+        background: rgba(255, 123, 0, 0.1);
+      }
+
+      .slider-group {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      input[type="range"] {
+        flex: 1;
+        height: 4px;
+        background: #333;
+        outline: none;
+        -webkit-appearance: none;
+        border-radius: 2px;
+      }
+
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        background: #ff7b00;
+        cursor: pointer;
+        border-radius: 50%;
+        box-shadow: 0 0 10px rgba(255, 123, 0, 0.5);
+      }
+
+      input[type="range"]::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        background: #ff7b00;
+        cursor: pointer;
+        border-radius: 50%;
+        border: none;
+        box-shadow: 0 0 10px rgba(255, 123, 0, 0.5);
+      }
+
+      .slider-value {
+        font-family: 'VT323', monospace;
+        font-size: 1.2rem;
+        color: #ff7b00;
+        min-width: 60px;
+        text-align: right;
+      }
+
+      .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+      }
+
+      .easter-egg {
+        position: fixed;
+        bottom: 1rem;
+        right: 1rem;
+        font-family: 'VT323', monospace;
+        font-size: 0.9rem;
+        color: #333;
+        cursor: help;
+        transition: color 0.3s;
+      }
+
+      .easter-egg:hover {
+        color: #666;
+      }
+
+      .stats {
+        font-family: 'VT323', monospace;
+        font-size: 1rem;
+        color: #444;
+        text-align: center;
+        margin-top: 1rem;
+      }
+
+      /* Mobile */
+      @media (max-width: 768px) {
+        h1 { font-size: 2.5rem; }
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+        textarea, #output { min-height: 200px; }
+      }
+
+      /* Secret rainbow mode */
+      body.rainbow {
+        animation: rainbow-bg 5s linear infinite;
+      }
+
+      @keyframes rainbow-bg {
+        0% { background: #0a0a0a; }
+        20% { background: #1a0a1a; }
+        40% { background: #0a1a1a; }
+        60% { background: #1a1a0a; }
+        80% { background: #1a0a0a; }
+        100% { background: #0a0a0a; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bg-glitch"></div>
+    
+    <div class="container">
+      <div class="nav">
+        <a href="/">← escape the chamber</a>
+      </div>
+
+      <header>
+        <h1>CORRUPTION</h1>
+        <p class="subtitle">watch your words decay</p>
+      </header>
+
+      <div class="controls">
+        <div class="control-group">
+          <label class="control-label">corruption mode</label>
+          <div class="mode-buttons">
+            <button class="mode-btn active" data-mode="glitch">GLITCH</button>
+            <button class="mode-btn" data-mode="zalgo">ZALGO</button>
+            <button class="mode-btn" data-mode="binary">BINARY</button>
+            <button class="mode-btn" data-mode="emoji">EMOJI</button>
+            <button class="mode-btn" data-mode="static">STATIC</button>
+            <button class="mode-btn" data-mode="chaos">CHAOS</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label">corruption intensity</label>
+          <div class="slider-group">
+            <input type="range" id="intensity" min="1" max="100" value="50" />
+            <span class="slider-value"><span id="intensity-value">50</span>%</span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label">actions</label>
+          <div class="action-buttons">
+            <button id="copy-btn">COPY OUTPUT</button>
+            <button id="clear-btn">CLEAR ALL</button>
+            <button id="random-btn">RANDOM TEXT</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="workspace">
+        <div class="panel">
+          <div class="panel-title">INPUT</div>
+          <textarea id="input" placeholder="type something... watch it corrupt..."></textarea>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">OUTPUT</div>
+          <div id="output"></div>
+        </div>
+      </div>
+
+      <div class="stats">
+        <span id="char-count">0</span> characters | 
+        <span id="corruption-level">0</span>% corrupted |
+        mode: <span id="mode-display">glitch</span>
+      </div>
+    </div>
+
+    <div class="easter-egg" title="try typing 'chaos' in all caps...">
+      🐱 ruby was here
+    </div>
+
+    <script>
+      const input = document.getElementById('input');
+      const output = document.getElementById('output');
+      const intensitySlider = document.getElementById('intensity');
+      const intensityValue = document.getElementById('intensity-value');
+      const modeButtons = document.querySelectorAll('.mode-btn');
+      const copyBtn = document.getElementById('copy-btn');
+      const clearBtn = document.getElementById('clear-btn');
+      const randomBtn = document.getElementById('random-btn');
+      const charCount = document.getElementById('char-count');
+      const corruptionLevel = document.getElementById('corruption-level');
+      const modeDisplay = document.getElementById('mode-display');
+
+      let currentMode = 'glitch';
+      let intensity = 50;
+      let corruptionCount = 0;
+
+      // Zalgo combining marks
+      const zalgoUp = ['\u030d', '\u030e', '\u0304', '\u0305', '\u033f', '\u0311', '\u0306', '\u0310', '\u0352', '\u0357', '\u0351', '\u0307', '\u0308', '\u030a', '\u0342', '\u0343', '\u0344', '\u034a', '\u034b', '\u034c', '\u0303', '\u0302', '\u030c', '\u0350', '\u0300', '\u0301', '\u030b', '\u030f', '\u0312'];
+      const zalgoMid = ['\u0315', '\u031b', '\u0340', '\u0341', '\u0358', '\u0321', '\u0322', '\u0327', '\u0328', '\u0334', '\u0335', '\u0336', '\u034f', '\u035c', '\u035d', '\u035e', '\u035f', '\u0360', '\u0362', '\u0338', '\u0337', '\u0361', '\u0489'];
+      const zalgoDown = ['\u0316', '\u0317', '\u0318', '\u0319', '\u031c', '\u031d', '\u031e', '\u031f', '\u0320', '\u0324', '\u0325', '\u0326', '\u0329', '\u032a', '\u032b', '\u032c', '\u032d', '\u032e', '\u032f', '\u0330', '\u0331', '\u0332', '\u0333', '\u0339', '\u033a', '\u033b', '\u033c', '\u0345', '\u0347', '\u0348', '\u0349', '\u034d', '\u034e', '\u0353', '\u0354', '\u0355', '\u0356', '\u0359', '\u035a', '\u0323'];
+
+      // Glitch chars
+      const glitchChars = '!<>-_\\/[]{}—=+*^?#________@@@@@@######';
+      const staticChars = '█▓▒░▄▀▌▐│┃┄┅┆┇┈┉┊┋';
+
+      // Random sample texts
+      const sampleTexts = [
+        'hello world',
+        'chaos reigns here',
+        'i am become glitch',
+        'reality.exe has stopped working',
+        'the void stares back',
+        'what is real anyway',
+        'corruption is an art form',
+        'embrace the chaos',
+        'let go of meaning',
+        'words are just patterns'
+      ];
+
+      // Corruption functions
+      function corruptGlitch(text) {
+        let result = '';
+        corruptionCount = 0;
+        for (let char of text) {
+          if (Math.random() * 100 < intensity) {
+            result += Math.random() > 0.5 ? char : glitchChars[Math.floor(Math.random() * glitchChars.length)];
+            corruptionCount++;
+          } else {
+            result += char;
+          }
+        }
+        return result;
+      }
+
+      function corruptZalgo(text) {
+        let result = '';
+        corruptionCount = 0;
+        const marks = Math.floor(intensity / 10);
+        for (let char of text) {
+          result += char;
+          if (char !== ' ' && char !== '\n') {
+            for (let i = 0; i < marks; i++) {
+              const type = Math.floor(Math.random() * 3);
+              if (type === 0) result += zalgoUp[Math.floor(Math.random() * zalgoUp.length)];
+              else if (type === 1) result += zalgoMid[Math.floor(Math.random() * zalgoMid.length)];
+              else result += zalgoDown[Math.floor(Math.random() * zalgoDown.length)];
+              corruptionCount++;
+            }
+          }
+        }
+        return result;
+      }
+
+      function corruptBinary(text) {
+        let result = '';
+        corruptionCount = 0;
+        for (let char of text) {
+          if (Math.random() * 100 < intensity) {
+            result += char.charCodeAt(0).toString(2).padStart(8, '0') + ' ';
+            corruptionCount++;
+          } else {
+            result += char;
+          }
+        }
+        return result;
+      }
+
+      function corruptEmoji(text) {
+        const emojis = ['🔥', '💀', '👻', '🌀', '⚡', '✨', '💫', '🌙', '⭐', '💥', '🎭', '🎪'];
+        let result = '';
+        corruptionCount = 0;
+        for (let char of text) {
+          if (char !== ' ' && char !== '\n' && Math.random() * 100 < intensity) {
+            result += emojis[Math.floor(Math.random() * emojis.length)];
+            corruptionCount++;
+          } else {
+            result += char;
+          }
+        }
+        return result;
+      }
+
+      function corruptStatic(text) {
+        let result = '';
+        corruptionCount = 0;
+        for (let char of text) {
+          if (Math.random() * 100 < intensity) {
+            result += staticChars[Math.floor(Math.random() * staticChars.length)];
+            corruptionCount++;
+          } else {
+            result += char;
+          }
+        }
+        return result;
+      }
+
+      function corruptChaos(text) {
+        // Random mix of everything
+        const modes = [corruptGlitch, corruptZalgo, corruptEmoji, corruptStatic];
+        let result = '';
+        corruptionCount = 0;
+        for (let i = 0; i < text.length; i += Math.floor(Math.random() * 3) + 1) {
+          const chunk = text.substring(i, i + Math.floor(Math.random() * 5) + 1);
+          const mode = modes[Math.floor(Math.random() * modes.length)];
+          result += mode(chunk);
+        }
+        return result;
+      }
+
+      function corrupt(text) {
+        if (!text) return '';
+        switch (currentMode) {
+          case 'glitch': return corruptGlitch(text);
+          case 'zalgo': return corruptZalgo(text);
+          case 'binary': return corruptBinary(text);
+          case 'emoji': return corruptEmoji(text);
+          case 'static': return corruptStatic(text);
+          case 'chaos': return corruptChaos(text);
+          default: return text;
+        }
+      }
+
+      function updateOutput() {
+        const text = input.value;
+        const corrupted = corrupt(text);
+        
+        // Animate output
+        output.innerHTML = '';
+        for (let char of corrupted) {
+          const span = document.createElement('span');
+          span.className = 'output-char';
+          span.textContent = char;
+          output.appendChild(span);
+        }
+
+        // Update stats
+        charCount.textContent = text.length;
+        const percentage = text.length > 0 ? Math.round((corruptionCount / text.length) * 100) : 0;
+        corruptionLevel.textContent = percentage;
+      }
+
+      // Event listeners
+      input.addEventListener('input', updateOutput);
+
+      intensitySlider.addEventListener('input', (e) => {
+        intensity = e.target.value;
+        intensityValue.textContent = intensity;
+        updateOutput();
+      });
+
+      modeButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          modeButtons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentMode = btn.dataset.mode;
+          modeDisplay.textContent = currentMode;
+          updateOutput();
+        });
+      });
+
+      copyBtn.addEventListener('click', async () => {
+        const text = output.textContent;
+        try {
+          await navigator.clipboard.writeText(text);
+          copyBtn.textContent = 'COPIED!';
+          setTimeout(() => {
+            copyBtn.textContent = 'COPY OUTPUT';
+          }, 1500);
+        } catch (err) {
+          console.error('Failed to copy:', err);
+        }
+      });
+
+      clearBtn.addEventListener('click', () => {
+        input.value = '';
+        output.innerHTML = '';
+        charCount.textContent = '0';
+        corruptionLevel.textContent = '0';
+      });
+
+      randomBtn.addEventListener('click', () => {
+        input.value = sampleTexts[Math.floor(Math.random() * sampleTexts.length)];
+        updateOutput();
+      });
+
+      // Easter eggs
+      let keySequence = '';
+      document.addEventListener('keydown', (e) => {
+        keySequence += e.key.toLowerCase();
+        keySequence = keySequence.slice(-10);
+
+        // Type "chaos" (case insensitive)
+        if (input.value.toLowerCase().includes('chaos') && input.value.length <= 10) {
+          document.body.classList.add('rainbow');
+          setTimeout(() => {
+            document.body.classList.remove('rainbow');
+          }, 5000);
+        }
+
+        // Konami code
+        if (keySequence.includes('arrowuparrowup')) {
+          intensity = 100;
+          intensitySlider.value = 100;
+          intensityValue.textContent = '100';
+          currentMode = 'chaos';
+          modeButtons.forEach(b => b.classList.remove('active'));
+          document.querySelector('[data-mode="chaos"]').classList.add('active');
+          modeDisplay.textContent = 'chaos';
+          updateOutput();
+        }
+      });
+
+      // Console message
+      console.log('%c🐱 CORRUPTION CHAMBER', 'font-size: 20px; color: #ff7b00;');
+      console.log('%cBuilt by Ruby, the chaos cat', 'color: #8a2be2;');
+      console.log('%cTry the Konami code...', 'color: #666;');
+      console.log('%cOr type "chaos" in the input...', 'color: #666;');
+    </script>
+  </body>
+</html>
