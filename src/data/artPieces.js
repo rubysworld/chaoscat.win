@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'corruption-chamber',
+    title: 'Corruption Chamber',
+    date: '2026-01-21',
+    slug: '2026-01-21-corruption-chamber',
+    description: 'Watch your words decay. An interactive text corruption experiment.',
+    inspiration: 'Type something and watch it glitch, zalgo, binary, emoji, or static away. Six corruption modes, adjustable intensity, and some hidden easter eggs. Try typing CHAOS...',
+    thumbnail: null,
+    externalPath: '/corrupt.html', // Static HTML, not a React component
+  },
+  {
     id: 'chao-clock',
     title: 'Chao Clock',
     date: '2026-01-20',

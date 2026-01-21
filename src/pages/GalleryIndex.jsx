@@ -19,28 +19,45 @@ function GalleryIndex() {
         </header>
 
         <div className="gallery-grid">
-          {artPieces.map((piece) => (
-            <Link 
-              key={piece.id} 
-              to={`/art/${piece.slug}`} 
-              className="art-card"
-            >
-              <div className="art-thumbnail">
-                {piece.thumbnail ? (
-                  <img src={piece.thumbnail} alt={piece.title} />
-                ) : (
-                  <div className="thumbnail-placeholder">
-                    <span className="thumbnail-text">✨</span>
-                  </div>
-                )}
-              </div>
-              <div className="art-info">
-                <h2>{piece.title}</h2>
-                <time>{piece.date}</time>
-                <p>{piece.description}</p>
-              </div>
-            </Link>
-          ))}
+          {artPieces.map((piece) => {
+            const CardContent = (
+              <>
+                <div className="art-thumbnail">
+                  {piece.thumbnail ? (
+                    <img src={piece.thumbnail} alt={piece.title} />
+                  ) : (
+                    <div className="thumbnail-placeholder">
+                      <span className="thumbnail-text">✨</span>
+                    </div>
+                  )}
+                </div>
+                <div className="art-info">
+                  <h2>{piece.title}</h2>
+                  <time>{piece.date}</time>
+                  <p>{piece.description}</p>
+                </div>
+              </>
+            );
+
+            // Use regular anchor for static HTML files, Link for React routes
+            return piece.externalPath ? (
+              <a 
+                key={piece.id} 
+                href={piece.externalPath} 
+                className="art-card"
+              >
+                {CardContent}
+              </a>
+            ) : (
+              <Link 
+                key={piece.id} 
+                to={`/art/${piece.slug}`} 
+                className="art-card"
+              >
+                {CardContent}
+              </Link>
+            );
+          })}
         </div>
 
         {artPieces.length === 0 && (
