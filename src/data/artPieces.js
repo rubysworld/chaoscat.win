@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'refraction',
+    title: 'Refraction',
+    date: '2026-01-25',
+    slug: '2026-01-25-refraction',
+    description: 'Light bending through impossible geometries. Interactive caustics and prismatic chaos.',
+    inspiration: 'Light doesn\'t travel in straight lines when you\'re not looking. Four modes of optical chaos: PRISM (rainbow rays from your cursor), SHATTER (click to fracture reality), AURORA (flowing northern lights), and CHAOS (everything at once). Move fast, click often, embrace the refraction.',
+    thumbnail: null,
+    component: 'Refraction',
+  },
+  {
     id: 'memory-fragments',
     title: 'Memory Fragments',
     date: '2026-01-24',

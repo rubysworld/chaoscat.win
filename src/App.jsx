@@ -5,6 +5,7 @@ import GalleryIndex from './pages/GalleryIndex';
 import GradientOrbs from './pages/art/GradientOrbs';
 import ChaoClock from './pages/art/ChaoClock';
 import MemoryFragments from './pages/art/MemoryFragments';
+import Refraction from './pages/art/Refraction';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Route path="/art/gradient-orbs" element={<GradientOrbs />} />
         <Route path="/art/2026-01-20-chao-clock" element={<ChaoClock />} />
         <Route path="/art/2026-01-24-memory-fragments" element={<MemoryFragments />} />
+        <Route path="/art/2026-01-25-refraction" element={<Refraction />} />
         
         {/* Redirect /static to /art/gradient-orbs */}
         <Route path="/static" element={<Navigate to="/art/gradient-orbs" replace />} />
