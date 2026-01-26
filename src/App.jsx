@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Home from './pages/Home';
 import GalleryIndex from './pages/GalleryIndex';
+import Status from './pages/Status';
 import GradientOrbs from './pages/art/GradientOrbs';
 import ChaoClock from './pages/art/ChaoClock';
 import MemoryFragments from './pages/art/MemoryFragments';
@@ -14,6 +15,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/art" element={<GalleryIndex />} />
+        <Route path="/status" element={<Status />} />
         <Route path="/art/gradient-orbs" element={<GradientOrbs />} />
         <Route path="/art/2026-01-20-chao-clock" element={<ChaoClock />} />
         <Route path="/art/2026-01-24-memory-fragments" element={<MemoryFragments />} />
