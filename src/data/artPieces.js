@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'emergence',
+    title: 'Emergence',
+    date: '2026-01-26',
+    slug: '2026-01-26-emergence',
+    description: 'Cellular automata playground. Simple rules, complex patterns, rainbow chaos.',
+    inspiration: 'Watch life emerge from mathematical rules. Six different cellular automaton rule sets (Conway\'s Life, HighLife, Day & Night, Seeds, 34 Life, and CHAOS mode that randomly switches between them). Click to spawn patterns. Adjust speed. Watch order arise from randomness, or chaos consume everything.',
+    thumbnail: null,
+    component: 'Emergence',
+  },
+  {
     id: 'refraction',
     title: 'Refraction',
     date: '2026-01-25',
