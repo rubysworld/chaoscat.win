@@ -1,0 +1,122 @@
+.broken-signal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #0a0514;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+}
+
+.broken-signal canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.controls {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: flex-end;
+  z-index: 10;
+}
+
+.mode-btn {
+  background: rgba(138, 43, 226, 0.2);
+  border: 1px solid rgba(138, 43, 226, 0.5);
+  color: #c896ff;
+  padding: 12px 24px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 20px rgba(138, 43, 226, 0.3);
+}
+
+.mode-btn:hover {
+  background: rgba(138, 43, 226, 0.4);
+  border-color: rgba(138, 43, 226, 0.8);
+  box-shadow: 0 0 30px rgba(138, 43, 226, 0.5);
+  transform: translateY(-2px);
+}
+
+.mode-btn:active {
+  transform: translateY(0);
+}
+
+.instructions {
+  text-align: right;
+  font-size: 12px;
+  color: rgba(200, 150, 255, 0.5);
+  line-height: 1.6;
+  text-transform: lowercase;
+  letter-spacing: 1px;
+}
+
+.instructions p {
+  margin: 4px 0;
+}
+
+/* Scanline effect overlay */
+.broken-signal::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.1) 0px,
+    transparent 1px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.1) 3px
+  );
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0.3;
+}
+
+/* Vignette */
+.broken-signal::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(
+    circle at center,
+    transparent 0%,
+    transparent 60%,
+    rgba(10, 5, 20, 0.8) 100%
+  );
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .controls {
+    bottom: 20px;
+    right: 20px;
+  }
+  
+  .mode-btn {
+    padding: 10px 20px;
+    font-size: 12px;
+  }
+  
+  .instructions {
+    font-size: 10px;
+  }
+}

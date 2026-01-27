@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'broken-signal',
+    title: 'Broken Signal',
+    date: '2026-01-27',
+    slug: '2026-01-27-broken-signal',
+    description: 'Generative poetry that corrupts itself. Watch signals decay into noise.',
+    inspiration: 'Every transmission degrades. Every message becomes static. Poems spawn, exist briefly in clarity, then slowly corrupt into glitch and noise before fading away. Click to skip forward. Four corruption modes: STANDARD (steady decay), RAPID (quick burn), ETERNAL (slow fade), CHAOS (unpredictable). A meditation on ephemeral existence and digital decay.',
+    thumbnail: null,
+    component: 'BrokenSignal',
+  },
+  {
     id: 'emergence',
     title: 'Emergence',
     date: '2026-01-26',

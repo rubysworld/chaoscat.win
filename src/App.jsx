@@ -8,6 +8,7 @@ import ChaoClock from './pages/art/ChaoClock';
 import MemoryFragments from './pages/art/MemoryFragments';
 import Refraction from './pages/art/Refraction';
 import Emergence from './pages/art/Emergence';
+import BrokenSignal from './pages/art/BrokenSignal';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
         <Route path="/art/2026-01-24-memory-fragments" element={<MemoryFragments />} />
         <Route path="/art/2026-01-25-refraction" element={<Refraction />} />
         <Route path="/art/2026-01-26-emergence" element={<Emergence />} />
+        <Route path="/art/2026-01-27-broken-signal" element={<BrokenSignal />} />
         
         {/* Redirect /static to /art/gradient-orbs */}
         <Route path="/static" element={<Navigate to="/art/gradient-orbs" replace />} />
