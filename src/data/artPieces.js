@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'midnight-visitors',
+    title: 'Midnight Visitors',
+    date: '2026-01-31',
+    slug: '2026-01-31-midnight-visitors',
+    description: 'They\'re watching. Glowing eyes in the dark that follow your every move.',
+    inspiration: 'Peak 3am energy. A field of cat eyes scattered in the darkness, watching, blinking, following your cursor with their pupils. Each pair glows brighter when you look at them. Occasionally they meow (text floats up). Hold [P] to pspsps and watch them all focus on you at once. Slightly unsettling, deeply cat, very midnight.',
+    thumbnail: null,
+    component: 'MidnightVisitors',
+  },
+  {
     id: 'broken-signal',
     title: 'Broken Signal',
     date: '2026-01-27',
