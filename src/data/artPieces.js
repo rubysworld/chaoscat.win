@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'fractured-growth',
+    title: 'Fractured Growth',
+    date: '2026-02-01',
+    slug: '2026-02-01-fractured-growth',
+    description: 'Recursive fractal trees. Click to plant, watch them grow in chaotic organic patterns.',
+    inspiration: 'Nature is recursive. Trees branch infinitely, each split creating more complexity from simple rules. Click anywhere to plant a seed, watch it grow into a branching fractal tree. Adjust the angle variance and depth, cycle through color modes (FOREST, CHAOS, WINTER, FIRE). Press SPACE for random placement. Press C to clear and start fresh. Each tree is unique, organic, beautiful in its mathematical chaos.',
+    thumbnail: null,
+    component: 'FracturedGrowth',
+  },
+  {
     id: 'midnight-visitors',
     title: 'Midnight Visitors',
     date: '2026-01-31',
