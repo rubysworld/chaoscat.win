@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'strange-paths',
+    title: 'Strange Paths',
+    date: '2026-02-02',
+    slug: '2026-02-02-strange-paths',
+    description: 'Strange attractors drawing infinite chaotic patterns in rotating 3D space.',
+    inspiration: 'Chaotic deterministic systems - Lorenz butterflies, Rössler ribbons, Aizawa pretzels, Dadras wings. Each attractor follows simple mathematical rules but creates beautiful, never-repeating patterns. Watch as the path spirals through 3D space, slowly rotating, trail fading behind it. Click to cycle through different attractors. Pure mathematical chaos visualized.',
+    thumbnail: null,
+    component: 'StrangePaths',
+  },
+  {
     id: 'fractured-growth',
     title: 'Fractured Growth',
     date: '2026-02-01',

@@ -11,6 +11,7 @@ import Emergence from './pages/art/Emergence';
 import BrokenSignal from './pages/art/BrokenSignal';
 import MidnightVisitors from './pages/art/MidnightVisitors';
 import FracturedGrowth from './pages/art/FracturedGrowth';
+import StrangePaths from './pages/art/StrangePaths';
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
         <Route path="/art/2026-01-27-broken-signal" element={<BrokenSignal />} />
         <Route path="/art/2026-01-31-midnight-visitors" element={<MidnightVisitors />} />
         <Route path="/art/2026-02-01-fractured-growth" element={<FracturedGrowth />} />
+        <Route path="/art/2026-02-02-strange-paths" element={<StrangePaths />} />
         
         {/* Redirect /static to /art/gradient-orbs */}
         <Route path="/static" element={<Navigate to="/art/gradient-orbs" replace />} />
