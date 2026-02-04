@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Luminous Mess - chaoscat.win</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: #000;
+      overflow: hidden;
+      font-family: 'VT323', monospace;
+      cursor: crosshair;
+    }
+    
+    canvas {
+      display: block;
+      image-rendering: pixelated;
+    }
+    
+    #ui {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      color: #ff00ff;
+      font-size: 20px;
+      text-shadow: 0 0 10px #ff00ff;
+      user-select: none;
+      z-index: 10;
+    }
+    
+    #controls {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      color: #00ffff;
+      font-size: 18px;
+      text-shadow: 0 0 8px #00ffff;
+      user-select: none;
+      z-index: 10;
+    }
+    
+    button {
+      background: rgba(0,255,255,0.2);
+      border: 2px solid #00ffff;
+      color: #00ffff;
+      padding: 8px 16px;
+      font-family: 'VT323', monospace;
+      font-size: 18px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-top: 5px;
+      transition: all 0.3s;
+      text-shadow: 0 0 8px #00ffff;
+    }
+    
+    button:hover {
+      background: rgba(0,255,255,0.4);
+      box-shadow: 0 0 20px #00ffff;
+    }
+    
+    button.active {
+      background: rgba(255,0,255,0.4);
+      border-color: #ff00ff;
+      color: #ff00ff;
+      text-shadow: 0 0 8px #ff00ff;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  
+  <div id="ui">
+    <div>LUMINOUS MESS</div>
+    <div>splatters: <span id="splatterCount">0</span></div>
+    <div>drips: <span id="dripCount">0</span></div>
+    <div>mode: <span id="modeLabel">NEON</span></div>
+  </div>
+  
+  <div id="controls">
+    <div>CLICK: splatter paint</div>
+    <div>HOLD: paint stream</div>
+    <div>SPACE: explosion</div>
+    <div>C: clear canvas</div>
+    <div><button id="modeBtn">MODE: NEON</button></div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+    
+    // State
+    let splatters = [];
+    let drips = [];
+    let mouse = { x: 0, y: 0, down: false };
+    let frame = 0;
+    let totalSplatters = 0;
+    let totalDrips = 0;
+    
+    // Color modes
+    const MODES = {
+      NEON: 'neon',
+      RAINBOW: 'rainbow', 
+      PASTEL: 'pastel',
+      CHAOS: 'chaos',
+      FIRE: 'fire',
+      ICE: 'ice'
+    };
+    
+    const modeOrder = Object.values(MODES);
+    let currentModeIndex = 0;
+    let currentMode = modeOrder[0];
+    
+    // Color functions
+    function getColor(mode) {
+      switch(mode) {
+        case MODES.NEON:
+          const neonHues = [0, 60, 180, 280, 300];
+          return `hsl(${neonHues[Math.floor(Math.random() * neonHues.length)]}, 100%, 50%)`;
+        
+        case MODES.RAINBOW:
+          return `hsl(${Math.random() * 360}, 100%, 60%)`;
+        
+        case MODES.PASTEL:
+          return `hsl(${Math.random() * 360}, 70%, 80%)`;
+        
+        case MODES.CHAOS:
+          return Math.random() > 0.5 
+            ? `hsl(${Math.random() * 360}, 100%, 50%)`
+            : `hsl(${Math.random() * 360}, 50%, ${20 + Math.random() * 40}%)`;
+        
+        case MODES.FIRE:
+          const fireHue = Math.random() * 60; // 0-60 (red to yellow)
+          return `hsl(${fireHue}, 100%, ${40 + Math.random() * 20}%)`;
+        
+        case MODES.ICE:
+          const iceHue = 180 + Math.random() * 60; // 180-240 (cyan to blue)
+          return `hsl(${iceHue}, 80%, ${60 + Math.random() * 20}%)`;
+      }
+    }
+    
+    // Splatter class
+    class Splatter {
+      constructor(x, y, size, color, vx = 0, vy = 0) {
+        this.x = x;
+        this.y = y;
+        this.size = size;
+        this.color = color;
+        this.vx = vx;
+        this.vy = vy;
+        this.life = 1;
+        this.maxLife = 60 + Math.random() * 180; // varies
+        this.age = 0;
+        this.glow = 15 + Math.random() * 15;
+      }
+      
+      update() {
+        // Physics
+        this.vy += 0.1; // gravity
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.99; // drag
+        
+        this.age++;
+        this.life = 1 - (this.age / this.maxLife);
+        
+        // Spawn drip occasionally when falling
+        if (Math.random() < 0.02 && this.vy > 2 && this.size > 3) {
+          drips.push(new Drip(this.x, this.y, this.color, this.size * 0.3));
+          totalDrips++;
+        }
+        
+        // Fade out and die
+        return this.life > 0 && this.y < canvas.height + 100;
+      }
+      
+      draw() {
+        ctx.save();
+        ctx.globalAlpha = this.life * 0.9;
+        ctx.shadowBlur = this.glow;
+        ctx.shadowColor = this.color;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    
+    // Drip class (paint dripping down)
+    class Drip {
+      constructor(x, y, color, size) {
+        this.x = x + (Math.random() - 0.5) * 5;
+        this.y = y;
+        this.size = size;
+        this.color = color;
+        this.vy = 1 + Math.random() * 2;
+        this.life = 1;
+        this.maxLife = 120 + Math.random() * 240;
+        this.age = 0;
+      }
+      
+      update() {
+        this.vy += 0.05; // gravity
+        this.y += this.vy;
+        this.age++;
+        this.life = 1 - (this.age / this.maxLife);
+        
+        // Random horizontal drift
+        this.x += (Math.random() - 0.5) * 0.5;
+        
+        return this.life > 0 && this.y < canvas.height + 50;
+      }
+      
+      draw() {
+        ctx.save();
+        ctx.globalAlpha = this.life * 0.7;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = this.color;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    
+    // Create splatter explosion
+    function createSplatter(x, y, count = 10, spread = 5) {
+      const color = getColor(currentMode);
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * spread;
+        const size = 3 + Math.random() * 8;
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed - 3; // upward bias
+        
+        splatters.push(new Splatter(x, y, size, color, vx, vy));
+      }
+      totalSplatters += count;
+    }
+    
+    // Create paint explosion
+    function createExplosion(x, y) {
+      for (let i = 0; i < 50; i++) {
+        const color = getColor(currentMode);
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 5 + Math.random() * 15;
+        const size = 4 + Math.random() * 12;
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed;
+        
+        splatters.push(new Splatter(x, y, size, color, vx, vy));
+      }
+      totalSplatters += 50;
+    }
+    
+    // Mouse events
+    canvas.addEventListener('mousedown', (e) => {
+      mouse.down = true;
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      createSplatter(mouse.x, mouse.y, 15, 8);
+    });
+    
+    canvas.addEventListener('mouseup', () => {
+      mouse.down = false;
+    });
+    
+    canvas.addEventListener('mousemove', (e) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      
+      // Paint stream when holding mouse
+      if (mouse.down && frame % 2 === 0) {
+        createSplatter(mouse.x, mouse.y, 5, 4);
+      }
+    });
+    
+    // Keyboard
+    let spaceHeld = false;
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !spaceHeld) {
+        spaceHeld = true;
+        // Explosion at random position or mouse
+        const x = mouse.x || canvas.width / 2;
+        const y = mouse.y || canvas.height / 2;
+        createExplosion(x, y);
+      }
+      
+      if (e.key.toLowerCase() === 'c') {
+        splatters = [];
+        drips = [];
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    });
+    
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space') {
+        spaceHeld = false;
+      }
+    });
+    
+    // Mode button
+    const modeBtn = document.getElementById('modeBtn');
+    modeBtn.addEventListener('click', () => {
+      currentModeIndex = (currentModeIndex + 1) % modeOrder.length;
+      currentMode = modeOrder[currentModeIndex];
+      modeBtn.textContent = `MODE: ${currentMode.toUpperCase()}`;
+      document.getElementById('modeLabel').textContent = currentMode.toUpperCase();
+    });
+    
+    // Animation loop
+    function animate() {
+      frame++;
+      
+      // Slow fade instead of full clear (creates trails)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.02)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Update and draw splatters
+      splatters = splatters.filter(s => s.update());
+      splatters.forEach(s => s.draw());
+      
+      // Update and draw drips
+      drips = drips.filter(d => d.update());
+      drips.forEach(d => d.draw());
+      
+      // Update UI
+      document.getElementById('splatterCount').textContent = totalSplatters;
+      document.getElementById('dripCount').textContent = totalDrips;
+      
+      requestAnimationFrame(animate);
+    }
+    
+    // Start
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    animate();
+  </script>
+</body>
+</html>
