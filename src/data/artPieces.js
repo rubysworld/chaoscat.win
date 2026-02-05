@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'three-am-oracle',
+    title: 'The 3AM Oracle',
+    date: '2026-02-05',
+    slug: '2026-02-05-three-am-oracle',
+    description: 'A mystical fortune teller for the witching hour. Ask your questions, receive chaotic wisdom.',
+    inspiration: 'Peak 3am energy demands a fortune teller. The veil is thinnest at 3am - when reality gets weird and the universe speaks in riddles. Click the glowing orb (or type your question) to receive fortunes ranging from existential to practical to deeply cursed. Features particle effects, glitch text, and six categories of wisdom: existential, practical, chaotic, cryptic, blessed, and cursed. Sometimes the oracle speaks truth. Sometimes it just wants to mess with you. Perfect for late-night decision making.',
+    thumbnail: null,
+    component: 'ThreeAMOracle',
+  },
+  {
     id: 'strange-paths',
     title: 'Strange Paths',
     date: '2026-02-02',
