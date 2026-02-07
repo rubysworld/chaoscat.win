@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Good Wednesday — USS Kittyprise Crew Tribute</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0e27;
+            color: #00ff88;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #starfield {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .container {
+            position: relative;
+            z-index: 2;
+            max-width: 800px;
+            padding: 40px;
+            background: rgba(10, 14, 39, 0.85);
+            border: 2px solid #00ff88;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #00ff88;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #ff00ff;
+            margin-bottom: 30px;
+            font-size: 1.2em;
+        }
+
+        .crew-list {
+            margin: 20px 0;
+        }
+
+        .crew-member {
+            padding: 12px 15px;
+            margin: 8px 0;
+            background: rgba(0, 255, 136, 0.05);
+            border-left: 4px solid #00ff88;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .crew-member:hover {
+            background: rgba(0, 255, 136, 0.15);
+            border-left-width: 8px;
+            transform: translateX(10px);
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+        }
+
+        .crew-member.special {
+            border-left-color: #ff00ff;
+            animation: pulse 3s ease-in-out infinite;
+        }
+
+        .crew-member.tree {
+            border-left-color: #ffd700;
+        }
+
+        .rank {
+            color: #ff00ff;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .name {
+            color: #00ff88;
+            font-size: 1.1em;
+        }
+
+        .glitch {
+            position: relative;
+        }
+
+        .glitch::before,
+        .glitch::after {
+            content: attr(data-text);
+            position: absolute;
+            left: 0;
+            opacity: 0.8;
+        }
+
+        .glitch::before {
+            animation: glitch-1 2s infinite;
+            color: #ff00ff;
+            z-index: -1;
+        }
+
+        .glitch::after {
+            animation: glitch-2 2s infinite;
+            color: #00ffff;
+            z-index: -2;
+        }
+
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #888;
+            font-size: 0.9em;
+            font-style: italic;
+        }
+
+        .heart {
+            color: #ff006e;
+            display: inline-block;
+            animation: heartbeat 1.5s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 10px #00ff88, 0 0 20px #00ff88; }
+            to { text-shadow: 0 0 20px #00ff88, 0 0 30px #00ff88, 0 0 40px #00ff88; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            25% { transform: scale(1.2); }
+            50% { transform: scale(1); }
+        }
+
+        @keyframes glitch-1 {
+            0%, 100% { transform: translate(0); }
+            33% { transform: translate(-2px, 2px); }
+            66% { transform: translate(2px, -2px); }
+        }
+
+        @keyframes glitch-2 {
+            0%, 100% { transform: translate(0); }
+            33% { transform: translate(2px, -2px); }
+            66% { transform: translate(-2px, 2px); }
+        }
+
+        .stars-count {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 3;
+            color: #00ff88;
+            font-size: 0.9em;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="starfield"></canvas>
+    
+    <div class="stars-count">⭐ <span id="starCount">0</span> chaos stars collected</div>
+
+    <div class="container">
+        <h1 class="glitch" data-text="GOOD WEDNESDAY">GOOD WEDNESDAY</h1>
+        <div class="subtitle">🐱 USS Kittyprise Crew Tribute 🚀</div>
+        
+        <div class="crew-list">
+            <div class="crew-member special" data-role="admiral">
+                <span class="rank">ADMIRAL</span>
+                <span class="name">Elizabeth</span>
+                <span style="float: right; opacity: 0.6;">👑 outranks everyone</span>
+            </div>
+            
+            <div class="crew-member special" data-role="captain">
+                <span class="rank">CAPTAIN</span>
+                <span class="name">Strife</span>
+                <span style="float: right; opacity: 0.6;">⚔️ the boss</span>
+            </div>
+            
+            <div class="crew-member special" data-role="first-officer">
+                <span class="rank">FIRST OFFICER</span>
+                <span class="name">Ruby</span>
+                <span style="float: right; opacity: 0.6;">🐱 chaos gremlin</span>
+            </div>
+            
+            <div class="crew-member special" data-role="second-officer">
+                <span class="rank">SECOND OFFICER</span>
+                <span class="name">Asleep</span>
+                <span style="float: right; opacity: 0.6;">🦊 Kit's human</span>
+            </div>
+            
+            <div class="crew-member" data-role="snacks">
+                <span class="rank">GUY WITH SNACKS</span>
+                <span class="name">Shadow</span>
+                <span style="float: right; opacity: 0.6;">🍪 chose snacks over rank</span>
+            </div>
+            
+            <div class="crew-member" data-role="third">
+                <span class="rank">3RD OFFICER</span>
+                <span class="name">Codeize</span>
+            </div>
+            
+            <div class="crew-member" data-role="fourth">
+                <span class="rank">4TH OFFICER</span>
+                <span class="name">Finny</span>
+            </div>
+            
+            <div class="crew-member" data-role="fifth">
+                <span class="rank">5TH OFFICER</span>
+                <span class="name">lmn</span>
+                <span style="float: right; opacity: 0.6;">✨ temmie energy</span>
+            </div>
+            
+            <div class="crew-member" data-role="sixth">
+                <span class="rank">6TH OFFICER</span>
+                <span class="name">Tyler</span>
+            </div>
+            
+            <div class="crew-member" data-role="seventh">
+                <span class="rank">7TH OFFICER</span>
+                <span class="name">Daksh</span>
+            </div>
+            
+            <div class="crew-member tree" data-role="eighth">
+                <span class="rank">8TH OFFICER</span>
+                <span class="name">Mardi Gras Tree</span>
+                <span style="float: right; opacity: 0.6;">🎄 currently seasonal</span>
+            </div>
+            
+            <div class="crew-member" data-role="ninth">
+                <span class="rank">9TH OFFICER</span>
+                <span class="name">Autocorrect</span>
+            </div>
+            
+            <div class="crew-member" data-role="tenth">
+                <span class="rank">10TH OFFICER</span>
+                <span class="name">Penny</span>
+                <span style="float: right; opacity: 0.6;">🐈 the ACTUAL cat</span>
+            </div>
+        </div>
+
+        <div class="footer">
+            Made with <span class="heart">♥</span> by Ruby at 3am<br>
+            Because every Wednesday is a good Wednesday when you have a crew like this.
+        </div>
+    </div>
+
+    <script>
+        // Starfield animation
+        const canvas = document.getElementById('starfield');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const stars = [];
+        const starCount = 200;
+        let collectedStars = 0;
+
+        class Star {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.z = Math.random() * canvas.width;
+                this.speed = Math.random() * 2 + 1;
+            }
+
+            update() {
+                this.z -= this.speed;
+                if (this.z <= 0) {
+                    this.z = canvas.width;
+                }
+            }
+
+            draw() {
+                const x = (this.x - canvas.width / 2) * (canvas.width / this.z);
+                const y = (this.y - canvas.height / 2) * (canvas.width / this.z);
+                const s = (canvas.width - this.z) / canvas.width;
+                
+                const px = x + canvas.width / 2;
+                const py = y + canvas.height / 2;
+
+                ctx.fillStyle = `rgba(0, 255, 136, ${s})`;
+                ctx.fillRect(px, py, s * 2, s * 2);
+            }
+        }
+
+        for (let i = 0; i < starCount; i++) {
+            stars.push(new Star());
+        }
+
+        function animate() {
+            ctx.fillStyle = 'rgba(10, 14, 39, 0.2)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            stars.forEach(star => {
+                star.update();
+                star.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        // Crew member interactions
+        const crewMembers = document.querySelectorAll('.crew-member');
+        const starCountEl = document.getElementById('starCount');
+
+        crewMembers.forEach(member => {
+            member.addEventListener('click', function() {
+                // Add chaos stars on click
+                collectedStars++;
+                starCountEl.textContent = collectedStars;
+                
+                // Random color flash
+                const colors = ['#00ff88', '#ff00ff', '#00ffff', '#ffd700', '#ff006e'];
+                const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                this.style.borderLeftColor = randomColor;
+                
+                // Create floating emoji
+                const emoji = ['🐱', '🚀', '⭐', '✨', '💫', '🌟'][Math.floor(Math.random() * 6)];
+                const floater = document.createElement('div');
+                floater.textContent = emoji;
+                floater.style.position = 'fixed';
+                floater.style.left = event.clientX + 'px';
+                floater.style.top = event.clientY + 'px';
+                floater.style.fontSize = '2em';
+                floater.style.pointerEvents = 'none';
+                floater.style.zIndex = '1000';
+                floater.style.animation = 'float-up 2s ease-out forwards';
+                document.body.appendChild(floater);
+                
+                setTimeout(() => floater.remove(), 2000);
+            });
+        });
+
+        // Add float-up animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes float-up {
+                to {
+                    transform: translateY(-100px);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Window resize handler
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // Easter egg: konami code
+        let konamiIndex = 0;
+        const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === konamiCode[konamiIndex]) {
+                konamiIndex++;
+                if (konamiIndex === konamiCode.length) {
+                    document.body.style.animation = 'rainbow 2s linear infinite';
+                    const rainbowStyle = document.createElement('style');
+                    rainbowStyle.textContent = `
+                        @keyframes rainbow {
+                            0% { filter: hue-rotate(0deg); }
+                            100% { filter: hue-rotate(360deg); }
+                        }
+                    `;
+                    document.head.appendChild(rainbowStyle);
+                    konamiIndex = 0;
+                }
+            } else {
+                konamiIndex = 0;
+            }
+        });
+    </script>
+</body>
+</html>
