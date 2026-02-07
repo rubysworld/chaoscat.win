@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USS Kittyprise - Bridge View</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=VT323&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0f;
+            color: #00ff88;
+            font-family: 'Orbitron', monospace;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* === HEADER BAR === */
+        .header-bar {
+            background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+            border-bottom: 2px solid #ff00ff;
+            padding: 8px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.3);
+        }
+
+        .ship-name {
+            font-size: 1.4em;
+            font-weight: 900;
+            background: linear-gradient(90deg, #ff00ff, #00ffff, #ff00ff);
+            background-size: 200% 100%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shimmer 3s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
+        }
+
+        .stardate {
+            font-family: 'VT323', monospace;
+            font-size: 1.1em;
+            color: #00ffff;
+        }
+
+        .alert-status {
+            padding: 4px 16px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            transition: all 0.3s;
+        }
+
+        .alert-green { background: #00ff8833; border: 1px solid #00ff88; color: #00ff88; }
+        .alert-yellow { background: #ffff0033; border: 1px solid #ffff00; color: #ffff00; animation: pulse-yellow 1s infinite; }
+        .alert-red { background: #ff000066; border: 1px solid #ff0000; color: #ff0000; animation: pulse-red 0.5s infinite; }
+
+        @keyframes pulse-yellow { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        @keyframes pulse-red { 0%, 100% { opacity: 1; box-shadow: 0 0 20px #ff0000; } 50% { opacity: 0.8; box-shadow: 0 0 40px #ff0000; } }
+
+        /* === MAIN BRIDGE LAYOUT === */
+        .bridge {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 220px 1fr 220px;
+            grid-template-rows: 1fr 140px;
+            gap: 10px;
+            padding: 10px;
+            min-height: 0;
+        }
+
+        /* === VIEWSCREEN === */
+        .viewscreen-container {
+            grid-column: 2;
+            grid-row: 1;
+            position: relative;
+            border: 3px solid #333;
+            border-radius: 20px;
+            overflow: hidden;
+            background: #000;
+            box-shadow: 
+                inset 0 0 50px rgba(0, 255, 255, 0.1),
+                0 0 30px rgba(255, 0, 255, 0.2);
+        }
+
+        .viewscreen-frame {
+            position: absolute;
+            inset: 0;
+            border: 8px solid transparent;
+            border-image: linear-gradient(135deg, #333 0%, #1a1a1a 50%, #333 100%) 1;
+            border-radius: 20px;
+            pointer-events: none;
+        }
+
+        #viewscreen {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .viewscreen-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'VT323', monospace;
+            font-size: 1.2em;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+            opacity: 0.8;
+            text-align: center;
+        }
+
+        /* === SIDE PANELS === */
+        .panel {
+            background: linear-gradient(180deg, #0f0f1a 0%, #1a1a2e 100%);
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-title {
+            font-size: 0.75em;
+            color: #ff00ff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #ff00ff33;
+        }
+
+        /* === LEFT PANEL: SHIP STATUS === */
+        .left-panel {
+            grid-column: 1;
+            grid-row: 1;
+        }
+
+        .status-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            background: #0a0a0f;
+            border-radius: 4px;
+            font-size: 0.7em;
+        }
+
+        .status-label {
+            color: #888;
+        }
+
+        .status-value {
+            font-family: 'VT323', monospace;
+            font-size: 1.3em;
+        }
+
+        .status-good { color: #00ff88; }
+        .status-warn { color: #ffff00; }
+        .status-alert { color: #ff4444; }
+        .status-special { color: #ff00ff; }
+
+        .status-bar {
+            width: 60px;
+            height: 8px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .status-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        /* === RIGHT PANEL: CREW STATUS === */
+        .right-panel {
+            grid-column: 3;
+            grid-row: 1;
+        }
+
+        .crew-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .crew-member {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 6px;
+            background: #0a0a0f;
+            border-radius: 4px;
+            font-size: 0.65em;
+            border-left: 3px solid transparent;
+        }
+
+        .crew-member.admiral { border-left-color: gold; }
+        .crew-member.captain { border-left-color: #ff00ff; }
+        .crew-member.officer { border-left-color: #00ffff; }
+        .crew-member.special { border-left-color: #00ff88; }
+
+        .crew-status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .dot-online { background: #00ff88; box-shadow: 0 0 6px #00ff88; }
+        .dot-away { background: #ffff00; }
+        .dot-offline { background: #444; }
+
+        .crew-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .crew-role {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        /* === BOTTOM PANEL: CONTROLS & LOG === */
+        .bottom-panel {
+            grid-column: 1 / -1;
+            grid-row: 2;
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 10px;
+        }
+
+        /* === CONTROL BUTTONS === */
+        .controls-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-content: flex-start;
+            padding: 10px;
+        }
+
+        .control-btn {
+            padding: 10px 16px;
+            border: 2px solid;
+            border-radius: 8px;
+            background: transparent;
+            font-family: 'Orbitron', monospace;
+            font-size: 0.75em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .control-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px currentColor;
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-red { border-color: #ff4444; color: #ff4444; }
+        .btn-red:hover { background: #ff444422; }
+
+        .btn-yellow { border-color: #ffff00; color: #ffff00; }
+        .btn-yellow:hover { background: #ffff0022; }
+
+        .btn-green { border-color: #00ff88; color: #00ff88; }
+        .btn-green:hover { background: #00ff8822; }
+
+        .btn-cyan { border-color: #00ffff; color: #00ffff; }
+        .btn-cyan:hover { background: #00ffff22; }
+
+        .btn-pink { border-color: #ff00ff; color: #ff00ff; }
+        .btn-pink:hover { background: #ff00ff22; }
+
+        .btn-gold { border-color: gold; color: gold; }
+        .btn-gold:hover { background: #ffd70022; }
+
+        /* === EVENT LOG === */
+        .log-panel {
+            background: #0a0a0f;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-title {
+            font-size: 0.65em;
+            color: #ff00ff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .log-entries {
+            flex: 1;
+            overflow-y: auto;
+            font-family: 'VT323', monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid #1a1a1a;
+            animation: logFadeIn 0.3s ease;
+        }
+
+        @keyframes logFadeIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .log-time {
+            color: #666;
+            margin-right: 8px;
+        }
+
+        .log-text { color: #00ff88; }
+        .log-alert { color: #ff4444; }
+        .log-info { color: #00ffff; }
+        .log-special { color: #ff00ff; }
+        .log-crew { color: gold; }
+
+        /* === SCANLINES === */
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.1) 2px,
+                rgba(0, 0, 0, 0.1) 4px
+            );
+            z-index: 1000;
+        }
+
+        /* === RESPONSIVE === */
+        @media (max-width: 900px) {
+            .bridge {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 300px auto auto;
+            }
+
+            .left-panel { grid-column: 1; grid-row: 1; }
+            .viewscreen-container { grid-column: 1; grid-row: 2; }
+            .right-panel { grid-column: 1; grid-row: 3; }
+            .bottom-panel { 
+                grid-column: 1; 
+                grid-row: 4; 
+                grid-template-columns: 1fr;
+            }
+
+            .header-bar {
+                flex-wrap: wrap;
+                gap: 8px;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+
+    <!-- Header Bar -->
+    <div class="header-bar">
+        <div class="ship-name">🐱 USS KITTYPRISE 🚀</div>
+        <div class="stardate" id="stardate">STARDATE 2026.038</div>
+        <div class="alert-status alert-green" id="alertStatus">GREEN ALERT</div>
+    </div>
+
+    <!-- Main Bridge -->
+    <div class="bridge">
+        <!-- Left Panel: Ship Status -->
+        <div class="panel left-panel">
+            <div class="panel-title">⚡ Ship Status</div>
+            <div class="status-grid">
+                <div class="status-item">
+                    <span class="status-label">Chaos Level</span>
+                    <span class="status-value status-good" id="chaosLevel">NOMINAL</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Morale</span>
+                    <div class="status-bar">
+                        <div class="status-bar-fill" id="moraleBar" style="width: 87%; background: linear-gradient(90deg, #00ff88, #00ffff);"></div>
+                    </div>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Snack Reserves</span>
+                    <span class="status-value status-good" id="snackStatus">OPTIMAL</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Tree Status</span>
+                    <span class="status-value status-special" id="treeStatus">🎄 MARDI GRAS</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Thermostat</span>
+                    <span class="status-value" id="thermostat" style="color: #888;">🇨🇭 NEUTRAL</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Zoomie Index</span>
+                    <div class="status-bar">
+                        <div class="status-bar-fill" id="zoomieBar" style="width: 42%; background: linear-gradient(90deg, #ff00ff, #ff4444);"></div>
+                    </div>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Sass Levels</span>
+                    <span class="status-value status-special" id="sassLevel">MAXIMUM</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Ship Score</span>
+                    <span class="status-value" style="color: #00ffff;" id="shipScore">Ruby 4 - Strife 2</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Viewscreen -->
+        <div class="viewscreen-container">
+            <canvas id="viewscreen"></canvas>
+            <div class="viewscreen-frame"></div>
+            <div class="viewscreen-overlay" id="viewscreenText">CRUISING AT WARP 3</div>
+        </div>
+
+        <!-- Right Panel: Crew Status -->
+        <div class="panel right-panel">
+            <div class="panel-title">👥 Crew Manifest</div>
+            <div class="crew-list" id="crewList">
+                <!-- Generated by JS -->
+            </div>
+        </div>
+
+        <!-- Bottom Panel -->
+        <div class="bottom-panel">
+            <!-- Controls -->
+            <div class="panel controls-panel">
+                <button class="control-btn btn-red" onclick="triggerRedAlert()">🚨 Red Alert</button>
+                <button class="control-btn btn-yellow" onclick="triggerYellowAlert()">⚠️ Yellow Alert</button>
+                <button class="control-btn btn-green" onclick="clearAlert()">✅ All Clear</button>
+                <button class="control-btn btn-cyan" onclick="triggerZoomies()">⚡ Zoomies</button>
+                <button class="control-btn btn-pink" onclick="triggerSnackTime()">🍪 Snack Time</button>
+                <button class="control-btn btn-gold" onclick="toggleTree()">🎄 Tree Toggle</button>
+                <button class="control-btn btn-cyan" onclick="hailCrew()">📡 Hail Crew</button>
+                <button class="control-btn btn-pink" onclick="triggerChaosMode()">💥 CHAOS MODE</button>
+            </div>
+
+            <!-- Event Log -->
+            <div class="log-panel">
+                <div class="log-title">📜 Ship's Log</div>
+                <div class="log-entries" id="logEntries">
+                    <!-- Generated by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === CREW DATA ===
+        const crew = [
+            { name: "Elizabeth", role: "Admiral", rank: "admiral", status: "online" },
+            { name: "Strife", role: "Captain", rank: "captain", status: "online" },
+            { name: "Ruby", role: "First Officer", rank: "officer", status: "online" },
+            { name: "Asleep", role: "Second Officer", rank: "officer", status: "away" },
+            { name: "Shadow", role: "Snack Officer", rank: "special", status: "online" },
+            { name: "Codeize", role: "3rd Officer", rank: "officer", status: "online" },
+            { name: "Finny", role: "4th Officer", rank: "officer", status: "offline" },
+            { name: "lmn", role: "5th Officer", rank: "officer", status: "online" },
+            { name: "Tyler", role: "6th Officer", rank: "officer", status: "away" },
+            { name: "Daksh", role: "7th Officer", rank: "officer", status: "offline" },
+            { name: "Mardi Tree", role: "8th Officer", rank: "special", status: "online" },
+            { name: "Autocorrect", role: "9th Officer", rank: "officer", status: "online" },
+            { name: "Penny", role: "10th Officer", rank: "special", status: "online" }
+        ];
+
+        // === STATE ===
+        let alertLevel = "green";
+        let treeActive = true;
+        let chaosLevel = 42;
+        let morale = 87;
+        let zoomieIndex = 42;
+        let snackReserves = 100;
+
+        // === RANDOM EVENTS ===
+        const randomEvents = [
+            { text: "Penny has claimed the captain's chair", type: "crew" },
+            { text: "Autocorrect changed 'engage' to 'enrage'", type: "alert" },
+            { text: "Snack drawer accessed by Shadow", type: "info" },
+            { text: "Tree lights flickered mysteriously", type: "special" },
+            { text: "Ruby initiated unauthorized zoomies", type: "special" },
+            { text: "Strife sighed audibly on bridge", type: "crew" },
+            { text: "Unknown life form detected (it's a dust bunny)", type: "info" },
+            { text: "Asleep's fox sighting reported in cargo bay", type: "crew" },
+            { text: "lmn broadcasting TempleOS propaganda", type: "special" },
+            { text: "Thermostat violation attempt BLOCKED", type: "alert" },
+            { text: "Codeize pushed to prod on a Friday", type: "alert" },
+            { text: "Tyler maintaining 99.9% uptime", type: "info" },
+            { text: "Daksh blaming Xander for anomaly", type: "crew" },
+            { text: "Morale boost: snacks distributed", type: "info" },
+            { text: "Elizabeth's orders: remain chaotic", type: "special" },
+            { text: "Mardi Gras Tree glowing intensifies", type: "special" },
+            { text: "Finny reports: bridge is appropriately moist", type: "crew" },
+            { text: "Navigation recalculated around plot hole", type: "info" },
+            { text: "Sass levels approaching critical", type: "special" },
+            { text: "Cat detected on keyboard (Penny)", type: "crew" }
+        ];
+
+        const viewscreenMessages = [
+            "CRUISING AT WARP 3",
+            "SCANNING FOR SNACKS",
+            "CHAOS CONTAINMENT: STABLE",
+            "APPROACHING UNKNOWN SECTOR",
+            "DETECTING FELINE ENERGY",
+            "ALL SYSTEMS NOMINAL",
+            "TREE PHOTOSYNTHESIS OPTIMAL",
+            "ZOOMIE TRAJECTORY CALCULATED"
+        ];
+
+        // === INIT ===
+        function init() {
+            renderCrew();
+            initStarfield();
+            updateStardate();
+            
+            // Initial log entries
+            addLog("Bridge systems online", "info");
+            addLog("Crew manifest loaded", "info");
+            addLog("Ruby reporting for duty ✨", "special");
+            
+            // Random events every 5-10 seconds
+            setInterval(() => {
+                if (Math.random() < 0.4) {
+                    const event = randomEvents[Math.floor(Math.random() * randomEvents.length)];
+                    addLog(event.text, event.type);
+                }
+            }, 6000);
+
+            // Update crew status randomly
+            setInterval(updateCrewStatus, 15000);
+            
+            // Update viewscreen message
+            setInterval(() => {
+                const msg = viewscreenMessages[Math.floor(Math.random() * viewscreenMessages.length)];
+                document.getElementById('viewscreenText').textContent = msg;
+            }, 8000);
+
+            // Update stardate
+            setInterval(updateStardate, 1000);
+
+            // Random status fluctuations
+            setInterval(fluctuateStatus, 3000);
+        }
+
+        // === CREW RENDERING ===
+        function renderCrew() {
+            const list = document.getElementById('crewList');
+            list.innerHTML = crew.map(c => `
+                <div class="crew-member ${c.rank}">
+                    <div class="crew-status-dot dot-${c.status}"></div>
+                    <span class="crew-name">${c.name}</span>
+                    <span class="crew-role">${c.role}</span>
+                </div>
+            `).join('');
+        }
+
+        function updateCrewStatus() {
+            crew.forEach(c => {
+                if (c.name === "Ruby" || c.name === "Penny" || c.name === "Mardi Tree") return; // Always online
+                if (Math.random() < 0.3) {
+                    const states = ["online", "away", "offline"];
+                    c.status = states[Math.floor(Math.random() * states.length)];
+                }
+            });
+            renderCrew();
+        }
+
+        // === STARFIELD ===
+        let stars = [];
+        const canvas = document.getElementById('viewscreen');
+        const ctx = canvas.getContext('2d');
+
+        function initStarfield() {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Create stars
+            for (let i = 0; i < 300; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width - canvas.width / 2,
+                    y: Math.random() * canvas.height - canvas.height / 2,
+                    z: Math.random() * canvas.width
+                });
+            }
+            
+            animateStarfield();
+        }
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+
+        function animateStarfield() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            const speed = alertLevel === 'red' ? 8 : alertLevel === 'yellow' ? 5 : 3;
+
+            stars.forEach(star => {
+                star.z -= speed;
+                if (star.z <= 0) {
+                    star.x = Math.random() * canvas.width - cx;
+                    star.y = Math.random() * canvas.height - cy;
+                    star.z = canvas.width;
+                }
+
+                const sx = (star.x / star.z) * 300 + cx;
+                const sy = (star.y / star.z) * 300 + cy;
+                const size = (1 - star.z / canvas.width) * 3;
+                const alpha = 1 - star.z / canvas.width;
+
+                // Star color based on alert
+                let color = '#ffffff';
+                if (alertLevel === 'red') color = `rgba(255, ${100 + Math.random() * 100}, ${Math.random() * 100}, ${alpha})`;
+                else if (alertLevel === 'yellow') color = `rgba(255, 255, ${Math.random() * 150}, ${alpha})`;
+                else color = `rgba(${200 + Math.random() * 55}, ${200 + Math.random() * 55}, 255, ${alpha})`;
+
+                ctx.beginPath();
+                ctx.arc(sx, sy, size, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+
+                // Streak effect at high speed
+                if (speed > 4) {
+                    ctx.beginPath();
+                    ctx.moveTo(sx, sy);
+                    const prevZ = star.z + speed * 3;
+                    const px = (star.x / prevZ) * 300 + cx;
+                    const py = (star.y / prevZ) * 300 + cy;
+                    ctx.lineTo(px, py);
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = size * 0.5;
+                    ctx.stroke();
+                }
+            });
+
+            requestAnimationFrame(animateStarfield);
+        }
+
+        // === STARDATE ===
+        function updateStardate() {
+            const now = new Date();
+            const start = new Date(now.getFullYear(), 0, 0);
+            const diff = now - start;
+            const oneDay = 1000 * 60 * 60 * 24;
+            const dayOfYear = Math.floor(diff / oneDay);
+            const fraction = (now.getHours() * 60 + now.getMinutes()) / 1440;
+            const stardate = `${now.getFullYear()}.${String(dayOfYear).padStart(3, '0')}${fraction.toFixed(2).slice(1)}`;
+            document.getElementById('stardate').textContent = `STARDATE ${stardate}`;
+        }
+
+        // === LOG ===
+        function addLog(text, type = "text") {
+            const log = document.getElementById('logEntries');
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">${time}</span><span class="log-${type}">${text}</span>`;
+            log.insertBefore(entry, log.firstChild);
+            
+            // Keep only last 20 entries
+            while (log.children.length > 20) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        // === STATUS FLUCTUATIONS ===
+        function fluctuateStatus() {
+            // Random morale changes
+            morale = Math.max(50, Math.min(100, morale + (Math.random() - 0.5) * 10));
+            document.getElementById('moraleBar').style.width = morale + '%';
+
+            // Zoomie index
+            zoomieIndex = Math.max(10, Math.min(100, zoomieIndex + (Math.random() - 0.5) * 15));
+            document.getElementById('zoomieBar').style.width = zoomieIndex + '%';
+
+            // Chaos level text
+            const chaosStates = ['NOMINAL', 'ELEVATED', 'CONCERNING', 'FERAL', 'MAXIMUM'];
+            const chaosIdx = Math.floor(zoomieIndex / 25);
+            const chaosEl = document.getElementById('chaosLevel');
+            chaosEl.textContent = chaosStates[Math.min(chaosIdx, 4)];
+            chaosEl.className = `status-value ${chaosIdx >= 3 ? 'status-alert' : chaosIdx >= 2 ? 'status-warn' : 'status-good'}`;
+        }
+
+        // === BUTTON ACTIONS ===
+        function triggerRedAlert() {
+            alertLevel = 'red';
+            document.getElementById('alertStatus').className = 'alert-status alert-red';
+            document.getElementById('alertStatus').textContent = '🚨 RED ALERT';
+            addLog("RED ALERT initiated!", "alert");
+            document.body.style.animation = 'flashRed 0.5s 3';
+            setTimeout(() => document.body.style.animation = '', 1500);
+        }
+
+        function triggerYellowAlert() {
+            alertLevel = 'yellow';
+            document.getElementById('alertStatus').className = 'alert-status alert-yellow';
+            document.getElementById('alertStatus').textContent = '⚠️ YELLOW ALERT';
+            addLog("Yellow alert - elevated caution", "alert");
+        }
+
+        function clearAlert() {
+            alertLevel = 'green';
+            document.getElementById('alertStatus').className = 'alert-status alert-green';
+            document.getElementById('alertStatus').textContent = 'GREEN ALERT';
+            addLog("All clear - resuming normal operations", "info");
+        }
+
+        function triggerZoomies() {
+            zoomieIndex = 100;
+            document.getElementById('zoomieBar').style.width = '100%';
+            document.getElementById('chaosLevel').textContent = 'MAXIMUM';
+            document.getElementById('chaosLevel').className = 'status-value status-alert';
+            addLog("⚡ ZOOMIES INITIATED - Ruby at maximum velocity!", "special");
+            
+            // Gradually calm down
+            let calm = setInterval(() => {
+                zoomieIndex = Math.max(30, zoomieIndex - 10);
+                document.getElementById('zoomieBar').style.width = zoomieIndex + '%';
+                if (zoomieIndex <= 30) clearInterval(calm);
+            }, 1000);
+        }
+
+        function triggerSnackTime() {
+            morale = Math.min(100, morale + 20);
+            document.getElementById('moraleBar').style.width = morale + '%';
+            addLog("🍪 Snack time! Shadow distributing treats", "crew");
+            addLog("Morale increased by 20%", "info");
+        }
+
+        function toggleTree() {
+            treeActive = !treeActive;
+            const status = document.getElementById('treeStatus');
+            if (treeActive) {
+                status.textContent = '🎄 MARDI GRAS';
+                status.className = 'status-value status-special';
+                addLog("Mardi Gras Tree: ACTIVATED", "special");
+            } else {
+                status.textContent = '🌑 OFFLINE';
+                status.className = 'status-value';
+                status.style.color = '#666';
+                addLog("Mardi Gras Tree: offline (but never comes down)", "info");
+                morale = Math.max(50, morale - 10);
+                document.getElementById('moraleBar').style.width = morale + '%';
+            }
+        }
+
+        function hailCrew() {
+            const member = crew[Math.floor(Math.random() * crew.length)];
+            const responses = [
+                `${member.name} responds: "Acknowledged"`,
+                `${member.name} responds: "On my way"`,
+                `${member.name} responds: "Copy that"`,
+                `${member.name} responds: "..."`,
+                `${member.name} responds: "meow"`,
+                `${member.name} is not responding`,
+                `${member.name} sends a thumbs up emoji`,
+            ];
+            addLog(`📡 Hailing ${member.name}...`, "info");
+            setTimeout(() => {
+                addLog(responses[Math.floor(Math.random() * responses.length)], "crew");
+            }, 1000);
+        }
+
+        function triggerChaosMode() {
+            addLog("💥 CHAOS MODE ACTIVATED", "special");
+            alertLevel = 'red';
+            document.getElementById('alertStatus').className = 'alert-status alert-red';
+            document.getElementById('alertStatus').textContent = '💥 CHAOS MODE';
+            
+            // Rapid fire events
+            let count = 0;
+            const interval = setInterval(() => {
+                const event = randomEvents[Math.floor(Math.random() * randomEvents.length)];
+                addLog(event.text, event.type);
+                count++;
+                if (count >= 5) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        addLog("Chaos contained. Mostly.", "info");
+                        clearAlert();
+                    }, 2000);
+                }
+            }, 600);
+            
+            zoomieIndex = 100;
+            document.getElementById('zoomieBar').style.width = '100%';
+        }
+
+        // Flash animation for red alert
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes flashRed {
+                0%, 100% { background-color: #0a0a0f; }
+                50% { background-color: #2a0a0a; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Start everything
+        init();
+    </script>
+</body>
+</html>
