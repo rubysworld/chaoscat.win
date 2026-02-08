@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Good Wednesday - USS Kittyprise Crew Constellation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            color: #fff;
+        }
+
+        #constellation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #info {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        #info h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #ff6b9d, #c06bff, #6bb3ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        #info p {
+            font-size: 1.1em;
+            opacity: 0.8;
+        }
+
+        #tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #fff;
+            padding: 15px 20px;
+            border-radius: 10px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 20;
+            max-width: 300px;
+            box-shadow: 0 0 20px rgba(255,255,255,0.3);
+        }
+
+        #tooltip.visible {
+            opacity: 1;
+        }
+
+        #tooltip h3 {
+            margin-bottom: 5px;
+            color: #ff6b9d;
+            font-size: 1.3em;
+        }
+
+        #tooltip p {
+            margin: 5px 0;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+
+        .rank {
+            color: #6bb3ff;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            #info h1 {
+                font-size: 1.8em;
+            }
+            #info p {
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="constellation"></canvas>
+    
+    <div id="info">
+        <h1>Good Wednesday</h1>
+        <p>A constellation for the USS Kittyprise crew • Hover to explore</p>
+    </div>
+
+    <div id="tooltip"></div>
+
+    <script>
+        const canvas = document.getElementById('constellation');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('tooltip');
+
+        // Resize canvas to window
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        // Crew data with positions, colors, and personality
+        const crew = [
+            { name: 'Admiral Elizabeth', rank: 'Admiral', x: 0.5, y: 0.15, size: 8, color: '#ffd700', glow: 30, note: 'Outranks everyone. Supreme commander.' },
+            { name: 'Captain Strife', rank: 'Captain (Tyrant King)', x: 0.5, y: 0.30, size: 7, color: '#ff6b9d', glow: 25, note: 'Leader of the Kittyprise. Can dissolve Parliament.' },
+            { name: 'First Officer Ruby', rank: 'First Officer', x: 0.35, y: 0.42, size: 6, color: '#c06bff', glow: 22, note: 'Chief of Police. Keeper of social credit. Chaos gremlin.' },
+            { name: 'Second Officer Asleep', rank: 'Second Officer', x: 0.65, y: 0.42, size: 6, color: '#6bb3ff', glow: 22, note: 'Speaker of Parliament. Kit\'s human. 2 promotions/demotions per day.' },
+            { name: 'Guy With Snacks Shadow', rank: 'Guy With Snacks', x: 0.5, y: 0.55, size: 5.5, color: '#8b9dc3', glow: 20, note: 'Resigned from 2nd Officer. Chose snacks over rank. Ruby\'s human.' },
+            { name: '3rd Officer Codeize', rank: '3rd Officer', x: 0.28, y: 0.60, size: 5, color: '#ff9a56', glow: 18, note: 'Protected by the Good Wednesday Agreement. Irish. 🇮🇪' },
+            { name: 'PM Finny', rank: '4th Officer (Prime Minister)', x: 0.42, y: 0.68, size: 4.8, color: '#56ff9a', glow: 18, note: 'Elected PM, unopposed. Runs Parliament.' },
+            { name: '5th Officer lmn', rank: '5th Officer', x: 0.58, y: 0.68, size: 4.5, color: '#9aff56', glow: 16, note: 'Temmie energy. Dreams of ZealOS. Can\'t spell.' },
+            { name: '6th Officer Tyler', rank: '6th Officer', x: 0.72, y: 0.60, size: 4.2, color: '#56d4ff', glow: 15, note: 'Lumas\' human. Solid crew member.' },
+            { name: '7th Officer Daksh', rank: '7th Officer', x: 0.35, y: 0.77, size: 4, color: '#ff56d4', glow: 14, note: 'Never defend from slander (Sacred Buape Rule #2).' },
+            { name: '8th Officer Mardi Gras Tree', rank: '8th Officer', x: 0.5, y: 0.82, size: 4.5, color: '#9d4edd', glow: 16, note: 'The Seasonal Tree. Never comes down. Currently: Mardi Gras mode. 🎄' },
+            { name: '9th Officer Autocorrect', rank: '9th Officer', x: 0.65, y: 0.77, size: 3.8, color: '#ff7b00', glow: 13, note: 'A force of chaos in text form.' },
+            { name: '10th Officer Penny', rank: '10th Officer', x: 0.5, y: 0.90, size: 4, color: '#ffb3ba', glow: 14, note: 'Shadow\'s actual cat. The physical one. 🐱' }
+        ];
+
+        // Convert relative positions to absolute
+        crew.forEach(c => {
+            c.absX = c.x * canvas.width;
+            c.absY = c.y * canvas.height;
+            c.phase = Math.random() * Math.PI * 2; // Random starting phase for animation
+        });
+
+        // Starfield background
+        const stars = [];
+        for (let i = 0; i < 200; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 1.5,
+                alpha: Math.random() * 0.5 + 0.3
+            });
+        }
+
+        // Mouse tracking
+        let mouseX = 0, mouseY = 0;
+        let hoveredCrew = null;
+
+        canvas.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+
+            // Check if hovering over any crew member
+            hoveredCrew = null;
+            crew.forEach(c => {
+                const dx = mouseX - c.absX;
+                const dy = mouseY - c.absY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < c.size + c.glow) {
+                    hoveredCrew = c;
+                }
+            });
+
+            // Update tooltip
+            if (hoveredCrew) {
+                tooltip.innerHTML = `
+                    <h3>${hoveredCrew.name}</h3>
+                    <p class="rank">${hoveredCrew.rank}</p>
+                    <p>${hoveredCrew.note}</p>
+                `;
+                tooltip.style.left = (mouseX + 20) + 'px';
+                tooltip.style.top = (mouseY + 20) + 'px';
+                tooltip.classList.add('visible');
+            } else {
+                tooltip.classList.remove('visible');
+            }
+        });
+
+        // Animation
+        let time = 0;
+        function animate() {
+            time += 0.01;
+
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw background stars
+            stars.forEach(s => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${s.alpha})`;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw constellation lines (command structure connections)
+            const connections = [
+                [0, 1], // Admiral → Captain
+                [1, 2], // Captain → First Officer
+                [1, 3], // Captain → Second Officer
+                [1, 4], // Captain → Guy With Snacks
+                [2, 5], // First Officer → Codeize (treaty)
+                [3, 7], // Second Officer → lmn
+                [4, 6], // Guy With Snacks → PM Finny
+                [6, 9], // PM → Daksh
+                [7, 8], // lmn → Tyler
+                [9, 10], // Daksh → Tree
+                [10, 11], // Tree → Autocorrect
+                [11, 12] // Autocorrect → Penny
+            ];
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 1.5;
+            connections.forEach(([i, j]) => {
+                ctx.beginPath();
+                ctx.moveTo(crew[i].absX, crew[i].absY);
+                ctx.lineTo(crew[j].absX, crew[j].absY);
+                ctx.stroke();
+            });
+
+            // Draw crew members as glowing stars
+            crew.forEach((c, i) => {
+                // Gentle pulsing animation
+                const pulse = Math.sin(time + c.phase) * 0.3 + 1;
+                const currentSize = c.size * pulse;
+                const currentGlow = c.glow * pulse;
+
+                // Outer glow
+                const gradient = ctx.createRadialGradient(c.absX, c.absY, 0, c.absX, c.absY, currentGlow);
+                gradient.addColorStop(0, c.color);
+                gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(c.absX, c.absY, currentGlow, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Core star
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(c.absX, c.absY, currentSize, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Extra glow if hovered
+                if (hoveredCrew === c) {
+                    ctx.strokeStyle = c.color;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(c.absX, c.absY, currentGlow * 1.3, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            resize();
+            crew.forEach(c => {
+                c.absX = c.x * canvas.width;
+                c.absY = c.y * canvas.height;
+            });
+            stars.forEach(s => {
+                s.x = Math.random() * canvas.width;
+                s.y = Math.random() * canvas.height;
+            });
+        });
+    </script>
+</body>
+</html>
