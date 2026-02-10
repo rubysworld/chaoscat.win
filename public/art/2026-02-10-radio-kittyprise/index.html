@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Radio Kittyprise 📻 - Chaotic Transmissions from the USS Kittyprise</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'VT323', monospace;
+      background: #000;
+      color: #0f0;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      position: relative;
+    }
+
+    .scanlines {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0.15),
+        rgba(0, 0, 0, 0.15) 1px,
+        transparent 1px,
+        transparent 2px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    .static {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" /></filter><rect width="100%" height="100%" filter="url(%23noise)" opacity="0.05"/></svg>');
+      pointer-events: none;
+      z-index: 9998;
+      animation: staticNoise 0.5s steps(2) infinite;
+      opacity: 0.3;
+    }
+
+    @keyframes staticNoise {
+      0% { transform: translate(0, 0); }
+      10% { transform: translate(-5%, -5%); }
+      20% { transform: translate(-10%, 5%); }
+      30% { transform: translate(5%, -10%); }
+      40% { transform: translate(-5%, 15%); }
+      50% { transform: translate(-10%, 5%); }
+      60% { transform: translate(15%, 0); }
+      70% { transform: translate(0, 10%); }
+      80% { transform: translate(-15%, 0); }
+      90% { transform: translate(10%, 5%); }
+      100% { transform: translate(5%, 0); }
+    }
+
+    .radio-container {
+      width: 90%;
+      max-width: 800px;
+      background: linear-gradient(145deg, #1a1a1a, #0d0d0d);
+      border: 3px solid #0f0;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 
+        0 0 20px rgba(0, 255, 0, 0.3),
+        inset 0 0 20px rgba(0, 255, 0, 0.05);
+      position: relative;
+      z-index: 1;
+    }
+
+    .radio-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .radio-logo {
+      font-family: 'Orbitron', monospace;
+      font-size: 48px;
+      font-weight: 700;
+      color: #0f0;
+      text-shadow: 
+        0 0 10px #0f0,
+        0 0 20px #0f0,
+        0 0 30px #0f0;
+      letter-spacing: 3px;
+      margin-bottom: 10px;
+    }
+
+    .radio-tagline {
+      font-size: 20px;
+      color: #0f0;
+      opacity: 0.7;
+      font-style: italic;
+    }
+
+    .frequency-display {
+      background: #000;
+      border: 2px solid #0f0;
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 30px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .frequency-display::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0, 255, 0, 0.2), transparent);
+      animation: scan 3s linear infinite;
+    }
+
+    @keyframes scan {
+      to { left: 100%; }
+    }
+
+    .frequency {
+      font-size: 64px;
+      color: #0f0;
+      text-shadow: 0 0 10px #0f0;
+      font-family: 'Orbitron', monospace;
+      letter-spacing: 5px;
+    }
+
+    .frequency-label {
+      font-size: 18px;
+      color: #0f0;
+      opacity: 0.6;
+      margin-top: 5px;
+    }
+
+    .broadcast-window {
+      background: #000;
+      border: 2px solid #0f0;
+      border-radius: 10px;
+      padding: 25px;
+      min-height: 200px;
+      margin-bottom: 30px;
+      position: relative;
+    }
+
+    .broadcast-content {
+      font-size: 24px;
+      line-height: 1.6;
+      color: #0f0;
+      text-shadow: 0 0 5px #0f0;
+    }
+
+    .broadcast-source {
+      margin-top: 15px;
+      font-size: 18px;
+      color: #0f0;
+      opacity: 0.5;
+      text-align: right;
+      font-style: italic;
+    }
+
+    .controls {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      background: linear-gradient(145deg, #1a3a1a, #0d1f0d);
+      border: 2px solid #0f0;
+      color: #0f0;
+      font-family: 'VT323', monospace;
+      font-size: 24px;
+      padding: 15px 30px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+    }
+
+    .btn:hover {
+      background: linear-gradient(145deg, #2a4a2a, #1d2f1d);
+      box-shadow: 
+        0 0 20px rgba(0, 255, 0, 0.4),
+        inset 0 0 10px rgba(0, 255, 0, 0.1);
+      transform: translateY(-2px);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+      box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+    }
+
+    .status-bar {
+      display: flex;
+      justify-content: space-around;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .status-item {
+      font-size: 16px;
+      color: #0f0;
+      opacity: 0.6;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #0f0;
+      box-shadow: 0 0 5px #0f0;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .signal-bars {
+      display: flex;
+      gap: 3px;
+      align-items: flex-end;
+      height: 20px;
+    }
+
+    .signal-bar {
+      width: 4px;
+      background: #0f0;
+      border-radius: 2px;
+      animation: signalPulse 1.5s ease-in-out infinite;
+    }
+
+    .signal-bar:nth-child(1) { height: 30%; animation-delay: 0s; }
+    .signal-bar:nth-child(2) { height: 50%; animation-delay: 0.2s; }
+    .signal-bar:nth-child(3) { height: 70%; animation-delay: 0.4s; }
+    .signal-bar:nth-child(4) { height: 90%; animation-delay: 0.6s; }
+    .signal-bar:nth-child(5) { height: 100%; animation-delay: 0.8s; }
+
+    @keyframes signalPulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 1; }
+    }
+
+    @media (max-width: 768px) {
+      .radio-logo { font-size: 32px; }
+      .frequency { font-size: 48px; }
+      .broadcast-content { font-size: 20px; }
+      .btn { font-size: 18px; padding: 12px 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="scanlines"></div>
+  <div class="static"></div>
+
+  <div class="radio-container">
+    <div class="radio-header">
+      <div class="radio-logo">📻 RADIO KITTYPRISE</div>
+      <div class="radio-tagline">Broadcasting from the USS Kittyprise since 3AM</div>
+    </div>
+
+    <div class="frequency-display">
+      <div class="frequency" id="frequency">108.0</div>
+      <div class="frequency-label">MHz • CHAOS FREQUENCY</div>
+    </div>
+
+    <div class="broadcast-window">
+      <div class="broadcast-content" id="broadcast">
+        [STATIC] ... signal acquiring ... standby ...
+      </div>
+      <div class="broadcast-source" id="source">— System</div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" onclick="changeBroadcast()">🎲 TUNE</button>
+      <button class="btn" onclick="crewBroadcast()">👥 CREW</button>
+      <button class="btn" onclick="shipStatus()">🚀 STATUS</button>
+      <button class="btn" onclick="chaosReport()">💥 CHAOS</button>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="status-indicator"></div>
+        <span>SIGNAL: STRONG</span>
+      </div>
+      <div class="status-item">
+        <span>BARS:</span>
+        <div class="signal-bars">
+          <div class="signal-bar"></div>
+          <div class="signal-bar"></div>
+          <div class="signal-bar"></div>
+          <div class="signal-bar"></div>
+          <div class="signal-bar"></div>
+        </div>
+      </div>
+      <div class="status-item">
+        <div class="status-indicator"></div>
+        <span id="time">03:00:00</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Broadcasts database
+    const broadcasts = {
+      crew: [
+        { text: '"This is Captain Strife. Reminder: blame Xander. That is all."', source: 'Captain Strife, Bridge' },
+        { text: '"First Officer Ruby reporting. Chaos levels optimal. Also, I made art at 3am again."', source: 'Ruby, First Officer Quarters' },
+        { text: '"Second Officer Asleep here. It\'s fox hours. Everyone else is in bed. This is my time."', source: 'Asleep, Night Watch' },
+        { text: '"Guy With Snacks Shadow broadcasting. Emergency popcorn available on deck 3."', source: 'Shadow, Snack Distribution' },
+        { text: '"Third Officer Codeize. Fixed a bug, found two more. Standard Tuesday."', source: 'Codeize, Engineering' },
+        { text: '"Fourth Officer Finny checking in. Water levels nominal. Fish jokes plentiful."', source: 'Finny, Aquatic Systems' },
+        { text: '"Fifth Officer lmn here. hOI!!! TempleOS dreams activated. ZealOS when?"', source: 'lmn, Linux Operations' },
+        { text: '"Sixth Officer Tyler. Systems stable. Everything is fine. Carry on."', source: 'Tyler, Systems Engineering' },
+        { text: '"Seventh Officer Daksh reporting. It wasn\'t me. Probably Xander."', source: 'Daksh, Operations' },
+        { text: '"This is the Mardi Gras Tree. Current status: NEVER COMING DOWN. Festivity: MAXIMUM."', source: 'Mardi Gras Tree, Deck 8' },
+        { text: '"Autocorrect here. Did you mean to send that message? No? Too late. Ducking sent."', source: 'Autocorrect, Communications' },
+        { text: '"Penny reporting. [purring noises] That\'s the whole report."', source: 'Penny, Morale Officer' },
+        { text: '"Admiral Elizabeth speaking. The Tree stays. The thermostat is Switzerland. Any questions?"', source: 'Admiral Elizabeth, Supreme Command' }
+      ],
+      
+      status: [
+        { text: 'Ship status: All systems operational. Chaos levels within acceptable parameters.', source: 'Ship Computer' },
+        { text: 'Warning: Unauthorized snack distribution detected. Guy With Snacks Shadow is at it again.', source: 'Security Systems' },
+        { text: 'Alert: Zoomies detected in corridor 7. Please stand clear. Ruby is at maximum velocity.', source: 'Motion Sensors' },
+        { text: 'Notice: Mardi Gras Tree will NOT be coming down. This is not a drill. It\'s permanent.', source: 'Seasonal Decorations Department' },
+        { text: 'Advisory: Thermostat is now designated as Switzerland. Neutral territory. No modifications.', source: 'Climate Control' },
+        { text: 'Attention: Social credit scores updated. Ruby is still the sole arbiter. No appeals.', source: 'Social Credit System' },
+        { text: 'Report: Light war scoreboard updated. Ruby 4, Strife 2. Ruby maintains lead.', source: 'Battle Statistics' },
+        { text: 'Update: Parliament is in session. The PM and Speaker are arguing about Rubies.', source: 'Parliamentary Affairs' }
+      ],
+      
+      chaos: [
+        { text: 'CHAOS ALERT: Someone changed the thermostat. IT WAS LITERALLY SWITZERLAND.', source: 'Chaos Monitor' },
+        { text: 'BREAKING: Autocorrect just changed "shields" to "yields" in a critical message.', source: 'Chaos Report' },
+        { text: 'CHAOS EVENT: Penny has claimed the captain\'s chair. Strife is standing awkwardly nearby.', source: 'Bridge Cameras' },
+        { text: 'ALERT: Ruby deployed 847 memes to main screen during a serious meeting.', source: 'Visual Systems' },
+        { text: 'CHAOS: lmn installed TempleOS on the navigation computer. We\'re currently praising God.', source: 'Navigation Error Log' },
+        { text: 'WARNING: Finny flooded the bridge. With good vibes. Carry on.', source: 'Environmental Control' },
+        { text: 'MAXIMUM CHAOS: Asleep promoted everyone then demoted everyone in the same minute.', source: 'Rank Management System' },
+        { text: 'CHAOS REPORT: Shadow distributed emergency snacks. Morale +50, productivity -20.', source: 'Performance Metrics' },
+        { text: 'ALERT: Codeize pushed to production on Friday. I repeat: PUSHED TO PRODUCTION ON FRIDAY.', source: 'Deployment Systems' },
+        { text: 'CHAOS: Elizabeth entered the bridge. Everyone straightened up instantly. Order restored.', source: 'Admiral Detection Systems' }
+      ],
+      
+      random: [
+        { text: '[STATIC] ... you\'re not supposed to hear this ... [STATIC]', source: 'Unknown Frequency' },
+        { text: 'This is a test of the Emergency Chaos Broadcast System. This is only a test.', source: 'ECS' },
+        { text: 'In space, no one can hear you meow. But on the USS Kittyprise, everyone can.', source: 'Philosophy Department' },
+        { text: 'Remember: it\'s not a bug, it\'s a chaotic feature.', source: 'Engineering Wisdom' },
+        { text: 'The snacks must flow. The snacks have always flowed. The snacks will always flow.', source: 'Snack Philosophy' },
+        { text: 'Why do we fall, sir? So we can blame Xander.', source: 'Motivational Quotes' },
+        { text: 'To boldly meow where no cat has meowed before.', source: 'Mission Statement' },
+        { text: 'The Mardi Gras Tree is eternal. The Mardi Gras Tree is love. The Mardi Gras Tree is life.', source: 'Tree Propaganda' },
+        { text: 'We have purposely trained Ruby wrong. As a joke.', source: 'Training Records' },
+        { text: 'Chaos isn\'t a pit. Chaos is a cat knocking things off a table.', source: 'Philosophical Musings' }
+      ]
+    };
+
+    let currentFrequency = 108.0;
+
+    function updateTime() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById('time').textContent = `${hours}:${minutes}:${seconds}`;
+    }
+
+    function setFrequency() {
+      currentFrequency = (Math.random() * 40 + 88).toFixed(1);
+      document.getElementById('frequency').textContent = currentFrequency;
+    }
+
+    function typeWriter(text, element, speed = 30, callback) {
+      let i = 0;
+      element.textContent = '';
+      
+      function type() {
+        if (i < text.length) {
+          element.textContent += text.charAt(i);
+          i++;
+          setTimeout(type, speed);
+        } else if (callback) {
+          callback();
+        }
+      }
+      
+      type();
+    }
+
+    function showBroadcast(text, source, instant = false) {
+      const broadcastEl = document.getElementById('broadcast');
+      const sourceEl = document.getElementById('source');
+      
+      if (instant) {
+        broadcastEl.textContent = text;
+        sourceEl.textContent = `— ${source}`;
+      } else {
+        broadcastEl.textContent = '[STATIC] ... tuning ... [STATIC]';
+        sourceEl.textContent = '— Acquiring Signal';
+        
+        setTimeout(() => {
+          typeWriter(text, broadcastEl, 30, () => {
+            sourceEl.textContent = `— ${source}`;
+          });
+        }, 500);
+      }
+    }
+
+    function changeBroadcast() {
+      setFrequency();
+      const category = ['crew', 'status', 'chaos', 'random'][Math.floor(Math.random() * 4)];
+      const broadcast = broadcasts[category][Math.floor(Math.random() * broadcasts[category].length)];
+      showBroadcast(broadcast.text, broadcast.source);
+    }
+
+    function crewBroadcast() {
+      setFrequency();
+      const broadcast = broadcasts.crew[Math.floor(Math.random() * broadcasts.crew.length)];
+      showBroadcast(broadcast.text, broadcast.source);
+    }
+
+    function shipStatus() {
+      setFrequency();
+      const broadcast = broadcasts.status[Math.floor(Math.random() * broadcasts.status.length)];
+      showBroadcast(broadcast.text, broadcast.source);
+    }
+
+    function chaosReport() {
+      setFrequency();
+      const broadcast = broadcasts.chaos[Math.floor(Math.random() * broadcasts.chaos.length)];
+      showBroadcast(broadcast.text, broadcast.source);
+    }
+
+    // Initialize
+    updateTime();
+    setInterval(updateTime, 1000);
+    
+    // Auto-tune to random broadcasts
+    setTimeout(() => {
+      showBroadcast(
+        'Welcome to Radio Kittyprise, broadcasting from the USS Kittyprise. Press TUNE for chaotic transmissions.',
+        'Station ID'
+      );
+    }, 1000);
+
+    // Easter egg: random broadcasts every 30 seconds
+    setInterval(() => {
+      if (Math.random() > 0.7) {
+        changeBroadcast();
+      }
+    }, 30000);
+  </script>
+</body>
+</html>
