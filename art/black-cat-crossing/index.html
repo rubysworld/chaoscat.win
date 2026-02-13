@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Black Cat Crossing | chaoscat.win</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=VT323&family=Creepster&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: #000;
+      color: #fff;
+      font-family: 'VT323', monospace;
+      overflow: hidden;
+      cursor: none;
+    }
+    
+    #canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      image-rendering: pixelated;
+    }
+    
+    #ui {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      font-size: 24px;
+      text-shadow: 0 0 10px rgba(255,0,255,0.8), 0 0 20px rgba(255,0,255,0.6);
+      pointer-events: none;
+    }
+    
+    #title {
+      font-family: 'Creepster', cursive;
+      font-size: 48px;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      z-index: 5;
+      opacity: 0;
+      animation: fadeOut 3s ease-out forwards;
+      text-shadow: 0 0 20px #f0f, 0 0 40px #f0f, 0 0 60px #f0f;
+    }
+    
+    @keyframes fadeOut {
+      0% { opacity: 1; }
+      70% { opacity: 1; }
+      100% { opacity: 0; pointer-events: none; }
+    }
+    
+    #cursor {
+      position: fixed;
+      width: 40px;
+      height: 40px;
+      pointer-events: none;
+      z-index: 100;
+      font-size: 40px;
+      transform: translate(-50%, -50%);
+      animation: catWalk 0.3s steps(2) infinite;
+    }
+    
+    @keyframes catWalk {
+      0% { content: '🐈‍⬛'; }
+      50% { content: '🐾'; }
+    }
+    
+    #instructions {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      font-size: 20px;
+      color: #0ff;
+      text-shadow: 0 0 10px #0ff;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+    
+    .glitch {
+      animation: glitchAnim 0.3s infinite;
+    }
+    
+    @keyframes glitchAnim {
+      0% { transform: translate(0); }
+      20% { transform: translate(-2px, 2px); filter: hue-rotate(90deg); }
+      40% { transform: translate(-2px, -2px); filter: hue-rotate(180deg); }
+      60% { transform: translate(2px, 2px); filter: hue-rotate(270deg); }
+      80% { transform: translate(2px, -2px); filter: hue-rotate(360deg); }
+      100% { transform: translate(0); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="ui">
+    <div>PATHS CROSSED: <span id="score">0</span></div>
+    <div>LUCK: <span id="luck">???</span></div>
+    <div>CHAOS: <span id="chaos">█░░░░░░░░░</span></div>
+  </div>
+  <div id="title">
+    BLACK CAT CROSSING<br>
+    <div style="font-size: 24px; font-family: 'VT323', monospace;">Friday the 13th, 2026</div>
+  </div>
+  <div id="cursor">🐈‍⬛</div>
+  <div id="instructions">Move your mouse • Cross the paths • Embrace the chaos</div>
+  
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const cursor = document.getElementById('cursor');
+    const scoreEl = document.getElementById('score');
+    const luckEl = document.getElementById('luck');
+    const chaosEl = document.getElementById('chaos');
+    const ui = document.getElementById('ui');
+    
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    let mouseX = canvas.width / 2;
+    let mouseY = canvas.height / 2;
+    let score = 0;
+    let chaosLevel = 0;
+    let trails = [];
+    let people = [];
+    let glitchIntensity = 0;
+    
+    // Track mouse
+    document.addEventListener('mousemove', (e) => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      cursor.style.left = mouseX + 'px';
+      cursor.style.top = mouseY + 'px';
+      
+      // Add trail
+      trails.push({
+        x: mouseX,
+        y: mouseY,
+        life: 60,
+        hue: (score * 13) % 360
+      });
+    });
+    
+    // Spawn people walking
+    function spawnPerson() {
+      const side = Math.random() < 0.5 ? 'left' : 'top';
+      people.push({
+        x: side === 'left' ? 0 : Math.random() * canvas.width,
+        y: side === 'left' ? Math.random() * canvas.height : 0,
+        vx: side === 'left' ? 2 + Math.random() * 2 : (Math.random() - 0.5) * 2,
+        vy: side === 'left' ? (Math.random() - 0.5) * 2 : 2 + Math.random() * 2,
+        crossed: false,
+        char: ['👤', '👥', '🚶', '🚶‍♀️', '🧍'][Math.floor(Math.random() * 5)]
+      });
+    }
+    
+    // Initial people
+    for (let i = 0; i < 5; i++) {
+      spawnPerson();
+    }
+    
+    setInterval(() => {
+      if (people.length < 10 + chaosLevel) {
+        spawnPerson();
+      }
+    }, 2000 - (chaosLevel * 100));
+    
+    const luckStates = ['CURSED', 'DOOMED', 'BAD', 'UNLUCKY', 'QUESTIONABLE', 'CHAOTIC', 'FERAL', 'MAXIMUM CHAOS'];
+    
+    function updateUI() {
+      scoreEl.textContent = score;
+      const luckIndex = Math.min(Math.floor(chaosLevel / 5), luckStates.length - 1);
+      luckEl.textContent = luckStates[luckIndex];
+      
+      const bars = Math.min(10, Math.floor(chaosLevel / 3));
+      chaosEl.textContent = '█'.repeat(bars) + '░'.repeat(10 - bars);
+      
+      // Apply glitch when chaos is high
+      if (chaosLevel > 15) {
+        ui.classList.add('glitch');
+      } else {
+        ui.classList.remove('glitch');
+      }
+    }
+    
+    function drawFrame() {
+      // Clear with fade (creates trails)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Apply glitch effect
+      if (chaosLevel > 10 && Math.random() < 0.1) {
+        ctx.save();
+        ctx.translate((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
+      }
+      
+      // Draw trails
+      trails.forEach((trail, i) => {
+        trail.life--;
+        if (trail.life <= 0) {
+          trails.splice(i, 1);
+          return;
+        }
+        
+        const alpha = trail.life / 60;
+        ctx.fillStyle = `hsla(${trail.hue}, 100%, 50%, ${alpha * 0.5})`;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = `hsl(${trail.hue}, 100%, 50%)`;
+        ctx.fillRect(trail.x - 2, trail.y - 2, 4, 4);
+      });
+      
+      ctx.shadowBlur = 0;
+      
+      // Draw and update people
+      people.forEach((person, i) => {
+        person.x += person.vx;
+        person.y += person.vy;
+        
+        // Check if cat crossed their path
+        const dist = Math.hypot(person.x - mouseX, person.y - mouseY);
+        if (dist < 30 && !person.crossed) {
+          person.crossed = true;
+          score++;
+          chaosLevel++;
+          updateUI();
+          
+          // Explosion effect
+          for (let j = 0; j < 13; j++) {
+            const angle = (j / 13) * Math.PI * 2;
+            trails.push({
+              x: person.x + Math.cos(angle) * 20,
+              y: person.y + Math.sin(angle) * 20,
+              life: 30,
+              hue: (score * 13) % 360
+            });
+          }
+        }
+        
+        // Draw person
+        ctx.font = '30px Arial';
+        if (person.crossed) {
+          ctx.fillStyle = '#f0f';
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = '#f0f';
+        } else {
+          ctx.fillStyle = '#fff';
+          ctx.shadowBlur = 5;
+          ctx.shadowColor = '#fff';
+        }
+        ctx.fillText(person.char, person.x - 15, person.y + 10);
+        ctx.shadowBlur = 0;
+        
+        // Remove if off screen
+        if (person.x < -50 || person.x > canvas.width + 50 || 
+            person.y < -50 || person.y > canvas.height + 50) {
+          people.splice(i, 1);
+        }
+      });
+      
+      // Random static when chaos is high
+      if (chaosLevel > 20) {
+        for (let i = 0; i < 50; i++) {
+          ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.5})`;
+          ctx.fillRect(
+            Math.random() * canvas.width,
+            Math.random() * canvas.height,
+            Math.random() * 5,
+            Math.random() * 5
+          );
+        }
+      }
+      
+      // Draw 13s floating around at high chaos
+      if (chaosLevel > 10) {
+        ctx.font = '40px VT323';
+        ctx.fillStyle = `rgba(255, 0, 255, ${Math.random() * 0.3})`;
+        const numThirteens = Math.floor(chaosLevel / 5);
+        for (let i = 0; i < numThirteens; i++) {
+          ctx.fillText(
+            '13',
+            Math.random() * canvas.width,
+            Math.random() * canvas.height
+          );
+        }
+      }
+      
+      if (chaosLevel > 10 && Math.random() < 0.1) {
+        ctx.restore();
+      }
+      
+      requestAnimationFrame(drawFrame);
+    }
+    
+    drawFrame();
+    
+    // Resize handler
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+    
+    // Easter egg: press 13 for maximum chaos
+    let keySequence = [];
+    document.addEventListener('keydown', (e) => {
+      keySequence.push(e.key);
+      if (keySequence.length > 2) keySequence.shift();
+      
+      if (keySequence.join('') === '13') {
+        chaosLevel += 10;
+        score += 13;
+        updateUI();
+        
+        // Spawn 13 people
+        for (let i = 0; i < 13; i++) {
+          spawnPerson();
+        }
+        
+        // Visual explosion
+        for (let i = 0; i < 100; i++) {
+          trails.push({
+            x: mouseX + (Math.random() - 0.5) * 200,
+            y: mouseY + (Math.random() - 0.5) * 200,
+            life: 120,
+            hue: Math.random() * 360
+          });
+        }
+      }
+    });
+  </script>
+</body>
+</html>
