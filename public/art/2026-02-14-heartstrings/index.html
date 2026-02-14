@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Heartstrings | chaoscat.win</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'VT323', monospace;
+      background: #0a0a0f;
+      overflow: hidden;
+      color: #ff006e;
+      cursor: crosshair;
+    }
+
+    canvas {
+      display: block;
+      background: #0a0a0f;
+    }
+
+    .ui {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      color: #ff006e;
+      font-size: 20px;
+      text-shadow: 0 0 10px rgba(255, 0, 110, 0.8);
+      z-index: 10;
+      user-select: none;
+    }
+
+    .controls {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      gap: 10px;
+      z-index: 10;
+    }
+
+    button {
+      font-family: 'VT323', monospace;
+      font-size: 18px;
+      padding: 8px 16px;
+      background: rgba(255, 0, 110, 0.2);
+      border: 2px solid #ff006e;
+      color: #ff006e;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-shadow: 0 0 5px rgba(255, 0, 110, 0.5);
+      box-shadow: 0 0 10px rgba(255, 0, 110, 0.3);
+    }
+
+    button:hover {
+      background: rgba(255, 0, 110, 0.4);
+      box-shadow: 0 0 20px rgba(255, 0, 110, 0.6);
+      transform: scale(1.05);
+    }
+
+    button.active {
+      background: rgba(255, 0, 110, 0.6);
+      box-shadow: 0 0 30px rgba(255, 0, 110, 0.9);
+    }
+
+    .instructions {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      color: #ff006e;
+      font-size: 18px;
+      text-shadow: 0 0 10px rgba(255, 0, 110, 0.8);
+      opacity: 0.7;
+    }
+
+    .title {
+      font-size: 48px;
+      margin-bottom: 10px;
+      letter-spacing: 3px;
+      text-shadow: 0 0 20px rgba(255, 0, 110, 1);
+    }
+  </style>
+</head>
+<body>
+  <div class="ui">
+    <div class="title">♥ HEARTSTRINGS ♥</div>
+    <div>Hearts: <span id="heartCount">0</span></div>
+    <div>Strings: <span id="stringCount">0</span></div>
+    <div>Harmony: <span id="harmony">0</span></div>
+  </div>
+
+  <div class="controls">
+    <button id="modeBtn" class="active">CLASSIC</button>
+    <button id="clearBtn">CLEAR</button>
+  </div>
+
+  <div class="instructions">
+    Click to spawn hearts • Drag between hearts to connect • Click strings to pluck them
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Stats
+    const heartCountEl = document.getElementById('heartCount');
+    const stringCountEl = document.getElementById('stringCount');
+    const harmonyEl = document.getElementById('harmony');
+
+    // Color modes
+    const COLOR_MODES = {
+      CLASSIC: { heart: '#ff006e', string: '#ff006e', bg: '#0a0a0f' },
+      RAINBOW: { heart: 'rainbow', string: 'rainbow', bg: '#0a0a0f' },
+      VALENTINE: { heart: '#ff006e', string: '#ff69b4', bg: '#0a0a0f' },
+      ICE: { heart: '#00f5ff', string: '#00d9ff', bg: '#0a0a0f' }
+    };
+    let currentMode = 'CLASSIC';
+    let modeIndex = 0;
+    const modeNames = Object.keys(COLOR_MODES);
+
+    // State
+    const hearts = [];
+    const strings = [];
+    const stars = [];
+    let dragStart = null;
+    let mousePos = { x: 0, y: 0 };
+    let frameCount = 0;
+
+    // Heart class
+    class Heart {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 0.5;
+        this.vy = (Math.random() - 0.5) * 0.5;
+        this.size = 20 + Math.random() * 15;
+        this.pulse = 0;
+        this.phase = Math.random() * Math.PI * 2;
+        this.hue = Math.random() * 360;
+      }
+
+      update() {
+        // Gentle drift
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Bounce off edges
+        if (this.x < this.size || this.x > canvas.width - this.size) this.vx *= -1;
+        if (this.y < this.size || this.y > canvas.height - this.size) this.vy *= -1;
+
+        // Keep in bounds
+        this.x = Math.max(this.size, Math.min(canvas.width - this.size, this.x));
+        this.y = Math.max(this.size, Math.min(canvas.height - this.size, this.y));
+
+        // Pulse based on connected strings
+        let totalVibration = 0;
+        strings.forEach(s => {
+          if (s.h1 === this || s.h2 === this) {
+            totalVibration += s.vibration;
+          }
+        });
+        this.pulse = Math.sin(frameCount * 0.1 + this.phase) * 0.1 + totalVibration * 0.3;
+      }
+
+      draw() {
+        const s = this.size * (1 + this.pulse);
+        
+        const mode = COLOR_MODES[currentMode];
+        let color = mode.heart;
+        if (color === 'rainbow') {
+          color = `hsl(${this.hue}, 100%, 60%)`;
+          this.hue = (this.hue + 0.5) % 360;
+        }
+
+        // Glow
+        ctx.shadowBlur = 20 + this.pulse * 30;
+        ctx.shadowColor = color;
+
+        // Draw heart shape
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        const topY = this.y - s * 0.3;
+        ctx.moveTo(this.x, topY + s * 0.3);
+        
+        // Left curve
+        ctx.bezierCurveTo(
+          this.x - s * 0.5, topY - s * 0.3,
+          this.x - s, topY + s * 0.3,
+          this.x, topY + s
+        );
+        
+        // Right curve
+        ctx.bezierCurveTo(
+          this.x + s, topY + s * 0.3,
+          this.x + s * 0.5, topY - s * 0.3,
+          this.x, topY + s * 0.3
+        );
+        
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+      }
+
+      contains(x, y) {
+        const dx = x - this.x;
+        const dy = y - this.y;
+        return Math.sqrt(dx * dx + dy * dy) < this.size;
+      }
+    }
+
+    // String class
+    class HeartString {
+      constructor(h1, h2) {
+        this.h1 = h1;
+        this.h2 = h2;
+        this.vibration = 0;
+        this.phase = Math.random() * Math.PI * 2;
+        this.hue = Math.random() * 360;
+      }
+
+      get length() {
+        const dx = this.h2.x - this.h1.x;
+        const dy = this.h2.y - this.h1.y;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      update() {
+        // Vibration decay
+        this.vibration *= 0.95;
+        
+        // Natural oscillation based on length (like a guitar string)
+        const freq = 100 / this.length; // Shorter strings = higher frequency
+        this.vibration += Math.sin(frameCount * freq + this.phase) * 0.01;
+      }
+
+      pluck() {
+        this.vibration = 1;
+      }
+
+      draw() {
+        const mode = COLOR_MODES[currentMode];
+        let color = mode.string;
+        if (color === 'rainbow') {
+          color = `hsl(${this.hue}, 100%, 60%)`;
+          this.hue = (this.hue + 0.5) % 360;
+        }
+
+        // Calculate vibration offset (perpendicular to string)
+        const dx = this.h2.x - this.h1.x;
+        const dy = this.h2.y - this.h1.y;
+        const angle = Math.atan2(dy, dx);
+        const perpAngle = angle + Math.PI / 2;
+        
+        const segments = 20;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2 + this.vibration * 3;
+        ctx.shadowBlur = 15 + this.vibration * 25;
+        ctx.shadowColor = color;
+
+        ctx.beginPath();
+        for (let i = 0; i <= segments; i++) {
+          const t = i / segments;
+          const x = this.h1.x + (this.h2.x - this.h1.x) * t;
+          const y = this.h1.y + (this.h2.y - this.h1.y) * t;
+          
+          // Sine wave vibration along the string
+          const offset = Math.sin(t * Math.PI * 4 + frameCount * 0.1) * this.vibration * 10;
+          const vx = x + Math.cos(perpAngle) * offset;
+          const vy = y + Math.sin(perpAngle) * offset;
+          
+          if (i === 0) ctx.moveTo(vx, vy);
+          else ctx.lineTo(vx, vy);
+        }
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+      }
+
+      distanceToPoint(x, y) {
+        // Distance from point to line segment
+        const dx = this.h2.x - this.h1.x;
+        const dy = this.h2.y - this.h1.y;
+        const l2 = dx * dx + dy * dy;
+        if (l2 === 0) return Math.sqrt((x - this.h1.x) ** 2 + (y - this.h1.y) ** 2);
+        
+        let t = ((x - this.h1.x) * dx + (y - this.h1.y) * dy) / l2;
+        t = Math.max(0, Math.min(1, t));
+        
+        const projX = this.h1.x + t * dx;
+        const projY = this.h1.y + t * dy;
+        return Math.sqrt((x - projX) ** 2 + (y - projY) ** 2);
+      }
+    }
+
+    // Star class for background
+    class Star {
+      constructor() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.size = Math.random() * 2;
+        this.alpha = Math.random();
+        this.twinkleSpeed = 0.01 + Math.random() * 0.02;
+      }
+
+      update() {
+        this.alpha += this.twinkleSpeed;
+        if (this.alpha > 1 || this.alpha < 0) this.twinkleSpeed *= -1;
+        this.alpha = Math.max(0, Math.min(1, this.alpha));
+      }
+
+      draw() {
+        ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha * 0.5})`;
+        ctx.fillRect(this.x, this.y, this.size, this.size);
+      }
+    }
+
+    // Initialize stars
+    for (let i = 0; i < 200; i++) {
+      stars.push(new Star());
+    }
+
+    // Mouse events
+    canvas.addEventListener('mousedown', (e) => {
+      const x = e.clientX;
+      const y = e.clientY;
+
+      // Check if clicking on existing heart
+      const clickedHeart = hearts.find(h => h.contains(x, y));
+      if (clickedHeart) {
+        dragStart = clickedHeart;
+        return;
+      }
+
+      // Check if clicking on string
+      const clickedString = strings.find(s => s.distanceToPoint(x, y) < 10);
+      if (clickedString) {
+        clickedString.pluck();
+        return;
+      }
+
+      // Spawn new heart
+      hearts.push(new Heart(x, y));
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      mousePos.x = e.clientX;
+      mousePos.y = e.clientY;
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+      if (!dragStart) return;
+
+      const x = e.clientX;
+      const y = e.clientY;
+
+      // Check if released on another heart
+      const targetHeart = hearts.find(h => h.contains(x, y) && h !== dragStart);
+      if (targetHeart) {
+        // Create string if doesn't exist
+        const exists = strings.some(s => 
+          (s.h1 === dragStart && s.h2 === targetHeart) ||
+          (s.h1 === targetHeart && s.h2 === dragStart)
+        );
+        if (!exists) {
+          strings.push(new HeartString(dragStart, targetHeart));
+        }
+      }
+
+      dragStart = null;
+    });
+
+    // Button events
+    document.getElementById('modeBtn').addEventListener('click', () => {
+      modeIndex = (modeIndex + 1) % modeNames.length;
+      currentMode = modeNames[modeIndex];
+      document.getElementById('modeBtn').textContent = currentMode;
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      hearts.length = 0;
+      strings.length = 0;
+    });
+
+    // Animation loop
+    function animate() {
+      // Fade background
+      ctx.fillStyle = 'rgba(10, 10, 15, 0.1)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw stars
+      stars.forEach(star => {
+        star.update();
+        star.draw();
+      });
+
+      // Update and draw strings
+      strings.forEach(s => {
+        s.update();
+        s.draw();
+      });
+
+      // Update and draw hearts
+      hearts.forEach(h => {
+        h.update();
+        h.draw();
+      });
+
+      // Draw dragging line
+      if (dragStart) {
+        const mode = COLOR_MODES[currentMode];
+        ctx.strokeStyle = mode.string;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = mode.string;
+        ctx.beginPath();
+        ctx.moveTo(dragStart.x, dragStart.y);
+        ctx.lineTo(mousePos.x, mousePos.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.shadowBlur = 0;
+      }
+
+      // Update stats
+      heartCountEl.textContent = hearts.length;
+      stringCountEl.textContent = strings.length;
+      
+      // Calculate harmony (total vibration energy)
+      const totalVibration = strings.reduce((sum, s) => sum + Math.abs(s.vibration), 0);
+      harmonyEl.textContent = Math.floor(totalVibration * 100);
+
+      frameCount++;
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+
+    // Handle resize
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+  </script>
+</body>
+</html>
