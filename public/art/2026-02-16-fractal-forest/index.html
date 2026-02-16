@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fractal Forest 🌳 — chaoscat.win</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0f;
+            font-family: 'Courier New', monospace;
+            color: #0f0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            padding: 20px;
+            text-align: center;
+            background: rgba(0, 255, 0, 0.05);
+            border-bottom: 2px solid #0f0;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            text-shadow: 0 0 20px #0f0;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
+
+        #canvas {
+            flex: 1;
+            cursor: crosshair;
+        }
+
+        .controls {
+            padding: 15px;
+            background: rgba(0, 255, 0, 0.05);
+            border-top: 2px solid #0f0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 0.85em;
+            text-transform: uppercase;
+        }
+
+        input[type="range"] {
+            width: 150px;
+            accent-color: #0f0;
+        }
+
+        button {
+            background: transparent;
+            border: 2px solid #0f0;
+            color: #0f0;
+            padding: 10px 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+        }
+
+        button:hover {
+            background: #0f0;
+            color: #0a0a0f;
+            box-shadow: 0 0 20px #0f0;
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        .value-display {
+            font-size: 0.9em;
+            color: #ff00ff;
+        }
+
+        .mode-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+            }
+            
+            .controls {
+                font-size: 0.85em;
+            }
+
+            input[type="range"] {
+                width: 120px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🌳 FRACTAL FOREST 🌳</h1>
+        <div class="subtitle">Click to plant trees • Watch them grow • Adjust parameters for chaos</div>
+    </header>
+
+    <canvas id="canvas"></canvas>
+
+    <div class="controls">
+        <div class="control-group">
+            <label>Depth: <span id="depthVal" class="value-display">9</span></label>
+            <input type="range" id="depth" min="3" max="12" value="9">
+        </div>
+
+        <div class="control-group">
+            <label>Branch Angle: <span id="angleVal" class="value-display">25°</span></label>
+            <input type="range" id="angle" min="10" max="45" value="25">
+        </div>
+
+        <div class="control-group">
+            <label>Length Decay: <span id="decayVal" class="value-display">0.7</span></label>
+            <input type="range" id="decay" min="50" max="90" value="70">
+        </div>
+
+        <div class="control-group">
+            <label>Chaos: <span id="chaosVal" class="value-display">10°</span></label>
+            <input type="range" id="chaos" min="0" max="30" value="10">
+        </div>
+
+        <div class="mode-buttons">
+            <button id="clearBtn">Clear Forest</button>
+            <button id="randomBtn">Random Tree</button>
+        </div>
+
+        <div class="control-group">
+            <label>Color Mode</label>
+            <button id="colorMode">RAINBOW</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Resize canvas to fit window
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight - 200; // Account for header and controls
+            redrawForest();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Parameters
+        let depth = 9;
+        let branchAngle = 25;
+        let lengthDecay = 0.7;
+        let chaosAmount = 10;
+        let colorMode = 'rainbow'; // rainbow, green, autumn, spring, monochrome
+
+        const colorModes = ['rainbow', 'green', 'autumn', 'spring', 'monochrome', 'fire'];
+        let currentModeIndex = 0;
+
+        // Tree storage for redrawing
+        let trees = [];
+
+        // Update parameter displays
+        function updateDisplays() {
+            document.getElementById('depthVal').textContent = depth;
+            document.getElementById('angleVal').textContent = branchAngle + '°';
+            document.getElementById('decayVal').textContent = lengthDecay.toFixed(2);
+            document.getElementById('chaosVal').textContent = chaosAmount + '°';
+            document.getElementById('colorMode').textContent = colorMode.toUpperCase();
+        }
+
+        // Event listeners for sliders
+        document.getElementById('depth').addEventListener('input', (e) => {
+            depth = parseInt(e.target.value);
+            updateDisplays();
+        });
+
+        document.getElementById('angle').addEventListener('input', (e) => {
+            branchAngle = parseInt(e.target.value);
+            updateDisplays();
+        });
+
+        document.getElementById('decay').addEventListener('input', (e) => {
+            lengthDecay = parseInt(e.target.value) / 100;
+            updateDisplays();
+        });
+
+        document.getElementById('chaos').addEventListener('input', (e) => {
+            chaosAmount = parseInt(e.target.value);
+            updateDisplays();
+        });
+
+        // Clear button
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            trees = [];
+            ctx.fillStyle = '#0a0a0f';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        });
+
+        // Random tree button
+        document.getElementById('randomBtn').addEventListener('click', () => {
+            depth = Math.floor(Math.random() * 6) + 6; // 6-11
+            branchAngle = Math.floor(Math.random() * 35) + 15; // 15-49
+            lengthDecay = (Math.floor(Math.random() * 40) + 50) / 100; // 0.5-0.9
+            chaosAmount = Math.floor(Math.random() * 25); // 0-24
+            
+            // Update sliders
+            document.getElementById('depth').value = depth;
+            document.getElementById('angle').value = branchAngle;
+            document.getElementById('decay').value = lengthDecay * 100;
+            document.getElementById('chaos').value = chaosAmount;
+            updateDisplays();
+            
+            // Plant a tree at random location
+            const x = Math.random() * canvas.width;
+            const y = canvas.height * 0.9;
+            plantTree(x, y);
+        });
+
+        // Color mode cycling
+        document.getElementById('colorMode').addEventListener('click', () => {
+            currentModeIndex = (currentModeIndex + 1) % colorModes.length;
+            colorMode = colorModes[currentModeIndex];
+            updateDisplays();
+            redrawForest();
+        });
+
+        // Get color based on depth level and mode
+        function getColor(currentDepth, maxDepth) {
+            const ratio = currentDepth / maxDepth;
+            
+            switch(colorMode) {
+                case 'rainbow':
+                    const hue = (ratio * 360 + Date.now() * 0.01) % 360;
+                    return `hsl(${hue}, 80%, 60%)`;
+                
+                case 'green':
+                    const greenHue = 120 + ratio * 40;
+                    const greenSat = 60 + ratio * 30;
+                    return `hsl(${greenHue}, ${greenSat}%, 50%)`;
+                
+                case 'autumn':
+                    const autumnHue = ratio * 60; // Red to yellow
+                    return `hsl(${autumnHue}, 90%, 60%)`;
+                
+                case 'spring':
+                    const springHue = 90 + ratio * 90; // Yellow to cyan
+                    return `hsl(${springHue}, 70%, 65%)`;
+                
+                case 'monochrome':
+                    const brightness = 30 + ratio * 60;
+                    return `hsl(0, 0%, ${brightness}%)`;
+                
+                case 'fire':
+                    const fireHue = ratio * 40; // Yellow to red
+                    const fireSat = 100;
+                    const fireBright = 50 + ratio * 30;
+                    return `hsl(${fireHue}, ${fireSat}%, ${fireBright}%)`;
+            }
+        }
+
+        // Draw a branch recursively
+        function drawBranch(x, y, length, angle, currentDepth, maxDepth) {
+            if (currentDepth === 0 || length < 1) return;
+
+            // Calculate end point
+            const endX = x + length * Math.cos(angle);
+            const endY = y + length * Math.sin(angle);
+
+            // Draw the branch
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(endX, endY);
+            ctx.strokeStyle = getColor(maxDepth - currentDepth, maxDepth);
+            ctx.lineWidth = currentDepth * 0.5;
+            ctx.lineCap = 'round';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = ctx.strokeStyle;
+            ctx.stroke();
+
+            // Add chaos (random angle variation)
+            const chaos1 = (Math.random() - 0.5) * chaosAmount * Math.PI / 180;
+            const chaos2 = (Math.random() - 0.5) * chaosAmount * Math.PI / 180;
+
+            // Recursive branches
+            const newLength = length * lengthDecay;
+            const angleRad = branchAngle * Math.PI / 180;
+            
+            // Left branch
+            drawBranch(
+                endX, endY, 
+                newLength, 
+                angle - angleRad + chaos1, 
+                currentDepth - 1,
+                maxDepth
+            );
+            
+            // Right branch
+            drawBranch(
+                endX, endY, 
+                newLength, 
+                angle + angleRad + chaos2, 
+                currentDepth - 1,
+                maxDepth
+            );
+        }
+
+        // Plant a tree at position
+        function plantTree(x, y) {
+            const treeData = {
+                x, y,
+                depth: depth,
+                angle: branchAngle,
+                decay: lengthDecay,
+                chaos: chaosAmount,
+                colorMode: colorMode
+            };
+            trees.push(treeData);
+
+            // Initial trunk length based on depth
+            const initialLength = canvas.height * 0.15;
+            const initialAngle = -Math.PI / 2; // Pointing up
+
+            drawBranch(x, y, initialLength, initialAngle, depth, depth);
+        }
+
+        // Redraw all trees (used when changing color mode or resizing)
+        function redrawForest() {
+            ctx.fillStyle = '#0a0a0f';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            trees.forEach(tree => {
+                const savedParams = {
+                    depth: depth,
+                    angle: branchAngle,
+                    decay: lengthDecay,
+                    chaos: chaosAmount
+                };
+
+                // Temporarily use tree's original parameters
+                depth = tree.depth;
+                branchAngle = tree.angle;
+                lengthDecay = tree.decay;
+                chaosAmount = tree.chaos;
+
+                const initialLength = canvas.height * 0.15;
+                const initialAngle = -Math.PI / 2;
+                drawBranch(tree.x, tree.y, initialLength, initialAngle, tree.depth, tree.depth);
+
+                // Restore current parameters
+                depth = savedParams.depth;
+                branchAngle = savedParams.angle;
+                lengthDecay = savedParams.decay;
+                chaosAmount = savedParams.chaos;
+            });
+        }
+
+        // Click to plant
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            plantTree(x, y);
+        });
+
+        // Initial display update
+        updateDisplays();
+
+        // Draw a welcome tree
+        plantTree(canvas.width / 2, canvas.height * 0.9);
+    </script>
+</body>
+</html>
