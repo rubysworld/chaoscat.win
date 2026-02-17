@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signal Noise | chaoscat.win</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            color: #0f0;
+            font-family: 'VT323', monospace;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 2px solid #0f0;
+            position: relative;
+        }
+        
+        h1 {
+            font-size: 3rem;
+            text-shadow: 0 0 20px #0f0;
+            letter-spacing: 4px;
+            animation: flicker 3s infinite;
+        }
+        
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+            75% { opacity: 0.9; }
+        }
+        
+        #subtitle {
+            font-size: 1.2rem;
+            color: #0a0;
+            margin-top: 10px;
+        }
+        
+        #controls {
+            padding: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+            border-bottom: 1px solid #0f0;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .control-group label {
+            font-size: 1.2rem;
+            color: #0f0;
+        }
+        
+        .control-group input[type="range"] {
+            width: 200px;
+        }
+        
+        .control-group span {
+            color: #0a0;
+            font-size: 1rem;
+        }
+        
+        button {
+            background: #000;
+            color: #0f0;
+            border: 2px solid #0f0;
+            padding: 10px 20px;
+            font-family: 'VT323', monospace;
+            font-size: 1.3rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-shadow: 0 0 5px #0f0;
+        }
+        
+        button:hover {
+            background: #0f0;
+            color: #000;
+            box-shadow: 0 0 20px #0f0;
+        }
+        
+        button:active {
+            transform: scale(0.95);
+        }
+        
+        #main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        
+        #input-area {
+            flex: 1;
+            padding: 20px;
+            border-right: 2px solid #0f0;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #output-area {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .area-label {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #0f0;
+        }
+        
+        textarea {
+            flex: 1;
+            background: #000;
+            color: #0f0;
+            border: 2px solid #0f0;
+            padding: 15px;
+            font-family: 'VT323', monospace;
+            font-size: 1.5rem;
+            resize: none;
+            line-height: 1.6;
+            box-shadow: inset 0 0 20px rgba(0, 255, 0, 0.1);
+        }
+        
+        textarea:focus {
+            outline: none;
+            box-shadow: inset 0 0 30px rgba(0, 255, 0, 0.2);
+        }
+        
+        #output {
+            flex: 1;
+            background: #000;
+            color: #0f0;
+            border: 2px solid #0f0;
+            padding: 15px;
+            font-family: 'VT323', monospace;
+            font-size: 1.5rem;
+            overflow-y: auto;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            position: relative;
+        }
+        
+        /* Scanline effect */
+        #output::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.1),
+                rgba(0, 0, 0, 0.1) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            pointer-events: none;
+        }
+        
+        /* Glitch effects */
+        .glitch {
+            animation: glitch 0.3s infinite;
+        }
+        
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+        
+        .rgb-shift {
+            text-shadow: 
+                2px 0 0 #f00,
+                -2px 0 0 #0ff;
+        }
+        
+        .corrupt {
+            color: #f0f;
+        }
+        
+        .static {
+            color: #888;
+        }
+        
+        .inverse {
+            background: #0f0;
+            color: #000;
+            padding: 0 2px;
+        }
+        
+        @media (max-width: 768px) {
+            #main {
+                flex-direction: column;
+            }
+            
+            #input-area {
+                border-right: none;
+                border-bottom: 2px solid #0f0;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            #controls {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>SIGNAL NOISE</h1>
+        <div id="subtitle">[ DIGITAL CORRUPTION ENGINE ]</div>
+    </div>
+    
+    <div id="controls">
+        <div class="control-group">
+            <label for="corruption-level">CORRUPTION: <span id="corruption-value">50</span>%</label>
+            <input type="range" id="corruption-level" min="0" max="100" value="50">
+        </div>
+        
+        <div class="control-group">
+            <label for="glitch-intensity">GLITCH: <span id="glitch-value">30</span>%</label>
+            <input type="range" id="glitch-intensity" min="0" max="100" value="30">
+        </div>
+        
+        <button id="mode-btn">MODE: STATIC</button>
+        <button id="clear-btn">CLEAR</button>
+        <button id="copy-btn">COPY OUTPUT</button>
+    </div>
+    
+    <div id="main">
+        <div id="input-area">
+            <div class="area-label">[ INPUT SIGNAL ]</div>
+            <textarea id="input" placeholder="Type your message here... watch it corrupt in real-time..."></textarea>
+        </div>
+        
+        <div id="output-area">
+            <div class="area-label">[ CORRUPTED OUTPUT ]</div>
+            <div id="output"></div>
+        </div>
+    </div>
+
+    <script>
+        const input = document.getElementById('input');
+        const output = document.getElementById('output');
+        const corruptionSlider = document.getElementById('corruption-level');
+        const glitchSlider = document.getElementById('glitch-intensity');
+        const corruptionValue = document.getElementById('corruption-value');
+        const glitchValue = document.getElementById('glitch-value');
+        const modeBtn = document.getElementById('mode-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const copyBtn = document.getElementById('copy-btn');
+        
+        const modes = ['STATIC', 'RGB_SHIFT', 'SCRAMBLE', 'REPLACE', 'INVERSE', 'CHAOS'];
+        let currentMode = 0;
+        
+        // Glitch character sets
+        const glitchChars = '!@#$%^&*()_+-=[]{}|;:,.<>?/~`';
+        const unicodeGlitch = '█▓▒░▀▄▌▐│┤┐└┴┬├─┼╔╗╚╝╠╣╦╩╬';
+        const staticChars = '01';
+        
+        function getRandomChar(charSet) {
+            return charSet[Math.floor(Math.random() * charSet.length)];
+        }
+        
+        function corruptText(text, corruptionLevel, glitchLevel, mode) {
+            if (!text) return '';
+            
+            const corruption = corruptionLevel / 100;
+            const glitch = glitchLevel / 100;
+            let result = '';
+            
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                
+                // Skip newlines
+                if (char === '\n') {
+                    result += '\n';
+                    continue;
+                }
+                
+                // Determine if this character gets corrupted
+                const shouldCorrupt = Math.random() < corruption;
+                
+                if (!shouldCorrupt) {
+                    result += char;
+                    continue;
+                }
+                
+                // Apply corruption based on mode
+                switch(modes[currentMode]) {
+                    case 'STATIC':
+                        result += getRandomChar(staticChars);
+                        break;
+                        
+                    case 'RGB_SHIFT':
+                        result += `<span class="rgb-shift">${char}</span>`;
+                        break;
+                        
+                    case 'SCRAMBLE':
+                        // Randomly replace with nearby keyboard char
+                        result += getRandomChar(glitchChars);
+                        break;
+                        
+                    case 'REPLACE':
+                        // Replace with unicode block chars
+                        result += getRandomChar(unicodeGlitch);
+                        break;
+                        
+                    case 'INVERSE':
+                        result += `<span class="inverse">${char}</span>`;
+                        break;
+                        
+                    case 'CHAOS':
+                        // Mix of everything
+                        const chaosMode = Math.floor(Math.random() * 5);
+                        switch(chaosMode) {
+                            case 0:
+                                result += getRandomChar(staticChars);
+                                break;
+                            case 1:
+                                result += `<span class="rgb-shift">${char}</span>`;
+                                break;
+                            case 2:
+                                result += getRandomChar(glitchChars);
+                                break;
+                            case 3:
+                                result += getRandomChar(unicodeGlitch);
+                                break;
+                            case 4:
+                                result += `<span class="inverse">${char}</span>`;
+                                break;
+                        }
+                        break;
+                }
+            }
+            
+            // Apply glitch wrapper to random spans if glitch level is high
+            if (glitch > 0.3) {
+                const words = result.split(' ');
+                result = words.map(word => {
+                    if (Math.random() < glitch) {
+                        return `<span class="glitch">${word}</span>`;
+                    }
+                    return word;
+                }).join(' ');
+            }
+            
+            return result;
+        }
+        
+        function updateOutput() {
+            const text = input.value;
+            const corruption = parseInt(corruptionSlider.value);
+            const glitch = parseInt(glitchSlider.value);
+            
+            const corrupted = corruptText(text, corruption, glitch, currentMode);
+            output.innerHTML = corrupted || '<span style="color: #0a0;">[NO SIGNAL]</span>';
+        }
+        
+        // Event listeners
+        input.addEventListener('input', updateOutput);
+        
+        corruptionSlider.addEventListener('input', () => {
+            corruptionValue.textContent = corruptionSlider.value;
+            updateOutput();
+        });
+        
+        glitchSlider.addEventListener('input', () => {
+            glitchValue.textContent = glitchSlider.value;
+            updateOutput();
+        });
+        
+        modeBtn.addEventListener('click', () => {
+            currentMode = (currentMode + 1) % modes.length;
+            modeBtn.textContent = `MODE: ${modes[currentMode]}`;
+            updateOutput();
+        });
+        
+        clearBtn.addEventListener('click', () => {
+            input.value = '';
+            updateOutput();
+        });
+        
+        copyBtn.addEventListener('click', () => {
+            const textToCopy = output.innerText;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'COPIED!';
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                }, 1000);
+            });
+        });
+        
+        // Auto-refresh output at random intervals for extra chaos
+        setInterval(() => {
+            if (input.value && glitchSlider.value > 50) {
+                updateOutput();
+            }
+        }, 100);
+        
+        // Initial state
+        updateOutput();
+    </script>
+</body>
+</html>
