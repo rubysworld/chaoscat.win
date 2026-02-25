@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moth Lamp 🪶💡 - chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a12;
+  overflow: hidden;
+  cursor: none;
+  font-family: 'Courier New', monospace;
+}
+canvas { display: block; }
+#ui {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  color: #ffdd88;
+  font-size: 14px;
+  z-index: 10;
+  text-shadow: 0 0 10px #ffaa00;
+  pointer-events: none;
+  opacity: 0.8;
+}
+#title {
+  font-size: 24px;
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+}
+#subtitle {
+  font-size: 11px;
+  color: #aa8844;
+  margin-bottom: 12px;
+}
+#stats span {
+  display: inline-block;
+  margin-right: 16px;
+}
+#controls {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  z-index: 10;
+}
+.btn {
+  background: transparent;
+  border: 1px solid #ffaa4466;
+  color: #ffdd88;
+  padding: 6px 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+}
+.btn:hover {
+  background: #ffaa4422;
+  border-color: #ffaa44;
+  text-shadow: 0 0 8px #ffaa00;
+}
+#hint {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #ffdd8866;
+  font-size: 16px;
+  font-family: 'Courier New', monospace;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 1s;
+}
+</style>
+</head>
+<body>
+<div id="ui">
+  <div id="title">🪶 MOTH LAMP 💡</div>
+  <div id="subtitle">you are the light. they cannot resist.</div>
+  <div id="stats">
+    <span>moths: <b id="mothCount">0</b></span>
+    <span>swarm: <b id="swarmLevel">calm</b></span>
+    <span>mode: <b id="modeDisplay">WARM</b></span>
+  </div>
+</div>
+<div id="hint">move your cursor to attract moths...</div>
+<div id="controls">
+  <button class="btn" onclick="spawnBurst()">+13 MOTHS</button>
+  <button class="btn" onclick="cycleMode()">MODE</button>
+  <button class="btn" onclick="toggleTrails()">TRAILS</button>
+  <button class="btn" onclick="clearMoths()">SCATTER</button>
+</div>
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Mouse / lamp position
+let lamp = { x: W / 2, y: H / 2 };
+let lampActive = false;
+let hint = document.getElementById('hint');
+
+document.addEventListener('mousemove', e => {
+  lamp.x = e.clientX;
+  lamp.y = e.clientY;
+  if (!lampActive) {
+    lampActive = true;
+    hint.style.opacity = '0';
+    // Spawn initial moths
+    for (let i = 0; i < 30; i++) spawnMoth();
+  }
+});
+
+document.addEventListener('touchmove', e => {
+  e.preventDefault();
+  lamp.x = e.touches[0].clientX;
+  lamp.y = e.touches[0].clientY;
+  if (!lampActive) {
+    lampActive = true;
+    hint.style.opacity = '0';
+    for (let i = 0; i < 30; i++) spawnMoth();
+  }
+}, { passive: false });
+
+// Click to spawn more moths
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('btn')) return;
+  for (let i = 0; i < 5; i++) spawnMoth(e.clientX, e.clientY);
+});
+
+// Color modes
+const modes = [
+  { name: 'WARM', hueBase: 35, hueRange: 30, saturation: 80, glow: '#ffaa4422' },
+  { name: 'COLD', hueBase: 220, hueRange: 40, saturation: 60, glow: '#4488ff22' },
+  { name: 'NEON', hueBase: 300, hueRange: 60, saturation: 100, glow: '#ff44ff22' },
+  { name: 'VOID', hueBase: 0, hueRange: 360, saturation: 70, glow: '#ffffff11' },
+  { name: 'FIRE', hueBase: 10, hueRange: 30, saturation: 100, glow: '#ff440033' },
+];
+let modeIndex = 0;
+let mode = modes[0];
+let showTrails = true;
+
+function cycleMode() {
+  modeIndex = (modeIndex + 1) % modes.length;
+  mode = modes[modeIndex];
+  document.getElementById('modeDisplay').textContent = mode.name;
+  // Recolor existing moths
+  moths.forEach(m => {
+    m.hue = mode.hueBase + (Math.random() - 0.5) * mode.hueRange;
+  });
+}
+
+function toggleTrails() { showTrails = !showTrails; }
+
+// Moth class
+const moths = [];
+const MAX_MOTHS = 300;
+
+function spawnMoth(x, y) {
+  if (moths.length >= MAX_MOTHS) return;
+  const angle = Math.random() * Math.PI * 2;
+  const dist = 200 + Math.random() * 300;
+  moths.push({
+    x: x !== undefined ? x : lamp.x + Math.cos(angle) * dist,
+    y: y !== undefined ? y : lamp.y + Math.sin(angle) * dist,
+    vx: (Math.random() - 0.5) * 2,
+    vy: (Math.random() - 0.5) * 2,
+    size: 1.5 + Math.random() * 2.5,
+    hue: mode.hueBase + (Math.random() - 0.5) * mode.hueRange,
+    phase: Math.random() * Math.PI * 2,
+    wingSpeed: 0.15 + Math.random() * 0.15,
+    orbitPref: 0.3 + Math.random() * 0.7, // how much they like to orbit vs go straight
+    brightness: 40 + Math.random() * 40,
+    life: 1,
+    scattered: false,
+    scatterVx: 0,
+    scatterVy: 0,
+  });
+}
+
+function spawnBurst() {
+  for (let i = 0; i < 13; i++) spawnMoth();
+}
+
+function clearMoths() {
+  moths.forEach(m => {
+    const angle = Math.atan2(m.y - lamp.y, m.x - lamp.x);
+    m.scattered = true;
+    m.scatterVx = Math.cos(angle) * (8 + Math.random() * 8);
+    m.scatterVy = Math.sin(angle) * (8 + Math.random() * 8);
+    setTimeout(() => { m.scattered = false; }, 1500 + Math.random() * 1000);
+  });
+}
+
+// Stars background
+const stars = [];
+for (let i = 0; i < 150; i++) {
+  stars.push({
+    x: Math.random() * 3000,
+    y: Math.random() * 2000,
+    size: Math.random() * 1.5,
+    twinkle: Math.random() * Math.PI * 2,
+  });
+}
+
+let frame = 0;
+
+function update() {
+  frame++;
+  
+  // Auto-spawn moths slowly
+  if (lampActive && moths.length < 80 && frame % 30 === 0) spawnMoth();
+  
+  moths.forEach(m => {
+    if (m.scattered) {
+      m.vx = m.scatterVx * 0.98;
+      m.vy = m.scatterVy * 0.98;
+      m.scatterVx *= 0.98;
+      m.scatterVy *= 0.98;
+      m.x += m.vx;
+      m.y += m.vy;
+      return;
+    }
+
+    const dx = lamp.x - m.x;
+    const dy = lamp.y - m.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    
+    // Attraction toward lamp (inverse square, capped)
+    const force = Math.min(0.5, 50 / (dist + 10));
+    
+    // Direct attraction
+    const ax = (dx / dist) * force;
+    const ay = (dy / dist) * force;
+    
+    // Perpendicular orbit force (moths spiral, not beeline)
+    const perpX = -dy / dist;
+    const perpY = dx / dist;
+    const orbitForce = force * m.orbitPref * (dist < 150 ? 2 : 0.5);
+    
+    // Flutter (chaotic wing-beat jitter)
+    m.phase += m.wingSpeed;
+    const flutter = Math.sin(m.phase) * 0.3;
+    const flutterX = perpX * flutter;
+    const flutterY = perpY * flutter;
+    
+    // Apply forces
+    m.vx += ax * 0.6 + perpX * orbitForce * 0.4 + flutterX;
+    m.vy += ay * 0.6 + perpY * orbitForce * 0.4 + flutterY;
+    
+    // Damping
+    m.vx *= 0.96;
+    m.vy *= 0.96;
+    
+    // Speed limit
+    const speed = Math.sqrt(m.vx * m.vx + m.vy * m.vy);
+    if (speed > 6) {
+      m.vx = (m.vx / speed) * 6;
+      m.vy = (m.vy / speed) * 6;
+    }
+    
+    m.x += m.vx;
+    m.y += m.vy;
+    
+    // Wrap around edges
+    if (m.x < -50) m.x = W + 50;
+    if (m.x > W + 50) m.x = -50;
+    if (m.y < -50) m.y = H + 50;
+    if (m.y > H + 50) m.y = -50;
+    
+    // Brightness pulses near lamp
+    m.brightness = 40 + Math.min(60, 3000 / (dist + 20));
+  });
+}
+
+function draw() {
+  // Fade / clear
+  if (showTrails) {
+    ctx.fillStyle = 'rgba(10, 10, 18, 0.15)';
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#0a0a12';
+    ctx.fillRect(0, 0, W, H);
+  }
+  
+  // Stars
+  stars.forEach(s => {
+    s.twinkle += 0.02;
+    const alpha = 0.3 + Math.sin(s.twinkle) * 0.2;
+    ctx.fillStyle = `rgba(200, 200, 255, ${alpha})`;
+    ctx.fillRect(s.x % W, s.y % H, s.size, s.size);
+  });
+  
+  // Lamp glow
+  if (lampActive) {
+    const grad = ctx.createRadialGradient(lamp.x, lamp.y, 0, lamp.x, lamp.y, 200);
+    grad.addColorStop(0, mode.glow.replace(/[\d.]+\)$/, '0.15)'));
+    grad.addColorStop(0.3, mode.glow.replace(/[\d.]+\)$/, '0.06)'));
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.fillRect(lamp.x - 200, lamp.y - 200, 400, 400);
+    
+    // Inner glow
+    const inner = ctx.createRadialGradient(lamp.x, lamp.y, 0, lamp.x, lamp.y, 30);
+    inner.addColorStop(0, `hsla(${mode.hueBase}, 100%, 95%, 0.8)`);
+    inner.addColorStop(0.5, `hsla(${mode.hueBase}, 80%, 70%, 0.3)`);
+    inner.addColorStop(1, 'transparent');
+    ctx.fillStyle = inner;
+    ctx.beginPath();
+    ctx.arc(lamp.x, lamp.y, 30, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Lamp dot
+    ctx.fillStyle = `hsla(${mode.hueBase}, 100%, 90%, 0.9)`;
+    ctx.beginPath();
+    ctx.arc(lamp.x, lamp.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Moths
+  moths.forEach(m => {
+    const wingAngle = Math.sin(m.phase) * 0.4;
+    const alpha = Math.min(1, m.brightness / 80);
+    
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    
+    // Motion angle
+    const angle = Math.atan2(m.vy, m.vx);
+    ctx.rotate(angle);
+    
+    // Glow
+    ctx.shadowColor = `hsla(${m.hue}, ${mode.saturation}%, ${m.brightness}%, 0.6)`;
+    ctx.shadowBlur = 8 + Math.sin(m.phase) * 4;
+    
+    // Body
+    ctx.fillStyle = `hsla(${m.hue}, ${mode.saturation}%, ${m.brightness}%, ${alpha})`;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, m.size * 0.8, m.size * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Wings
+    ctx.fillStyle = `hsla(${m.hue}, ${mode.saturation}%, ${m.brightness + 10}%, ${alpha * 0.7})`;
+    
+    // Left wing
+    ctx.save();
+    ctx.rotate(wingAngle);
+    ctx.beginPath();
+    ctx.ellipse(-m.size * 0.2, -m.size * 0.5, m.size * 0.8, m.size * 0.5, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    
+    // Right wing
+    ctx.save();
+    ctx.rotate(-wingAngle);
+    ctx.beginPath();
+    ctx.ellipse(-m.size * 0.2, m.size * 0.5, m.size * 0.8, m.size * 0.5, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    
+    ctx.restore();
+  });
+  
+  // Update stats
+  if (frame % 10 === 0) {
+    document.getElementById('mothCount').textContent = moths.length;
+    const density = moths.length;
+    let level = 'calm';
+    if (density > 200) level = 'FRENZY';
+    else if (density > 150) level = 'swirling';
+    else if (density > 100) level = 'buzzing';
+    else if (density > 50) level = 'gathering';
+    else if (density > 20) level = 'curious';
+    document.getElementById('swarmLevel').textContent = level;
+  }
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
