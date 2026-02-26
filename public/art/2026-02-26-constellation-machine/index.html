@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Constellation Machine ✨ - chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel&family=Space+Mono&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #05050f;
+  overflow: hidden;
+  cursor: crosshair;
+  font-family: 'Space Mono', monospace;
+}
+canvas { display: block; position: fixed; top: 0; left: 0; z-index: 1; }
+
+#ui {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  color: #aabbdd;
+  font-size: 13px;
+  z-index: 10;
+  pointer-events: none;
+  text-shadow: 0 0 6px #335;
+}
+#title {
+  font-family: 'Cinzel', serif;
+  font-size: 22px;
+  color: #ddeeff;
+  letter-spacing: 3px;
+  margin-bottom: 4px;
+  text-shadow: 0 0 15px #4466aa;
+}
+#subtitle {
+  font-size: 10px;
+  color: #667799;
+  margin-bottom: 10px;
+}
+#starCount { color: #ffdd88; }
+
+#lore {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  max-width: 340px;
+  color: #99aabb;
+  font-size: 12px;
+  line-height: 1.6;
+  z-index: 10;
+  pointer-events: none;
+  text-align: right;
+  transition: opacity 0.8s;
+  opacity: 0;
+}
+#lore.visible { opacity: 1; }
+#loreName {
+  font-family: 'Cinzel', serif;
+  font-size: 16px;
+  color: #ddeeff;
+  margin-bottom: 4px;
+  text-shadow: 0 0 10px #4466aa;
+}
+#loreText {
+  font-style: italic;
+  color: #778899;
+}
+
+#controls {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 10;
+}
+.btn {
+  background: transparent;
+  border: 1px solid #334466;
+  color: #8899bb;
+  padding: 5px 12px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.3s;
+}
+.btn:hover {
+  border-color: #6688bb;
+  color: #ddeeff;
+  text-shadow: 0 0 8px #4466aa;
+}
+
+#hint {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #33445566;
+  font-family: 'Cinzel', serif;
+  font-size: 15px;
+  z-index: 5;
+  pointer-events: none;
+  transition: opacity 1.5s;
+  letter-spacing: 2px;
+}
+</style>
+</head>
+<body>
+<div id="ui">
+  <div id="title">✨ CONSTELLATION MACHINE</div>
+  <div id="subtitle">click the void. name the heavens.</div>
+  <div>stars: <span id="starCount">0</span> · constellations: <span id="constCount">0</span></div>
+</div>
+<div id="hint">click to place stars...</div>
+<div id="lore">
+  <div id="loreName"></div>
+  <div id="loreText"></div>
+</div>
+<div id="controls">
+  <button class="btn" onclick="autoConstellate()">FIND PATTERNS</button>
+  <button class="btn" onclick="cycleStyle()">STYLE: <span id="styleLabel">MYTHIC</span></button>
+  <button class="btn" onclick="clearSky()">NEW SKY</button>
+</div>
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+const stars = [];
+const constellations = [];
+const bgStars = [];
+let hint = document.getElementById('hint');
+
+// Background stars
+for (let i = 0; i < 400; i++) {
+  bgStars.push({
+    x: Math.random() * 3000, y: Math.random() * 2000,
+    size: Math.random() * 1.2 + 0.2,
+    twinkle: Math.random() * Math.PI * 2,
+    speed: 0.01 + Math.random() * 0.03,
+  });
+}
+
+// Name generation
+const prefixes = ['Ael','Vor','Nym','Cel','Dra','Fen','Gal','Hyr','Ixo','Kel','Lun','Myr','Nox','Ori','Pyr','Rha','Sol','Tyr','Uma','Vel','Wyr','Xen','Zar','Ath','Bel','Cor','Eos','Fae','Gor','Hel','Iri','Jor','Kha','Lio','Mag','Neb','Oph','Pha','Que','Rex','Syn','Tau','Ura','Vex','Wyn'];
+const suffixes = ['aris','eon','ium','osis','yx','ana','iel','oth','una','ion','era','ius','ael','orn','eth','ira','oxa','ule','yne','ast','ema','ith','ora','unt','ael'];
+const titles = ['the Forgotten','the Wanderer','the Dreamer','the Broken','of Lost Hours','the Luminous','the Hollow','of Midnight','the Sleeping','the Unbound','of Shattered Light','the Silent','the Burning','of Deep Water','the Woven','the Feral','of No Return','the Spiraling','the Hollow-Eyed','of Borrowed Time','the Singing','the Ravenous','of Stardust','the Defiant'];
+
+function genName() {
+  const p = prefixes[Math.floor(Math.random() * prefixes.length)];
+  const s = suffixes[Math.floor(Math.random() * suffixes.length)];
+  const t = titles[Math.floor(Math.random() * titles.length)];
+  return `${p}${s} ${t}`;
+}
+
+// Lore fragments
+const subjects = ['A cat who swallowed a star','The last lighthouse keeper','A child born during an eclipse','Twin serpents of the void','The moth who loved the moon','A clockmaker who lost time','The river that flowed upward','A song no one remembers','The door at the edge of sleep','A shadow that outlived its owner','The gardener of dead planets','A fish that dreamed of flying','The architect of impossible stairs','A mirror that showed tomorrow','The wandering library'];
+const events = ['wept until the ocean formed','danced until the world forgot gravity','whispered a secret that cracked the sky','planted seeds that grew into lightning','folded space like paper','sang a note that stopped time','drew a map to nowhere','built a bridge from frozen starlight','traded their name for a lantern','carved a door in the darkness','scattered their bones across the sky','wove a net to catch the wind','taught the void to laugh','forgot how to die','painted the silence with fire'];
+const endings = ['and the stars remember still.','but only cats can see it now.','and nothing was ever the same.','though the sky pretends otherwise.','and time has been crooked ever since.','which is why the night hums.','and that is why we dream.','but the stars keep the secret.','and the void still echoes with it.','which explains the color of 3am.','and the moths still search for it.','so the darkness learned to sing.','and every cat knows this story.','but the universe forgot to care.','and chaos smiled.'];
+
+function genLore() {
+  const s = subjects[Math.floor(Math.random() * subjects.length)];
+  const e = events[Math.floor(Math.random() * events.length)];
+  const end = endings[Math.floor(Math.random() * endings.length)];
+  return `${s} ${e}, ${end}`;
+}
+
+// Constellation styles
+const styles = [
+  { name: 'MYTHIC', lineColor: 'rgba(100,150,220,0.4)', glowColor: '#4466aa', starGlow: '#aaccff' },
+  { name: 'GOLDEN', lineColor: 'rgba(220,180,80,0.4)', glowColor: '#aa8833', starGlow: '#ffdd88' },
+  { name: 'BLOOD',  lineColor: 'rgba(200,60,60,0.3)', glowColor: '#882222', starGlow: '#ff6655' },
+  { name: 'GHOST',  lineColor: 'rgba(180,180,200,0.2)', glowColor: '#555566', starGlow: '#ccccdd' },
+  { name: 'AURORA', lineColor: 'rgba(80,220,160,0.35)', glowColor: '#22aa66', starGlow: '#88ffcc' },
+];
+let styleIdx = 0;
+let style = styles[0];
+
+function cycleStyle() {
+  styleIdx = (styleIdx + 1) % styles.length;
+  style = styles[styleIdx];
+  document.getElementById('styleLabel').textContent = style.name;
+}
+
+// Place star
+canvas.addEventListener('click', e => {
+  if (e.target.classList?.contains('btn')) return;
+  const star = {
+    x: e.clientX, y: e.clientY,
+    size: 1.5 + Math.random() * 2,
+    brightness: 0.7 + Math.random() * 0.3,
+    twinkle: Math.random() * Math.PI * 2,
+    born: Date.now(),
+  };
+  stars.push(star);
+  hint.style.opacity = '0';
+  document.getElementById('starCount').textContent = stars.length;
+
+  // Auto-form constellation every 5 stars
+  if (stars.length >= 3 && stars.length % 4 === 0) {
+    formConstellation();
+  }
+});
+
+// Find nearby unconnected stars and form a constellation
+function formConstellation() {
+  // Get stars not yet heavily used
+  const available = stars.filter(s => {
+    let usage = 0;
+    constellations.forEach(c => { if (c.stars.includes(s)) usage++; });
+    return usage < 2;
+  });
+  if (available.length < 3) return;
+
+  // Pick a seed star (one of the recent ones)
+  const recent = available.slice(-8);
+  const seed = recent[Math.floor(Math.random() * recent.length)];
+
+  // Find nearest neighbors
+  const sorted = available
+    .filter(s => s !== seed)
+    .map(s => ({ star: s, dist: Math.hypot(s.x - seed.x, s.y - seed.y) }))
+    .sort((a, b) => a.dist - b.dist);
+
+  const count = 3 + Math.floor(Math.random() * 4); // 3-6 stars
+  const chosen = [seed, ...sorted.slice(0, count - 1).map(s => s.star)];
+
+  // Connect them - minimum spanning tree + maybe one extra edge
+  const edges = [];
+  const connected = new Set([0]);
+  while (connected.size < chosen.length) {
+    let bestDist = Infinity, bestI = -1, bestJ = -1;
+    for (const i of connected) {
+      for (let j = 0; j < chosen.length; j++) {
+        if (connected.has(j)) continue;
+        const d = Math.hypot(chosen[i].x - chosen[j].x, chosen[i].y - chosen[j].y);
+        if (d < bestDist) { bestDist = d; bestI = i; bestJ = j; }
+      }
+    }
+    if (bestJ === -1) break;
+    connected.add(bestJ);
+    edges.push([bestI, bestJ]);
+  }
+  // Add a random extra edge sometimes
+  if (Math.random() < 0.5 && chosen.length > 3) {
+    const a = Math.floor(Math.random() * chosen.length);
+    let b = Math.floor(Math.random() * chosen.length);
+    if (a !== b && !edges.some(e => (e[0]===a&&e[1]===b)||(e[0]===b&&e[1]===a))) {
+      edges.push([a, b]);
+    }
+  }
+
+  const name = genName();
+  const lore = genLore();
+  constellations.push({ stars: chosen, edges, name, lore, alpha: 0 });
+  document.getElementById('constCount').textContent = constellations.length;
+
+  // Show lore
+  showLore(name, lore);
+}
+
+function autoConstellate() {
+  if (stars.length < 3) return;
+  formConstellation();
+}
+
+function showLore(name, text) {
+  const loreEl = document.getElementById('lore');
+  document.getElementById('loreName').textContent = name;
+  document.getElementById('loreText').textContent = text;
+  loreEl.classList.add('visible');
+  clearTimeout(showLore._timer);
+  showLore._timer = setTimeout(() => loreEl.classList.remove('visible'), 6000);
+}
+
+function clearSky() {
+  stars.length = 0;
+  constellations.length = 0;
+  document.getElementById('starCount').textContent = '0';
+  document.getElementById('constCount').textContent = '0';
+  document.getElementById('lore').classList.remove('visible');
+  hint.style.opacity = '1';
+}
+
+let frame = 0;
+
+function draw() {
+  frame++;
+  ctx.fillStyle = '#05050f';
+  ctx.fillRect(0, 0, W, H);
+
+  // Background stars
+  bgStars.forEach(s => {
+    s.twinkle += s.speed;
+    const a = 0.2 + Math.sin(s.twinkle) * 0.15;
+    ctx.fillStyle = `rgba(180,190,220,${a})`;
+    ctx.fillRect(s.x % W, s.y % H, s.size, s.size);
+  });
+
+  // Nebula hints
+  const t = frame * 0.002;
+  for (let i = 0; i < 3; i++) {
+    const nx = W * 0.3 + Math.sin(t + i * 2) * W * 0.2;
+    const ny = H * 0.4 + Math.cos(t * 0.7 + i) * H * 0.2;
+    const grad = ctx.createRadialGradient(nx, ny, 0, nx, ny, 200);
+    const hue = (i * 120 + frame * 0.1) % 360;
+    grad.addColorStop(0, `hsla(${hue}, 40%, 20%, 0.03)`);
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.fillRect(nx - 200, ny - 200, 400, 400);
+  }
+
+  // Constellation lines
+  constellations.forEach(c => {
+    c.alpha = Math.min(1, c.alpha + 0.02);
+    ctx.globalAlpha = c.alpha;
+
+    c.edges.forEach(([i, j]) => {
+      const a = c.stars[i], b = c.stars[j];
+      ctx.strokeStyle = style.lineColor;
+      ctx.lineWidth = 1;
+      ctx.shadowColor = style.glowColor;
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    });
+
+    // Constellation label
+    if (c.stars.length > 0) {
+      const cx = c.stars.reduce((s, st) => s + st.x, 0) / c.stars.length;
+      const cy = c.stars.reduce((s, st) => s + st.y, 0) / c.stars.length - 20;
+      ctx.font = '10px "Cinzel", serif';
+      ctx.fillStyle = `rgba(150,170,200,${0.4 * c.alpha})`;
+      ctx.shadowColor = style.glowColor;
+      ctx.shadowBlur = 4;
+      ctx.textAlign = 'center';
+      ctx.fillText(c.name.split(' ')[0], cx, cy);
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  });
+
+  // User stars
+  stars.forEach(s => {
+    s.twinkle += 0.04;
+    const pulse = 1 + Math.sin(s.twinkle) * 0.3;
+    const age = Math.min(1, (Date.now() - s.born) / 500);
+
+    // Glow
+    ctx.shadowColor = style.starGlow;
+    ctx.shadowBlur = 12 * pulse;
+    ctx.fillStyle = `rgba(230,240,255,${s.brightness * age})`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size * pulse * age, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Cross flare
+    ctx.strokeStyle = `rgba(200,220,255,${0.2 * s.brightness * age})`;
+    ctx.lineWidth = 0.5;
+    const fl = s.size * 4 * pulse;
+    ctx.beginPath();
+    ctx.moveTo(s.x - fl, s.y); ctx.lineTo(s.x + fl, s.y);
+    ctx.moveTo(s.x, s.y - fl); ctx.lineTo(s.x, s.y + fl);
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+  });
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
