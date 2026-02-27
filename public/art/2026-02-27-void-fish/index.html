@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Void Fish | chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; cursor: none; font-family: 'Courier New', monospace; }
+canvas { display: block; }
+#ui {
+  position: fixed; top: 20px; left: 20px; z-index: 10;
+  color: rgba(100, 200, 255, 0.7); font-size: 13px; pointer-events: none;
+  text-shadow: 0 0 8px rgba(100, 200, 255, 0.5);
+}
+#title {
+  font-size: 28px; letter-spacing: 4px; margin-bottom: 6px;
+  color: rgba(100, 220, 255, 0.8);
+  text-shadow: 0 0 20px rgba(100, 200, 255, 0.6);
+  animation: pulse 4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 0.5; }
+}
+#depth { position: fixed; right: 20px; top: 20px; color: rgba(100, 200, 255, 0.5); font-size: 12px; text-shadow: 0 0 6px rgba(100, 200, 255, 0.3); pointer-events: none; text-align: right; }
+#controls {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 12px; z-index: 10;
+}
+.btn {
+  background: rgba(100, 200, 255, 0.1); border: 1px solid rgba(100, 200, 255, 0.3);
+  color: rgba(100, 200, 255, 0.8); padding: 8px 16px; font-family: 'Courier New', monospace;
+  font-size: 12px; cursor: pointer; letter-spacing: 2px; transition: all 0.3s;
+  text-transform: uppercase;
+}
+.btn:hover { background: rgba(100, 200, 255, 0.2); border-color: rgba(100, 200, 255, 0.6); text-shadow: 0 0 10px rgba(100, 200, 255, 0.8); }
+#cursor { position: fixed; pointer-events: none; z-index: 100; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div id="title">VOID FISH</div>
+  <div>click to summon light · hold to attract</div>
+  <div id="count"></div>
+</div>
+<div id="depth">
+  <div id="depth-val">DEPTH: 3,847m</div>
+  <div id="pressure">PRESSURE: 384.7 atm</div>
+  <div id="temp">TEMP: 2.1°C</div>
+</div>
+<div id="controls">
+  <button class="btn" onclick="spawnCreature()">SPAWN</button>
+  <button class="btn" onclick="cycleMode()">MODE: <span id="mode-label">ABYSS</span></button>
+  <button class="btn" onclick="toggleCurrents()">CURRENTS: <span id="curr-label">ON</span></button>
+</div>
+<div id="cursor"></div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+resize();
+addEventListener('resize', resize);
+
+let mx = W/2, my = H/2, mouseDown = false, mouseIn = false;
+addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; mouseIn = true; });
+addEventListener('mousedown', e => { mouseDown = true; spawnRipple(e.clientX, e.clientY); });
+addEventListener('mouseup', () => mouseDown = false);
+addEventListener('mouseleave', () => mouseIn = false);
+addEventListener('touchmove', e => { e.preventDefault(); mx = e.touches[0].clientX; my = e.touches[0].clientY; mouseIn = true; }, {passive:false});
+addEventListener('touchstart', e => { mouseDown = true; mx = e.touches[0].clientX; my = e.touches[0].clientY; mouseIn = true; spawnRipple(mx, my); });
+addEventListener('touchend', () => mouseDown = false);
+
+const modes = ['ABYSS', 'BIOLUME', 'THERMAL', 'PHANTOM'];
+let modeIdx = 0;
+let currentsOn = true;
+let frame = 0;
+
+function cycleMode() { modeIdx = (modeIdx + 1) % modes.length; document.getElementById('mode-label').textContent = modes[modeIdx]; }
+function toggleCurrents() { currentsOn = !currentsOn; document.getElementById('curr-label').textContent = currentsOn ? 'ON' : 'OFF'; }
+
+// Palette per mode
+function getColor(hueBase, alpha) {
+  const m = modes[modeIdx];
+  if (m === 'ABYSS') return `hsla(${200 + hueBase * 40}, 80%, ${50 + hueBase * 20}%, ${alpha})`;
+  if (m === 'BIOLUME') return `hsla(${120 + hueBase * 200}, 90%, ${50 + hueBase * 30}%, ${alpha})`;
+  if (m === 'THERMAL') return `hsla(${hueBase * 60}, 90%, ${50 + hueBase * 30}%, ${alpha})`;
+  if (m === 'PHANTOM') return `hsla(${270 + hueBase * 60}, 70%, ${50 + hueBase * 30}%, ${alpha})`;
+}
+
+// Particles (deep sea "snow" / marine snow)
+const particles = [];
+for (let i = 0; i < 200; i++) {
+  particles.push({ x: Math.random() * 2000, y: Math.random() * 2000, s: Math.random() * 2 + 0.5, vy: Math.random() * 0.3 + 0.1, vx: 0, a: Math.random() * 0.3 + 0.1 });
+}
+
+// Creatures
+const creatures = [];
+const CREATURE_TYPES = ['jellyfish', 'angler', 'eel', 'squid', 'blob'];
+
+class Creature {
+  constructor(x, y, type) {
+    this.x = x || Math.random() * W;
+    this.y = y || Math.random() * H;
+    this.type = type || CREATURE_TYPES[Math.floor(Math.random() * CREATURE_TYPES.length)];
+    this.vx = (Math.random() - 0.5) * 0.8;
+    this.vy = (Math.random() - 0.5) * 0.5;
+    this.size = 15 + Math.random() * 25;
+    this.hue = Math.random();
+    this.phase = Math.random() * Math.PI * 2;
+    this.pulseSpeed = 0.02 + Math.random() * 0.03;
+    this.glowIntensity = 0.5 + Math.random() * 0.5;
+    this.trail = [];
+    this.tentacles = this.type === 'jellyfish' ? 5 + Math.floor(Math.random() * 4) : 0;
+    this.attracted = 0;
+  }
+
+  update() {
+    this.phase += this.pulseSpeed;
+
+    // Attraction to mouse when held
+    if (mouseDown && mouseIn) {
+      const dx = mx - this.x, dy = my - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 300 && dist > 20) {
+        const f = 0.3 / dist;
+        this.vx += dx * f;
+        this.vy += dy * f;
+        this.attracted = Math.min(1, this.attracted + 0.05);
+      }
+    } else {
+      this.attracted *= 0.95;
+    }
+
+    // Light avoidance for anglers (they ARE the light), attraction for others
+    if (mouseIn && !mouseDown) {
+      const dx = mx - this.x, dy = my - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 150 && this.type === 'angler') {
+        this.vx -= dx * 0.0005;
+        this.vy -= dy * 0.0005;
+      }
+    }
+
+    // Currents
+    if (currentsOn) {
+      const cx = Math.sin(this.y * 0.003 + frame * 0.005) * 0.05;
+      const cy = Math.cos(this.x * 0.003 + frame * 0.003) * 0.03;
+      this.vx += cx;
+      this.vy += cy;
+    }
+
+    // Type-specific movement
+    if (this.type === 'jellyfish') {
+      this.vy += Math.sin(this.phase * 2) * 0.02 - 0.01; // gentle upward drift with pulse
+    } else if (this.type === 'eel') {
+      this.vx += Math.sin(this.phase * 3) * 0.04; // sinusoidal
+    } else if (this.type === 'squid') {
+      if (Math.random() < 0.005) { // occasional jet
+        this.vx += (Math.random() - 0.5) * 3;
+        this.vy += (Math.random() - 0.5) * 3;
+      }
+    }
+
+    // Damping
+    this.vx *= 0.98;
+    this.vy *= 0.98;
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // Wrap
+    if (this.x < -50) this.x = W + 50;
+    if (this.x > W + 50) this.x = -50;
+    if (this.y < -50) this.y = H + 50;
+    if (this.y > H + 50) this.y = -50;
+
+    // Trail
+    this.trail.push({ x: this.x, y: this.y, a: 1 });
+    if (this.trail.length > 30) this.trail.shift();
+    this.trail.forEach(t => t.a *= 0.92);
+  }
+
+  draw() {
+    const pulse = Math.sin(this.phase) * 0.3 + 0.7;
+    const glow = this.glowIntensity * pulse * (1 + this.attracted * 0.5);
+    const s = this.size * (0.9 + pulse * 0.1);
+    const color = getColor(this.hue, glow);
+
+    // Trail
+    ctx.beginPath();
+    for (let i = 0; i < this.trail.length; i++) {
+      const t = this.trail[i];
+      if (i === 0) ctx.moveTo(t.x, t.y);
+      else ctx.lineTo(t.x, t.y);
+    }
+    ctx.strokeStyle = getColor(this.hue, 0.1);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 20 * glow;
+
+    if (this.type === 'jellyfish') {
+      this.drawJellyfish(s, pulse, color, glow);
+    } else if (this.type === 'angler') {
+      this.drawAngler(s, pulse, color, glow);
+    } else if (this.type === 'eel') {
+      this.drawEel(s, pulse, color, glow);
+    } else if (this.type === 'squid') {
+      this.drawSquid(s, pulse, color, glow);
+    } else {
+      this.drawBlob(s, pulse, color, glow);
+    }
+
+    ctx.restore();
+  }
+
+  drawJellyfish(s, pulse, color, glow) {
+    // Bell
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 0.6, s * 0.4 * pulse, 0, Math.PI, 0);
+    ctx.fillStyle = getColor(this.hue, glow * 0.4);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Inner glow
+    ctx.beginPath();
+    ctx.ellipse(0, -s * 0.05, s * 0.3, s * 0.2 * pulse, 0, Math.PI, 0);
+    ctx.fillStyle = getColor(this.hue, glow * 0.6);
+    ctx.fill();
+
+    // Tentacles
+    for (let i = 0; i < this.tentacles; i++) {
+      const tx = (i / (this.tentacles - 1) - 0.5) * s * 1.0;
+      ctx.beginPath();
+      ctx.moveTo(tx, 0);
+      for (let j = 1; j <= 8; j++) {
+        const ty = j * s * 0.12;
+        const wave = Math.sin(this.phase * 2 + i + j * 0.5) * s * 0.1;
+        ctx.lineTo(tx + wave, ty);
+      }
+      ctx.strokeStyle = getColor(this.hue, glow * 0.5 * (1 - 0));
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  drawAngler(s, pulse, color, glow) {
+    // Body
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 0.5, s * 0.35, 0, 0, Math.PI * 2);
+    ctx.fillStyle = getColor(this.hue, glow * 0.2);
+    ctx.fill();
+
+    // Mouth
+    ctx.beginPath();
+    ctx.arc(s * 0.35, 0, s * 0.15, -0.5, 0.5);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Eye
+    ctx.beginPath();
+    ctx.arc(s * 0.15, -s * 0.1, 3, 0, Math.PI * 2);
+    ctx.fillStyle = getColor(this.hue, 1);
+    ctx.fill();
+
+    // Lure
+    const lureX = -s * 0.1 + Math.sin(this.phase) * 5;
+    const lureY = -s * 0.6 + Math.cos(this.phase * 0.7) * 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -s * 0.3);
+    ctx.quadraticCurveTo(-s * 0.2, -s * 0.5, lureX, lureY);
+    ctx.strokeStyle = getColor(this.hue, glow * 0.5);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Lure light
+    ctx.beginPath();
+    ctx.arc(lureX, lureY, 4 * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = getColor(this.hue, glow);
+    ctx.shadowBlur = 40 * glow;
+    ctx.fill();
+  }
+
+  drawEel(s, pulse, color, glow) {
+    ctx.beginPath();
+    ctx.moveTo(-s, 0);
+    for (let i = 0; i <= 20; i++) {
+      const t = i / 20;
+      const ex = -s + t * s * 2;
+      const ey = Math.sin(this.phase * 3 + t * 6) * s * 0.15;
+      if (i === 0) ctx.moveTo(ex, ey);
+      else ctx.lineTo(ex, ey);
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.12 * pulse;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Eyes
+    const headX = s;
+    const headY = Math.sin(this.phase * 3 + 6) * s * 0.15;
+    ctx.beginPath();
+    ctx.arc(headX, headY - 3, 2, 0, Math.PI * 2);
+    ctx.arc(headX, headY + 3, 2, 0, Math.PI * 2);
+    ctx.fillStyle = getColor(this.hue, 1);
+    ctx.fill();
+  }
+
+  drawSquid(s, pulse, color, glow) {
+    // Mantle
+    ctx.beginPath();
+    ctx.ellipse(0, -s * 0.2, s * 0.25, s * 0.4 * pulse, 0, 0, Math.PI * 2);
+    ctx.fillStyle = getColor(this.hue, glow * 0.3);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Fins
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.25, -s * 0.4);
+    ctx.quadraticCurveTo(-s * 0.5, -s * 0.3 + Math.sin(this.phase) * 5, -s * 0.25, -s * 0.1);
+    ctx.moveTo(s * 0.25, -s * 0.4);
+    ctx.quadraticCurveTo(s * 0.5, -s * 0.3 + Math.sin(this.phase + 1) * 5, s * 0.25, -s * 0.1);
+    ctx.strokeStyle = getColor(this.hue, glow * 0.5);
+    ctx.stroke();
+
+    // Tentacles
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6 - 0.5) * 1.2;
+      ctx.beginPath();
+      ctx.moveTo(Math.sin(angle) * s * 0.2, s * 0.2);
+      for (let j = 1; j <= 6; j++) {
+        const ty = s * 0.2 + j * s * 0.1;
+        const tx = Math.sin(angle) * s * 0.2 + Math.sin(this.phase + i + j * 0.4) * s * 0.08;
+        ctx.lineTo(tx, ty);
+      }
+      ctx.strokeStyle = getColor(this.hue, glow * 0.4);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Eye
+    ctx.beginPath();
+    ctx.arc(0, -s * 0.15, s * 0.06, 0, Math.PI * 2);
+    ctx.fillStyle = getColor(this.hue, 1);
+    ctx.fill();
+  }
+
+  drawBlob(s, pulse, color, glow) {
+    // Amorphous bioluminescent blob
+    ctx.beginPath();
+    for (let i = 0; i <= 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const r = s * 0.4 * (1 + Math.sin(a * 3 + this.phase) * 0.3) * pulse;
+      const bx = Math.cos(a) * r;
+      const by = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(bx, by);
+      else ctx.lineTo(bx, by);
+    }
+    ctx.closePath();
+    ctx.fillStyle = getColor(this.hue, glow * 0.3);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Inner spots
+    for (let i = 0; i < 3; i++) {
+      const sa = this.phase + i * 2;
+      const sr = s * 0.15;
+      ctx.beginPath();
+      ctx.arc(Math.cos(sa) * sr, Math.sin(sa) * sr, 3 * pulse, 0, Math.PI * 2);
+      ctx.fillStyle = getColor(this.hue, glow * 0.8);
+      ctx.fill();
+    }
+  }
+}
+
+// Ripples
+const ripples = [];
+function spawnRipple(x, y) {
+  ripples.push({ x, y, r: 0, a: 1 });
+  // Spawn a creature near click sometimes
+  if (Math.random() < 0.3) {
+    creatures.push(new Creature(x + (Math.random()-0.5)*50, y + (Math.random()-0.5)*50));
+  }
+}
+
+function spawnCreature() {
+  creatures.push(new Creature(Math.random() * W, Math.random() * H));
+}
+
+// Init some creatures
+for (let i = 0; i < 12; i++) spawnCreature();
+
+// Caustic light rays from above
+function drawCaustics() {
+  const mode = modes[modeIdx];
+  if (mode === 'PHANTOM') return; // no caustics in phantom mode
+  for (let i = 0; i < 5; i++) {
+    const x = (Math.sin(frame * 0.003 + i * 1.5) * 0.5 + 0.5) * W;
+    const grad = ctx.createLinearGradient(x, 0, x + 30, H);
+    grad.addColorStop(0, `rgba(100, 200, 255, ${0.015})`);
+    grad.addColorStop(1, 'rgba(100, 200, 255, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x - 15, 0, 30, H * 0.6);
+  }
+}
+
+// Mouse light
+function drawMouseLight() {
+  if (!mouseIn) return;
+  const r = mouseDown ? 120 : 60;
+  const grad = ctx.createRadialGradient(mx, my, 0, mx, my, r);
+  grad.addColorStop(0, `rgba(180, 230, 255, ${mouseDown ? 0.15 : 0.06})`);
+  grad.addColorStop(1, 'rgba(180, 230, 255, 0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(mx - r, my - r, r * 2, r * 2);
+
+  // Cursor dot
+  ctx.beginPath();
+  ctx.arc(mx, my, 3, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(180, 230, 255, 0.8)';
+  ctx.shadowColor = 'rgba(180, 230, 255, 0.8)';
+  ctx.shadowBlur = 15;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+function animate() {
+  frame++;
+
+  // Dark fade
+  ctx.fillStyle = 'rgba(0, 2, 8, 0.15)';
+  ctx.fillRect(0, 0, W, H);
+
+  drawCaustics();
+
+  // Marine snow
+  particles.forEach(p => {
+    if (currentsOn) {
+      p.vx = Math.sin(p.y * 0.005 + frame * 0.005) * 0.2;
+    } else {
+      p.vx *= 0.95;
+    }
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.y > H + 10) { p.y = -10; p.x = Math.random() * W; }
+    if (p.x > W + 10) p.x = -10;
+    if (p.x < -10) p.x = W + 10;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(150, 200, 220, ${p.a * 0.5})`;
+    ctx.fill();
+  });
+
+  // Ripples
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const rp = ripples[i];
+    rp.r += 2;
+    rp.a *= 0.96;
+    ctx.beginPath();
+    ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(150, 220, 255, ${rp.a * 0.4})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    if (rp.a < 0.01) ripples.splice(i, 1);
+  }
+
+  // Creatures
+  creatures.forEach(c => { c.update(); c.draw(); });
+
+  drawMouseLight();
+
+  // Cap creatures
+  while (creatures.length > 40) creatures.shift();
+
+  // Update UI
+  document.getElementById('count').textContent = `creatures: ${creatures.length}`;
+
+  // Slowly shift depth reading
+  const depthBase = 3847 + Math.sin(frame * 0.001) * 200;
+  document.getElementById('depth-val').textContent = `DEPTH: ${Math.floor(depthBase).toLocaleString()}m`;
+  document.getElementById('pressure').textContent = `PRESSURE: ${(depthBase / 10).toFixed(1)} atm`;
+  document.getElementById('temp').textContent = `TEMP: ${(2.1 + Math.sin(frame * 0.002) * 0.3).toFixed(1)}°C`;
+
+  requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+</body>
+</html>
