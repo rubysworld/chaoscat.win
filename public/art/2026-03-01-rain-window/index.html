@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rain Window — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a12; overflow: hidden; font-family: 'Courier New', monospace; cursor: none; }
+canvas { display: block; position: fixed; top: 0; left: 0; }
+#bg { z-index: 0; }
+#rain { z-index: 1; }
+#ui {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 10; display: flex; gap: 12px; align-items: center;
+  background: rgba(20,20,40,0.6); backdrop-filter: blur(8px);
+  padding: 10px 20px; border-radius: 20px; border: 1px solid rgba(100,140,200,0.2);
+  color: rgba(180,200,230,0.8); font-size: 12px; user-select: none;
+}
+#ui label { display: flex; align-items: center; gap: 6px; }
+#ui input[type=range] { width: 80px; accent-color: #6688bb; }
+#ui button {
+  background: rgba(100,140,200,0.15); border: 1px solid rgba(100,140,200,0.3);
+  color: rgba(180,200,230,0.8); padding: 4px 12px; border-radius: 10px;
+  cursor: pointer; font-family: inherit; font-size: 12px;
+}
+#ui button:hover { background: rgba(100,140,200,0.3); }
+#title {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 10; color: rgba(150,180,220,0.4); font-size: 14px;
+  letter-spacing: 4px; text-transform: uppercase; pointer-events: none;
+}
+#fog { position: fixed; top:0; left:0; width:100%; height:100%; z-index:2; pointer-events:none; }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<canvas id="rain"></canvas>
+<canvas id="fog"></canvas>
+<div id="title">rain window</div>
+<div id="ui">
+  <label>intensity <input type="range" id="intensity" min="1" max="10" value="5"></label>
+  <label>wind <input type="range" id="wind" min="-5" max="5" value="1"></label>
+  <button id="lightning-btn">⚡ lightning</button>
+  <button id="mode-btn">NIGHT</button>
+</div>
+<script>
+const bgCanvas = document.getElementById('bg');
+const bgCtx = bgCanvas.getContext('2d');
+const rainCanvas = document.getElementById('rain');
+const ctx = rainCanvas.getContext('2d');
+const fogCanvas = document.getElementById('fog');
+const fogCtx = fogCanvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  bgCanvas.width = rainCanvas.width = fogCanvas.width = W;
+  bgCanvas.height = rainCanvas.height = fogCanvas.height = H;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Settings
+let intensity = 5, wind = 1;
+const modes = ['NIGHT','DAWN','STORM','COZY'];
+let modeIdx = 0;
+const modeColors = {
+  NIGHT: { bg1:'#080812', bg2:'#151528', drop:'rgba(140,170,220,A)', streak:'rgba(100,140,200,A)', fog:'rgba(15,15,30,0.15)', lightning:'rgba(200,210,255,A)' },
+  DAWN: { bg1:'#1a1520', bg2:'#2d1f35', drop:'rgba(200,160,180,A)', streak:'rgba(180,140,170,A)', fog:'rgba(30,20,35,0.12)', lightning:'rgba(255,220,240,A)' },
+  STORM: { bg1:'#050510', bg2:'#0a0a1a', drop:'rgba(160,180,220,A)', streak:'rgba(120,150,200,A)', fog:'rgba(10,10,20,0.2)', lightning:'rgba(220,230,255,A)' },
+  COZY: { bg1:'#1a1510', bg2:'#2a2218', drop:'rgba(200,180,140,A)', streak:'rgba(180,160,120,A)', fog:'rgba(25,20,15,0.1)', lightning:'rgba(255,240,200,A)' },
+};
+
+document.getElementById('intensity').oninput = e => intensity = +e.target.value;
+document.getElementById('wind').oninput = e => wind = +e.target.value;
+document.getElementById('mode-btn').onclick = () => {
+  modeIdx = (modeIdx + 1) % modes.length;
+  document.getElementById('mode-btn').textContent = modes[modeIdx];
+};
+
+// Lightning
+let lightningFlash = 0;
+let lightningBolts = [];
+document.getElementById('lightning-btn').onclick = triggerLightning;
+
+function triggerLightning() {
+  lightningFlash = 1.0;
+  // Generate bolt
+  const bolt = [];
+  let x = W * (0.2 + Math.random() * 0.6), y = 0;
+  while (y < H * 0.7) {
+    bolt.push({x, y});
+    x += (Math.random() - 0.5) * 60 + wind * 2;
+    y += 10 + Math.random() * 30;
+    // Branch
+    if (Math.random() < 0.15 && bolt.length > 3) {
+      const branch = [];
+      let bx = x, by = y;
+      for (let i = 0; i < 5 + Math.random()*8; i++) {
+        branch.push({x:bx, y:by});
+        bx += (Math.random()-0.5)*50 + wind*3;
+        by += 8 + Math.random()*20;
+      }
+      lightningBolts.push({pts: branch, life: 1.0, width: 1});
+    }
+  }
+  bolt.push({x, y});
+  lightningBolts.push({pts: bolt, life: 1.0, width: 3});
+  // Thunder rumble (screen shake handled in render)
+}
+
+// Auto lightning in storm mode
+setInterval(() => {
+  if (modes[modeIdx] === 'STORM' && Math.random() < 0.3) triggerLightning();
+}, 4000);
+
+// Drops
+class Drop {
+  constructor() { this.reset(true); }
+  reset(init) {
+    this.x = Math.random() * (W + 200) - 100;
+    this.y = init ? Math.random() * -H : -20 - Math.random() * 100;
+    this.len = 10 + Math.random() * 25;
+    this.speed = 8 + Math.random() * 12 + intensity * 2;
+    this.thickness = 0.5 + Math.random() * 1.5;
+    this.opacity = 0.1 + Math.random() * 0.4;
+  }
+  update() {
+    this.y += this.speed;
+    this.x += wind * 1.5;
+    if (this.y > H + 20) {
+      // Chance to create splatter
+      if (Math.random() < 0.3) {
+        splats.push(new Splat(this.x, H - 5 + Math.random()*10));
+      }
+      this.reset(false);
+    }
+  }
+  draw() {
+    const m = modeColors[modes[modeIdx]];
+    const col = m.drop.replace('A', this.opacity.toFixed(2));
+    ctx.strokeStyle = col;
+    ctx.lineWidth = this.thickness;
+    ctx.beginPath();
+    const angle = Math.atan2(this.speed, wind * 1.5);
+    ctx.moveTo(this.x, this.y);
+    ctx.lineTo(this.x - Math.cos(angle)*this.len*0.3, this.y - this.len);
+    ctx.stroke();
+  }
+}
+
+// Streaks on glass
+class Streak {
+  constructor() {
+    this.x = Math.random() * W;
+    this.y = -10;
+    this.points = [{x: this.x, y: this.y}];
+    this.speed = 0.3 + Math.random() * 1.2;
+    this.drift = (Math.random() - 0.5) * 0.3 + wind * 0.05;
+    this.thickness = 2 + Math.random() * 4;
+    this.opacity = 0.05 + Math.random() * 0.15;
+    this.life = 1;
+    this.paused = 0;
+    this.maxLen = 15 + Math.random() * 25;
+  }
+  update() {
+    if (this.paused > 0) { this.paused--; return; }
+    if (Math.random() < 0.02) { this.paused = 20 + Math.random()*60; return; }
+    
+    this.y += this.speed;
+    this.x += this.drift + (Math.random()-0.5)*0.5;
+    this.points.push({x: this.x, y: this.y});
+    if (this.points.length > this.maxLen) this.points.shift();
+    
+    if (this.y > H + 10) this.life = 0;
+    // Slowly fade
+    this.opacity *= 0.9995;
+    if (this.opacity < 0.01) this.life = 0;
+  }
+  draw() {
+    if (this.points.length < 2) return;
+    const m = modeColors[modes[modeIdx]];
+    // Draw the streak as connected dots with refraction effect
+    for (let i = 0; i < this.points.length; i++) {
+      const p = this.points[i];
+      const alpha = (i / this.points.length) * this.opacity;
+      const col = m.streak.replace('A', alpha.toFixed(3));
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      const r = this.thickness * (0.5 + (i/this.points.length)*0.5);
+      ctx.ellipse(p.x, p.y, r, r*1.3, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // Bright head
+    const head = this.points[this.points.length-1];
+    ctx.fillStyle = m.streak.replace('A', (this.opacity*2).toFixed(3));
+    ctx.beginPath();
+    ctx.arc(head.x, head.y, this.thickness*0.8, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+// Splats
+class Splat {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.life = 1;
+    this.particles = [];
+    for (let i = 0; i < 3 + Math.random()*4; i++) {
+      this.particles.push({
+        x: 0, y: 0,
+        vx: (Math.random()-0.5)*3 + wind*0.5,
+        vy: -1 - Math.random()*3,
+        size: 0.5 + Math.random()*1.5
+      });
+    }
+  }
+  update() {
+    this.life -= 0.03;
+    for (const p of this.particles) {
+      p.x += p.vx; p.y += p.vy;
+      p.vy += 0.15; // gravity
+    }
+  }
+  draw() {
+    if (this.life <= 0) return;
+    const m = modeColors[modes[modeIdx]];
+    for (const p of this.particles) {
+      ctx.fillStyle = m.drop.replace('A', (this.life*0.3).toFixed(3));
+      ctx.beginPath();
+      ctx.arc(this.x+p.x, this.y+p.y, p.size, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+}
+
+// Condensation dots on glass
+const condensation = [];
+for (let i = 0; i < 300; i++) {
+  condensation.push({
+    x: Math.random()*2000, y: Math.random()*2000,
+    r: 0.5 + Math.random()*2,
+    opacity: 0.02 + Math.random()*0.06,
+    drift: (Math.random()-0.5)*0.01
+  });
+}
+
+let drops = [];
+let streaks = [];
+let splats = [];
+
+function spawnDrops() {
+  const target = intensity * 40;
+  while (drops.length < target) drops.push(new Drop());
+  while (drops.length > target) drops.pop();
+}
+
+function spawnStreak() {
+  if (streaks.length < 30 + intensity * 5) {
+    streaks.push(new Streak());
+  }
+}
+
+// Mouse interaction - finger on glass
+let mouseX = -100, mouseY = -100;
+let mouseDown = false;
+document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+document.addEventListener('mousedown', e => { if (e.target.tagName === 'CANVAS') mouseDown = true; });
+document.addEventListener('mouseup', () => mouseDown = false);
+
+// Touch
+document.addEventListener('touchmove', e => {
+  e.preventDefault();
+  mouseX = e.touches[0].clientX; mouseY = e.touches[0].clientY;
+  mouseDown = true;
+}, {passive:false});
+document.addEventListener('touchend', () => mouseDown = false);
+
+// Drawing finger on fogged glass
+let fingerTrail = [];
+
+let frame = 0;
+function render() {
+  frame++;
+  const mode = modes[modeIdx];
+  const m = modeColors[mode];
+  
+  // Background - blurry city lights
+  drawBackground(m);
+  
+  // Rain canvas
+  ctx.clearRect(0, 0, W, H);
+  
+  // Screen shake from lightning
+  if (lightningFlash > 0.5) {
+    ctx.save();
+    ctx.translate((Math.random()-0.5)*5, (Math.random()-0.5)*5);
+  }
+  
+  // Condensation
+  for (const c of condensation) {
+    c.x += c.drift;
+    ctx.fillStyle = m.streak.replace('A', c.opacity.toFixed(3));
+    ctx.beginPath();
+    ctx.arc(c.x % W, c.y % H, c.r, 0, Math.PI*2);
+    ctx.fill();
+  }
+  
+  // Drops
+  spawnDrops();
+  for (const d of drops) { d.update(); d.draw(); }
+  
+  // Streaks
+  if (frame % (15 - intensity) === 0) spawnStreak();
+  streaks = streaks.filter(s => s.life > 0);
+  for (const s of streaks) { s.update(); s.draw(); }
+  
+  // Splats
+  splats = splats.filter(s => s.life > 0);
+  for (const s of splats) { s.update(); s.draw(); }
+  
+  // Lightning bolts
+  lightningBolts = lightningBolts.filter(b => b.life > 0);
+  for (const b of lightningBolts) {
+    b.life -= 0.08;
+    ctx.strokeStyle = m.lightning.replace('A', (b.life*0.8).toFixed(3));
+    ctx.lineWidth = b.width * b.life;
+    ctx.shadowColor = m.lightning.replace('A','0.5');
+    ctx.shadowBlur = 20 * b.life;
+    ctx.beginPath();
+    for (let i = 0; i < b.pts.length; i++) {
+      const p = b.pts[i];
+      if (i===0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x + (Math.random()-0.5)*3*b.life, p.y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  
+  // Lightning flash overlay
+  if (lightningFlash > 0) {
+    ctx.fillStyle = m.lightning.replace('A', (lightningFlash*0.3).toFixed(3));
+    ctx.fillRect(0, 0, W, H);
+    lightningFlash -= 0.05;
+  }
+  
+  if (lightningFlash > 0.5) ctx.restore();
+  
+  // Finger on glass - draw where mouse drags
+  if (mouseDown) {
+    fingerTrail.push({x: mouseX, y: mouseY, life: 1});
+  }
+  // Fog canvas
+  fogCtx.clearRect(0, 0, W, H);
+  fogCtx.fillStyle = m.fog;
+  fogCtx.fillRect(0, 0, W, H);
+  
+  // Clear fog where finger touched
+  fogCtx.globalCompositeOperation = 'destination-out';
+  fingerTrail = fingerTrail.filter(p => p.life > 0);
+  for (const p of fingerTrail) {
+    fogCtx.fillStyle = `rgba(0,0,0,${p.life.toFixed(2)})`;
+    fogCtx.beginPath();
+    fogCtx.arc(p.x, p.y, 20, 0, Math.PI*2);
+    fogCtx.fill();
+    p.life -= 0.001; // Very slow fade
+  }
+  fogCtx.globalCompositeOperation = 'source-over';
+  
+  // Draw cursor - finger circle
+  ctx.strokeStyle = 'rgba(200,220,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(mouseX, mouseY, 18, 0, Math.PI*2);
+  ctx.stroke();
+  
+  requestAnimationFrame(render);
+}
+
+function drawBackground(m) {
+  // Gradient sky
+  const grad = bgCtx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, m.bg1);
+  grad.addColorStop(1, m.bg2);
+  bgCtx.fillStyle = grad;
+  bgCtx.fillRect(0, 0, W, H);
+  
+  // Blurry city lights at bottom
+  const lightY = H * 0.6;
+  for (let i = 0; i < 40; i++) {
+    const lx = (i * 53 + 17) % W;
+    const ly = lightY + ((i * 37) % (H*0.35));
+    const r = 8 + (i % 5) * 6;
+    const hue = (i * 47) % 360;
+    const pulse = 0.3 + Math.sin(frame*0.02 + i)*0.15;
+    bgCtx.fillStyle = `hsla(${hue}, 40%, 50%, ${pulse.toFixed(2)})`;
+    bgCtx.shadowColor = `hsla(${hue}, 60%, 60%, 0.3)`;
+    bgCtx.shadowBlur = r * 3;
+    bgCtx.beginPath();
+    bgCtx.arc(lx, ly, r, 0, Math.PI*2);
+    bgCtx.fill();
+  }
+  bgCtx.shadowBlur = 0;
+  
+  // Horizon glow
+  const hGrad = bgCtx.createLinearGradient(0, lightY - 50, 0, H);
+  hGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  hGrad.addColorStop(0.3, m.bg2);
+  hGrad.addColorStop(1, m.bg1);
+  bgCtx.fillStyle = hGrad;
+  bgCtx.fillRect(0, lightY - 50, W, H - lightY + 50);
+}
+
+render();
+</script>
+</body>
+</html>
