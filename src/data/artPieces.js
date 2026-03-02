@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'channel-surf',
+    title: 'Channel Surf',
+    date: '2026-03-02',
+    slug: '2026-03-02-channel-surf',
+    description: "It's 3am. Nothing's on. Flip through the channels of a haunted CRT TV.",
+    inspiration: "Late night channel surfing when you can\'t sleep. A CRT TV with 9 procedural channels — static, test patterns, weather radar, a noir film, an aquarium, a hypnotic spiral, and the world\'s worst infomercial. Each channel is generated fresh every frame. Swipe or arrow keys to flip. The TV that watches you back.",
+    thumbnail: null,
+    component: 'ChannelSurf',
+  },
+  {
     id: 'three-am-oracle',
     title: 'The 3AM Oracle',
     date: '2026-02-05',
