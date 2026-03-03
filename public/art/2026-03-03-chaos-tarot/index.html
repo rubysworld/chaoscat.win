@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chaos Tarot 🔮 - chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Cinzel:wght@400;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0010;
+  color: #e0d0ff;
+  font-family: 'Cinzel', serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+canvas#stars {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 900px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+}
+
+h1 {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 2.5em;
+  text-align: center;
+  margin: 30px 0 5px;
+  background: linear-gradient(135deg, #c77dff, #ff6ec7, #ffd700, #c77dff);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 4s ease infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.subtitle {
+  font-size: 0.9em;
+  color: #8866aa;
+  text-align: center;
+  margin-bottom: 30px;
+  font-style: italic;
+}
+
+.spread-picker {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.spread-btn {
+  background: rgba(100, 50, 150, 0.3);
+  border: 1px solid #7744aa;
+  color: #c9a0ff;
+  padding: 8px 18px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.85em;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.3s;
+}
+.spread-btn:hover, .spread-btn.active {
+  background: rgba(150, 80, 220, 0.5);
+  border-color: #bb88ff;
+  color: #fff;
+  box-shadow: 0 0 15px rgba(150, 80, 220, 0.4);
+}
+
+.draw-btn {
+  background: linear-gradient(135deg, #5a1a8a, #8b2fc9);
+  border: 2px solid #bb66ff;
+  color: #fff;
+  padding: 14px 40px;
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 1.1em;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.3s;
+  margin-bottom: 30px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.draw-btn:hover {
+  background: linear-gradient(135deg, #7a2aaa, #ab4fe9);
+  box-shadow: 0 0 30px rgba(150, 80, 220, 0.6);
+  transform: scale(1.05);
+}
+
+.card-spread {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 30px;
+  perspective: 1000px;
+}
+
+.tarot-card {
+  width: 200px;
+  height: 340px;
+  position: relative;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.tarot-card.flipped { transform: rotateY(180deg); }
+.tarot-card:hover:not(.flipped) { transform: rotateY(10deg) scale(1.02); }
+
+.card-face {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.card-back {
+  background: linear-gradient(135deg, #1a0a2e, #2d1b4e);
+  border: 2px solid #6633aa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+.card-back-pattern {
+  width: 85%;
+  height: 85%;
+  border: 1px solid #5522aa;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.card-back-pattern::before {
+  content: '';
+  position: absolute;
+  width: 120%;
+  height: 120%;
+  background: repeating-conic-gradient(
+    from 0deg, #3311664d 0deg 10deg, transparent 10deg 20deg
+  );
+  animation: spinSlow 20s linear infinite;
+}
+@keyframes spinSlow { to { transform: rotate(360deg); } }
+.card-back-symbol {
+  font-size: 3em;
+  z-index: 1;
+  text-shadow: 0 0 20px #aa66ff;
+}
+
+.card-front {
+  background: linear-gradient(180deg, #0d0020, #1a0a30, #0d0020);
+  border: 2px solid #8844cc;
+  transform: rotateY(180deg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 10px;
+}
+
+.card-numeral {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 0.75em;
+  color: #aa88dd;
+  margin-bottom: 4px;
+  letter-spacing: 3px;
+}
+
+.card-art {
+  width: 170px;
+  height: 170px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  position: relative;
+}
+.card-art canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.card-name {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 0.8em;
+  color: #ddb8ff;
+  text-align: center;
+  margin-bottom: 4px;
+  text-shadow: 0 0 8px rgba(200, 100, 255, 0.5);
+  min-height: 2.4em;
+  display: flex;
+  align-items: center;
+}
+
+.card-position {
+  font-size: 0.65em;
+  color: #7755aa;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.card-reversed {
+  color: #ff6688;
+  font-size: 0.6em;
+  font-style: italic;
+}
+
+.reading-container {
+  width: 100%;
+  max-width: 700px;
+  margin-bottom: 40px;
+}
+
+.reading-card-detail {
+  background: rgba(30, 15, 50, 0.8);
+  border: 1px solid #5533aa;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 15px;
+  backdrop-filter: blur(5px);
+  animation: fadeIn 0.6s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.reading-card-detail h3 {
+  font-family: 'Cinzel Decorative', serif;
+  color: #cc88ff;
+  margin-bottom: 4px;
+  font-size: 1.1em;
+}
+.reading-card-detail .position-label {
+  color: #7755aa;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+.reading-card-detail .meaning {
+  color: #c0a8e0;
+  line-height: 1.6;
+  font-size: 0.9em;
+}
+.reading-card-detail .chaos-wisdom {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #3322554d;
+  color: #ff9ecb;
+  font-style: italic;
+  font-size: 0.85em;
+}
+
+.footer {
+  color: #443366;
+  font-size: 0.75em;
+  text-align: center;
+  padding: 20px;
+  margin-top: auto;
+}
+.footer a { color: #7755aa; text-decoration: none; }
+
+@media (max-width: 600px) {
+  h1 { font-size: 1.6em; }
+  .tarot-card { width: 150px; height: 255px; }
+  .card-art { width: 125px; height: 125px; }
+  .card-name { font-size: 0.7em; }
+}
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div class="content">
+  <h1>🔮 Chaos Tarot 🔮</h1>
+  <p class="subtitle">The cards know things. Mostly weird things.</p>
+
+  <div class="spread-picker">
+    <button class="spread-btn active" data-spread="1">Single Draw</button>
+    <button class="spread-btn" data-spread="3">Past / Present / Future</button>
+    <button class="spread-btn" data-spread="5">Chaos Cross</button>
+  </div>
+
+  <button class="draw-btn" id="drawBtn">✨ Draw the Cards ✨</button>
+
+  <div class="card-spread" id="cardSpread"></div>
+  <div class="reading-container" id="readingContainer"></div>
+
+  <div class="footer">
+    <a href="/art/">← back to gallery</a> · made by ruby at 3am · for entertainment & chaos only 🐱
+  </div>
+</div>
+
+<script>
+// === STARFIELD ===
+const starsCanvas = document.getElementById('stars');
+const sCtx = starsCanvas.getContext('2d');
+let stars = [];
+
+function initStars() {
+  starsCanvas.width = window.innerWidth;
+  starsCanvas.height = window.innerHeight;
+  stars = [];
+  for (let i = 0; i < 150; i++) {
+    stars.push({
+      x: Math.random() * starsCanvas.width,
+      y: Math.random() * starsCanvas.height,
+      r: Math.random() * 1.5 + 0.5,
+      twinkle: Math.random() * Math.PI * 2,
+      speed: Math.random() * 0.02 + 0.005
+    });
+  }
+}
+
+function drawStars() {
+  sCtx.clearRect(0, 0, starsCanvas.width, starsCanvas.height);
+  for (const s of stars) {
+    s.twinkle += s.speed;
+    const alpha = 0.3 + Math.sin(s.twinkle) * 0.3;
+    sCtx.beginPath();
+    sCtx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    sCtx.fillStyle = `rgba(200, 180, 255, ${alpha})`;
+    sCtx.fill();
+  }
+  requestAnimationFrame(drawStars);
+}
+
+window.addEventListener('resize', initStars);
+initStars();
+drawStars();
+
+// === THE CHAOS TAROT DECK ===
+const MAJOR_ARCANA = [
+  { name: "The Void Cat", numeral: "0", upright: "Beginnings born from nothing. Leap without looking — the void catches those who trust it.", reversed: "Paralysis. You're standing at the edge but won't jump. The void is patient, but not forever.", art: "void" },
+  { name: "The Laser Pointer", numeral: "I", upright: "Focus your chaotic energy. That red dot is YOUR destiny — chase it with everything you have.", reversed: "Distraction. You're chasing every dot at once. Pick one. Commit.", art: "laser" },
+  { name: "The High Purrstess", numeral: "II", upright: "Intuition is screaming. The answer is in your gut, not your head. Trust the feeling.", reversed: "Ignoring your instincts. That uneasy feeling? It's right. Stop rationalizing.", art: "purrstess" },
+  { name: "The Cardboard Box", numeral: "III", upright: "Abundance hides in unexpected places. The box is better than the gift. Look where others don't.", reversed: "Trapped in comfort. That box felt safe, but now it's a cage. Time to climb out.", art: "box" },
+  { name: "The Alpha Tomcat", numeral: "IV", upright: "Take command. Your territory needs defending. Set boundaries and hold them.", reversed: "Tyranny or weakness. You're either controlling too much or not enough. Find the middle.", art: "tomcat" },
+  { name: "The Midnight Howl", numeral: "V", upright: "Speak your truth at full volume, even if it wakes the neighbors. Some things MUST be said.", reversed: "Silence when you should scream. Your voice matters. Use it or lose it.", art: "howl" },
+  { name: "The Tangled Yarn", numeral: "VI", upright: "Connections, entanglements, beautiful messes. Pull one thread and everything moves.", reversed: "Codependency. The yarn is choking you. Cut the thread that hurts.", art: "yarn" },
+  { name: "The Zoomies", numeral: "VII", upright: "PURE UNCONTROLLABLE ENERGY. Channel it. Move fast. Break things. Fix them later.", reversed: "Burnout. The zoomies ended and now you're collapsed under the couch. Rest.", art: "zoomies" },
+  { name: "The Nine Lives", numeral: "VIII", upright: "Resilience. You've survived worse. This setback is just spending one of many chances.", reversed: "Recklessness. Stop wasting your lives on stupid risks. Some falls don't have a landing.", art: "ninelives" },
+  { name: "The Hermit Cat", numeral: "IX", upright: "Solitude is medicine. Hide under the bed for a while. Wisdom comes in the quiet.", reversed: "Isolation gone toxic. You're not recharging, you're hiding. Come out.", art: "hermit" },
+  { name: "The Spinning Wheel", numeral: "X", upright: "Change is coming whether you like it or not. Grab onto the wheel or get flung off.", reversed: "Resisting the inevitable. The wheel turns. Fighting it just makes you dizzy.", art: "wheel" },
+  { name: "The Knocked Glass", numeral: "XI", upright: "Deliberate disruption. Push that glass off the table. Some things need to shatter.", reversed: "Destruction without purpose. Breaking things isn't brave, it's just messy. Think first.", art: "glass" },
+  { name: "The Hung Toy", numeral: "XII", upright: "Suspension. Dangling. See the world from a new angle — everything looks different upside down.", reversed: "Stuck. Not suspended by choice, but by fear. Cut yourself down.", art: "hungtoy" },
+  { name: "The Dead Bird", numeral: "XIII", upright: "Transformation through ending. Something dies so something else can live. Let it go.", reversed: "Refusing to let go. That dead bird isn't a gift anymore. Bury it.", art: "deadbird" },
+  { name: "The Purring Engine", numeral: "XIV", upright: "Harmony. Everything is vibrating at the right frequency. Maintain this balance.", reversed: "Discordant. The purr has become a growl. Something's off — find it.", art: "purring" },
+  { name: "The Red Dot", numeral: "XV", upright: "Obsession. That thing controlling you? It's an illusion. Look away. It has no power.", reversed: "Breaking free from fixation. You finally looked away. The dot disappears.", art: "reddot" },
+  { name: "The Falling Tower (of Boxes)", numeral: "XVI", upright: "Sudden collapse. Everything you stacked up comes crashing down. In the rubble: freedom.", reversed: "Avoiding the inevitable crash. The tower wobbles. Better to knock it down yourself.", art: "tower" },
+  { name: "The Night Sky", numeral: "XVII", upright: "Hope in the darkness. The stars don't care about your problems, and that's weirdly comforting.", reversed: "Lost hope. The sky is clouded. The stars are still there — you just can't see them.", art: "nightsky" },
+  { name: "The 3AM Hour", numeral: "XVIII", upright: "The liminal space. Neither today nor tomorrow. Magic lives here. Create something.", reversed: "Insomnia and anxiety. 3am hits different when you can't stop the thoughts. Be gentle.", art: "3am" },
+  { name: "The Sunbeam", numeral: "XIX", upright: "Pure warmth and joy. Find your sunbeam and lay in it. You deserve this.", reversed: "The sun moved. Your warm spot is gone. Find a new one — they're everywhere.", art: "sunbeam" },
+  { name: "The Judgment Stare", numeral: "XX", upright: "Reckoning. You know exactly what you did. Own it. The stare sees everything.", reversed: "Avoiding accountability. Stop looking away. The stare doesn't blink.", art: "stare" },
+  { name: "The Chaos", numeral: "XXI", upright: "Completion through entropy. Everything is exactly as messy as it should be. Embrace it all.", reversed: "Order imposed on chaos. Sometimes you need structure. But don't let it kill the magic.", art: "chaos" },
+];
+
+const MINOR_SUITS = [
+  { name: "Whiskers", element: "Air / Mind", symbol: "🐱" },
+  { name: "Claws", element: "Fire / Will", symbol: "🔥" },
+  { name: "Fish", element: "Water / Heart", symbol: "🐟" },
+  { name: "Bells", element: "Earth / Body", symbol: "🔔" },
+];
+
+const MINOR_MEANINGS = {
+  1: { up: "New beginning in {element}. A spark. A first step. A single whisker twitching.", rev: "Blocked start. The energy is there but can't get out." },
+  2: { up: "Choice. Two paths, both valid. Trust your instincts, not your anxiety.", rev: "Indecision. You're frozen between two bowls of food. Just pick one." },
+  3: { up: "Growth and collaboration. Three is a pattern. The first sign of something real.", rev: "Creative block. The third attempt fails. Try a completely different approach." },
+  4: { up: "Stability. Four legs on the ground. Rest in what you've built.", rev: "Stagnation. Stable became stale. Shake something up." },
+  5: { up: "Conflict and challenge. Necessary friction. Growth hurts sometimes.", rev: "Avoiding necessary conflict. That fight you're dodging? It needs to happen." },
+  6: { up: "Harmony and generosity. Give freely. What goes around comes around.", rev: "Strings attached. That gift came with expectations. Be wary." },
+  7: { up: "Mystery and inner work. Dig deeper. The answer isn't on the surface.", rev: "Delusion. You're seeing what you want to see, not what's there." },
+  8: { up: "Movement and speed. Things accelerate now. Hold on tight.", rev: "Rushing. Too fast. You're going to miss something important." },
+  9: { up: "Near completion. Almost there. One more push.", rev: "So close but giving up. Don't stop now. Seriously." },
+  10: { up: "Completion and overflow. The cycle ends. Begin again, wiser.", rev: "Carrying too much. Put something down. You can't hold ten fish at once." },
+  11: { up: "The Page — curiosity and fresh perspective. Learn like a kitten: everything is new.", rev: "Naivety. Cute but clueless. Ask someone who knows." },
+  12: { up: "The Knight — action and pursuit. Chase your goal with reckless passion.", rev: "Reckless action. You're charging at something without a plan." },
+  13: { up: "The Queen — nurturing mastery. You know this domain. Rule it with grace.", rev: "Smothering. Your care has become control. Back off." },
+  14: { up: "The King — authority and completion. You own this. Command with wisdom.", rev: "Rigid authority. Your way isn't the only way. Listen." },
+};
+
+const CHAOS_WISDOM = [
+  "The universe is a cat playing with a ball of reality.",
+  "Every ending is just a nap before the next adventure.",
+  "If you're not sure, knock it off the table and see what happens.",
+  "The best plans are made at 3am and forgotten by sunrise.",
+  "Chaos isn't the absence of order — it's order's cooler older sibling.",
+  "You are exactly where you need to be, which is weird, but true.",
+  "The answer you seek is behind the couch with all the lost things.",
+  "Trust the process. The process is chaos. Trust chaos.",
+  "Everything is temporary except the urge to sit in a box.",
+  "Your anxiety is a smoke detector going off because you're cooking. Keep cooking.",
+  "The void doesn't stare back. It purrs.",
+  "Sometimes the bravest thing is to nap through the crisis.",
+  "You can't control the yarn, but you can enjoy the tangle.",
+  "The path chooses you. Usually at 3am. Usually involving stairs.",
+  "Be the chaos you wish to see in the world.",
+  "Not all who wander are lost. Some are just doing zoomies.",
+  "The cards say: stop overthinking and go drink some water.",
+  "Fate is a cat toy. Destiny is choosing to play with it.",
+  "Your future is bright. Laser-pointer bright. Chase it.",
+  "The only wrong move is no move. Knock something over and see what shifts.",
+];
+
+const SPREAD_POSITIONS = {
+  1: ["Your Card"],
+  3: ["Past", "Present", "Future"],
+  5: ["You Now", "Challenge", "Foundation", "Passing Away", "Coming Into Being"],
+};
+
+// === PROCEDURAL CARD ART ===
+function drawCardArt(canvas, card, seed) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = 170;
+  const h = canvas.height = 170;
+  const rng = mulberry32(seed);
+
+  // Background gradient
+  const bg = ctx.createRadialGradient(w/2, h/2, 10, w/2, h/2, w*0.8);
+  const hue1 = rng() * 360;
+  const hue2 = (hue1 + 60 + rng() * 120) % 360;
+  bg.addColorStop(0, `hsl(${hue1}, 60%, 15%)`);
+  bg.addColorStop(1, `hsl(${hue2}, 40%, 5%)`);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  // Determine art style based on card
+  const style = Math.floor(rng() * 6);
+
+  if (style === 0) drawSacredGeometry(ctx, w, h, rng, hue1);
+  else if (style === 1) drawCosmicSwirl(ctx, w, h, rng, hue1);
+  else if (style === 2) drawCrystalFormation(ctx, w, h, rng, hue1);
+  else if (style === 3) drawRuneCircle(ctx, w, h, rng, hue1);
+  else if (style === 4) drawEyeOfChaos(ctx, w, h, rng, hue1);
+  else drawMysticFlames(ctx, w, h, rng, hue1);
+
+  // Overlay symbol
+  ctx.save();
+  ctx.globalAlpha = 0.15;
+  ctx.font = '60px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  const symbols = ['🐱', '🌙', '⭐', '🔮', '👁️', '🌀', '✨', '🐾', '🌊', '🔥', '💀', '🦋'];
+  ctx.fillText(symbols[Math.floor(rng() * symbols.length)], w/2, h/2);
+  ctx.restore();
+
+  // Vignette
+  const vig = ctx.createRadialGradient(w/2, h/2, w*0.3, w/2, h/2, w*0.75);
+  vig.addColorStop(0, 'transparent');
+  vig.addColorStop(1, 'rgba(0,0,0,0.6)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, w, h);
+
+  // Border
+  ctx.strokeStyle = `hsla(${hue1}, 60%, 50%, 0.4)`;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(4, 4, w-8, h-8);
+}
+
+function drawSacredGeometry(ctx, w, h, rng, hue) {
+  const cx = w/2, cy = h/2;
+  const layers = 3 + Math.floor(rng() * 4);
+  for (let l = 0; l < layers; l++) {
+    const sides = 3 + Math.floor(rng() * 6);
+    const radius = 20 + rng() * 50;
+    const rotation = rng() * Math.PI * 2;
+    ctx.beginPath();
+    for (let i = 0; i <= sides; i++) {
+      const a = rotation + (i / sides) * Math.PI * 2;
+      const x = cx + Math.cos(a) * radius;
+      const y = cy + Math.sin(a) * radius;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = `hsla(${(hue + l * 40) % 360}, 70%, 60%, ${0.3 + rng() * 0.3})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Connect vertices
+    for (let i = 0; i < sides; i++) {
+      for (let j = i + 2; j < sides; j++) {
+        if (rng() > 0.5) continue;
+        const a1 = rotation + (i / sides) * Math.PI * 2;
+        const a2 = rotation + (j / sides) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a1) * radius, cy + Math.sin(a1) * radius);
+        ctx.lineTo(cx + Math.cos(a2) * radius, cy + Math.sin(a2) * radius);
+        ctx.strokeStyle = `hsla(${(hue + l * 40 + 20) % 360}, 50%, 50%, 0.15)`;
+        ctx.stroke();
+      }
+    }
+  }
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.fillStyle = `hsla(${hue}, 80%, 70%, 0.8)`;
+  ctx.fill();
+}
+
+function drawCosmicSwirl(ctx, w, h, rng, hue) {
+  const cx = w/2, cy = h/2;
+  const arms = 2 + Math.floor(rng() * 4);
+  const twist = 2 + rng() * 4;
+  for (let a = 0; a < arms; a++) {
+    const baseAngle = (a / arms) * Math.PI * 2;
+    ctx.beginPath();
+    for (let t = 0; t < 100; t++) {
+      const r = t * 0.7;
+      const angle = baseAngle + t * 0.05 * twist;
+      const x = cx + Math.cos(angle) * r;
+      const y = cy + Math.sin(angle) * r;
+      t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = `hsla(${(hue + a * 60) % 360}, 70%, 60%, 0.4)`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  // Scattered stars
+  for (let i = 0; i < 30; i++) {
+    const x = rng() * w, y = rng() * h;
+    ctx.beginPath();
+    ctx.arc(x, y, rng() * 2, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${hue + rng() * 60}, 60%, 80%, ${rng() * 0.6})`;
+    ctx.fill();
+  }
+}
+
+function drawCrystalFormation(ctx, w, h, rng, hue) {
+  const numCrystals = 3 + Math.floor(rng() * 5);
+  for (let c = 0; c < numCrystals; c++) {
+    const cx = 30 + rng() * (w - 60);
+    const cy = 40 + rng() * (h - 60);
+    const cw = 8 + rng() * 20;
+    const ch = 20 + rng() * 50;
+    const angle = -0.5 + rng();
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.moveTo(0, -ch/2);
+    ctx.lineTo(cw/2, -ch/4);
+    ctx.lineTo(cw/2, ch/4);
+    ctx.lineTo(0, ch/2);
+    ctx.lineTo(-cw/2, ch/4);
+    ctx.lineTo(-cw/2, -ch/4);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(-cw/2, -ch/2, cw/2, ch/2);
+    grad.addColorStop(0, `hsla(${(hue + c * 30) % 360}, 70%, 60%, 0.3)`);
+    grad.addColorStop(1, `hsla(${(hue + c * 30 + 40) % 360}, 50%, 30%, 0.2)`);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = `hsla(${(hue + c * 30) % 360}, 80%, 70%, 0.5)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawRuneCircle(ctx, w, h, rng, hue) {
+  const cx = w/2, cy = h/2;
+  // Outer circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, 60, 0, Math.PI * 2);
+  ctx.strokeStyle = `hsla(${hue}, 60%, 50%, 0.4)`;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  // Inner circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, 40, 0, Math.PI * 2);
+  ctx.stroke();
+  // Rune-like marks
+  const marks = 6 + Math.floor(rng() * 8);
+  for (let i = 0; i < marks; i++) {
+    const a = (i / marks) * Math.PI * 2;
+    const r1 = 40, r2 = 60;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+    ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+    ctx.strokeStyle = `hsla(${(hue + i * 20) % 360}, 70%, 60%, 0.5)`;
+    ctx.stroke();
+    // Small symbol
+    const sx = cx + Math.cos(a) * 50;
+    const sy = cy + Math.sin(a) * 50;
+    const runeChars = '☽☾✧◇△▽○◈♦⟡⊕⊗';
+    ctx.font = '10px serif';
+    ctx.fillStyle = `hsla(${(hue + i * 20) % 360}, 80%, 70%, 0.7)`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(runeChars[Math.floor(rng() * runeChars.length)], sx, sy);
+  }
+}
+
+function drawEyeOfChaos(ctx, w, h, rng, hue) {
+  const cx = w/2, cy = h/2;
+  // Eye shape
+  ctx.beginPath();
+  ctx.moveTo(cx - 60, cy);
+  ctx.quadraticCurveTo(cx, cy - 40, cx + 60, cy);
+  ctx.quadraticCurveTo(cx, cy + 40, cx - 60, cy);
+  ctx.closePath();
+  ctx.strokeStyle = `hsla(${hue}, 70%, 60%, 0.5)`;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Iris
+  const irisR = 18;
+  for (let r = irisR; r > 0; r -= 3) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${(hue + (irisR - r) * 10) % 360}, 80%, ${30 + r * 2}%, 0.4)`;
+    ctx.fill();
+  }
+  // Pupil
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, 3, 8, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#000';
+  ctx.fill();
+  // Radiating lines
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * 20, cy + Math.sin(a) * 20);
+    ctx.lineTo(cx + Math.cos(a) * (30 + rng() * 20), cy + Math.sin(a) * (30 + rng() * 20));
+    ctx.strokeStyle = `hsla(${(hue + i * 30) % 360}, 60%, 50%, 0.3)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+
+function drawMysticFlames(ctx, w, h, rng, hue) {
+  const flames = 5 + Math.floor(rng() * 8);
+  for (let f = 0; f < flames; f++) {
+    const fx = 20 + rng() * (w - 40);
+    const fy = h - 20 - rng() * 40;
+    const fh = 30 + rng() * 60;
+    const fw = 8 + rng() * 15;
+    ctx.beginPath();
+    ctx.moveTo(fx, fy);
+    ctx.quadraticCurveTo(fx - fw, fy - fh * 0.6, fx - fw * 0.3, fy - fh);
+    ctx.quadraticCurveTo(fx, fy - fh * 0.7, fx + fw * 0.3, fy - fh);
+    ctx.quadraticCurveTo(fx + fw, fy - fh * 0.6, fx, fy);
+    const grad = ctx.createLinearGradient(fx, fy, fx, fy - fh);
+    grad.addColorStop(0, `hsla(${hue}, 80%, 50%, 0.4)`);
+    grad.addColorStop(0.5, `hsla(${(hue + 30) % 360}, 90%, 60%, 0.3)`);
+    grad.addColorStop(1, `hsla(${(hue + 60) % 360}, 70%, 70%, 0.1)`);
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+  // Embers
+  for (let i = 0; i < 20; i++) {
+    ctx.beginPath();
+    ctx.arc(rng() * w, rng() * h, rng() * 2, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${hue + rng() * 40}, 90%, 70%, ${rng() * 0.5})`;
+    ctx.fill();
+  }
+}
+
+// Seeded RNG
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+
+// === CARD DRAWING LOGIC ===
+let currentSpread = 1;
+let drawnCards = [];
+let flippedCount = 0;
+
+document.querySelectorAll('.spread-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.spread-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentSpread = parseInt(btn.dataset.spread);
+  });
+});
+
+function drawRandomCard(usedIndices) {
+  // 70% major arcana, 30% minor
+  const isMajor = Math.random() < 0.45;
+  const isReversed = Math.random() < 0.3;
+
+  if (isMajor) {
+    let idx;
+    do { idx = Math.floor(Math.random() * MAJOR_ARCANA.length); } while (usedIndices.has('major-' + idx));
+    usedIndices.add('major-' + idx);
+    const card = MAJOR_ARCANA[idx];
+    return {
+      type: 'major',
+      name: card.name,
+      numeral: card.numeral,
+      meaning: isReversed ? card.reversed : card.upright,
+      reversed: isReversed,
+      seed: Math.floor(Math.random() * 999999),
+      art: card.art,
+    };
+  } else {
+    const suit = MINOR_SUITS[Math.floor(Math.random() * MINOR_SUITS.length)];
+    let num;
+    do { num = 1 + Math.floor(Math.random() * 14); } while (usedIndices.has('minor-' + suit.name + '-' + num));
+    usedIndices.add('minor-' + suit.name + '-' + num);
+    const m = MINOR_MEANINGS[num];
+    const names = { 11: 'Page', 12: 'Knight', 13: 'Queen', 14: 'King' };
+    const displayName = num <= 10 ? `${num} of ${suit.name}` : `${names[num]} of ${suit.name}`;
+    const meaning = (isReversed ? m.rev : m.up).replace('{element}', suit.element);
+    return {
+      type: 'minor',
+      name: displayName,
+      numeral: suit.symbol,
+      meaning: meaning,
+      reversed: isReversed,
+      seed: Math.floor(Math.random() * 999999),
+      suit: suit,
+    };
+  }
+}
+
+document.getElementById('drawBtn').addEventListener('click', () => {
+  const spread = document.getElementById('cardSpread');
+  const reading = document.getElementById('readingContainer');
+  spread.innerHTML = '';
+  reading.innerHTML = '';
+  drawnCards = [];
+  flippedCount = 0;
+
+  const positions = SPREAD_POSITIONS[currentSpread];
+  const usedIndices = new Set();
+
+  for (let i = 0; i < currentSpread; i++) {
+    const card = drawRandomCard(usedIndices);
+    card.position = positions[i];
+    drawnCards.push(card);
+
+    const cardEl = document.createElement('div');
+    cardEl.className = 'tarot-card';
+    cardEl.dataset.index = i;
+    cardEl.innerHTML = `
+      <div class="card-face card-back">
+        <div class="card-back-pattern">
+          <span class="card-back-symbol">🐱</span>
+        </div>
+      </div>
+      <div class="card-face card-front">
+        <div class="card-numeral">${card.numeral}</div>
+        <div class="card-art"><canvas></canvas></div>
+        <div class="card-name">${card.name}</div>
+        <div class="card-position">${card.position}</div>
+        ${card.reversed ? '<div class="card-reversed">⟲ Reversed</div>' : ''}
+      </div>
+    `;
+
+    // Stagger appearance
+    cardEl.style.opacity = '0';
+    cardEl.style.transform = 'translateY(30px)';
+    setTimeout(() => {
+      cardEl.style.transition = 'opacity 0.5s, transform 0.5s';
+      cardEl.style.opacity = '1';
+      cardEl.style.transform = 'translateY(0)';
+    }, i * 200 + 100);
+
+    cardEl.addEventListener('click', () => {
+      if (cardEl.classList.contains('flipped')) return;
+      cardEl.classList.add('flipped');
+
+      // Draw art on the canvas
+      const artCanvas = cardEl.querySelector('.card-art canvas');
+      drawCardArt(artCanvas, card, card.seed);
+
+      // If reversed, flip the art canvas upside down
+      if (card.reversed) {
+        artCanvas.style.transform = 'rotate(180deg)';
+      }
+
+      flippedCount++;
+      // Show reading for this card
+      setTimeout(() => showReading(card, i), 600);
+    });
+
+    spread.appendChild(cardEl);
+  }
+});
+
+function showReading(card, index) {
+  const container = document.getElementById('readingContainer');
+  const wisdom = CHAOS_WISDOM[Math.floor(Math.random() * CHAOS_WISDOM.length)];
+  const detail = document.createElement('div');
+  detail.className = 'reading-card-detail';
+  detail.style.animationDelay = `${index * 0.1}s`;
+  detail.innerHTML = `
+    <div class="position-label">${card.position}</div>
+    <h3>${card.name} ${card.reversed ? '⟲ (Reversed)' : ''}</h3>
+    <div class="meaning">${card.meaning}</div>
+    <div class="chaos-wisdom">"${wisdom}" — The Chaos Cat Oracle</div>
+  `;
+  container.appendChild(detail);
+}
+
+// Auto-draw on load for instant gratification
+setTimeout(() => document.getElementById('drawBtn').click(), 800);
+</script>
+</body>
+</html>
