@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entropy Clock — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; cursor: crosshair; }
+canvas { display: block; }
+#ui {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 12px; z-index: 10;
+}
+.btn {
+  background: rgba(0,0,0,0.6); color: #0ff; border: 1px solid #0ff;
+  padding: 8px 16px; font-family: 'Courier New', monospace; font-size: 13px;
+  cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
+  transition: all 0.2s;
+}
+.btn:hover { background: #0ff; color: #000; }
+#info {
+  position: fixed; top: 15px; right: 20px; color: rgba(0,255,255,0.4);
+  font-size: 11px; text-align: right; z-index: 10;
+}
+#title {
+  position: fixed; top: 15px; left: 20px; color: rgba(0,255,255,0.3);
+  font-size: 11px; z-index: 10;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title">ENTROPY CLOCK<br>chaoscat.win</div>
+<div id="info">
+  <span id="entropy-level">ENTROPY: 0%</span><br>
+  <span id="mode-label">MODE: MELT</span>
+</div>
+<div id="ui">
+  <button class="btn" id="modeBtn">MODE</button>
+  <button class="btn" id="resetBtn">RESET</button>
+  <button class="btn" id="accelBtn">ACCELERATE</button>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, cx, cy;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cx = W / 2; cy = H / 2;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Modes
+const MODES = ['MELT', 'SHATTER', 'CORRUPT', 'DISSOLVE', 'GLITCH'];
+let modeIdx = 0;
+let mode = MODES[0];
+
+// Entropy level (0 to 1) — increases over time
+let entropy = 0;
+let entropyRate = 0.0003;
+let accelerated = false;
+
+// Particles — debris falling off the clock
+const particles = [];
+const MAX_PARTICLES = 500;
+
+class Particle {
+  constructor(x, y, color) {
+    this.x = x; this.y = y;
+    this.vx = (Math.random() - 0.5) * 2;
+    this.vy = Math.random() * 2 + 0.5;
+    this.life = 1;
+    this.decay = 0.005 + Math.random() * 0.01;
+    this.size = 1 + Math.random() * 3;
+    this.color = color;
+    this.rot = Math.random() * Math.PI * 2;
+    this.rotSpeed = (Math.random() - 0.5) * 0.1;
+  }
+  update() {
+    this.x += this.vx;
+    this.vy += 0.03; // gravity
+    this.y += this.vy;
+    this.life -= this.decay;
+    this.rot += this.rotSpeed;
+  }
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rot);
+    ctx.globalAlpha = this.life * 0.8;
+    ctx.fillStyle = this.color;
+    ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+    ctx.restore();
+  }
+}
+
+function spawnParticle(x, y, color) {
+  if (particles.length < MAX_PARTICLES) {
+    particles.push(new Particle(x, y, color || '#0ff'));
+  }
+}
+
+// Clock drawing with entropy effects
+function getTimeStrings() {
+  const now = new Date();
+  const h = now.getHours();
+  const m = now.getMinutes();
+  const s = now.getSeconds();
+  const ms = now.getMilliseconds();
+  return { h, m, s, ms };
+}
+
+function drawClockFace(radius) {
+  // Outer ring — distorted by entropy
+  ctx.beginPath();
+  for (let a = 0; a < Math.PI * 2; a += 0.02) {
+    let r = radius;
+    if (mode === 'MELT') {
+      r += Math.sin(a * 3 + Date.now() * 0.001) * entropy * 30;
+      // Melt downward
+      const meltFactor = Math.sin(a) * entropy * 40; // sin(a) peaks at bottom
+      r += Math.max(0, meltFactor);
+    } else if (mode === 'SHATTER') {
+      r += (Math.random() - 0.5) * entropy * 60;
+    } else if (mode === 'CORRUPT') {
+      r += Math.tan(a * 5 + Date.now() * 0.002) * entropy * 10;
+      r = Math.min(r, radius * 1.5);
+      r = Math.max(r, radius * 0.5);
+    } else if (mode === 'DISSOLVE') {
+      if (Math.random() < entropy * 0.3) continue; // skip points
+      r += Math.sin(a * 7 + Date.now() * 0.003) * entropy * 15;
+    } else if (mode === 'GLITCH') {
+      if (Math.random() < entropy * 0.1) {
+        r += (Math.random() > 0.5 ? 1 : -1) * 20 * entropy;
+      }
+    }
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    if (a === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.strokeStyle = `rgba(0, 255, 255, ${0.6 - entropy * 0.3})`;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Inner glow
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+  grad.addColorStop(0, `rgba(0, 255, 255, ${0.05 - entropy * 0.03})`);
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
+function drawTickMarks(radius) {
+  for (let i = 0; i < 60; i++) {
+    // Skip some ticks as entropy increases
+    if (mode === 'DISSOLVE' && Math.random() < entropy * 0.5) continue;
+
+    const angle = (i / 60) * Math.PI * 2 - Math.PI / 2;
+    const isHour = i % 5 === 0;
+    const innerR = isHour ? radius * 0.85 : radius * 0.92;
+    const outerR = radius * 0.97;
+
+    let wobble = 0;
+    if (mode === 'MELT') wobble = Math.sin(Date.now() * 0.001 + i) * entropy * 8;
+    if (mode === 'SHATTER') wobble = (Math.random() - 0.5) * entropy * 20;
+    if (mode === 'GLITCH' && Math.random() < entropy * 0.2) wobble = (Math.random() - 0.5) * 30;
+
+    const x1 = cx + Math.cos(angle) * innerR + wobble;
+    const y1 = cy + Math.sin(angle) * innerR + wobble * 0.5;
+    const x2 = cx + Math.cos(angle) * outerR + wobble;
+    const y2 = cy + Math.sin(angle) * outerR + wobble * 0.5;
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = isHour
+      ? `rgba(0, 255, 255, ${0.8 - entropy * 0.4})`
+      : `rgba(0, 255, 255, ${0.3 - entropy * 0.2})`;
+    ctx.lineWidth = isHour ? 3 : 1;
+    ctx.stroke();
+
+    // Shed particles from tick marks
+    if (entropy > 0.3 && Math.random() < entropy * 0.02) {
+      spawnParticle(x2, y2, '#0ff');
+    }
+  }
+}
+
+function drawHand(angle, length, width, color, entropyFx) {
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  let drawAngle = angle;
+  // Entropy effects on hands
+  if (mode === 'MELT') {
+    // Hands droop downward
+    const droopTarget = Math.PI / 2; // straight down
+    drawAngle = angle + (droopTarget - angle) * entropy * 0.5 * Math.sin(Date.now() * 0.0005);
+  } else if (mode === 'SHATTER') {
+    drawAngle += (Math.random() - 0.5) * entropy * 0.3;
+  } else if (mode === 'CORRUPT') {
+    drawAngle += Math.sin(Date.now() * 0.01 * entropyFx) * entropy * 0.5;
+  } else if (mode === 'GLITCH') {
+    if (Math.random() < entropy * 0.05) {
+      drawAngle += Math.PI * (Math.random() > 0.5 ? 1 : -1);
+    }
+  }
+
+  ctx.rotate(drawAngle);
+
+  // Hand with glow
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 10 + entropy * 20;
+  ctx.beginPath();
+  ctx.moveTo(0, width);
+  ctx.lineTo(length, 0);
+  ctx.lineTo(0, -width);
+  ctx.closePath();
+
+  const alpha = Math.max(0.1, 1 - entropy * 0.5);
+  ctx.fillStyle = color.replace('1)', `${alpha})`);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Shed particles from hand tip
+  if (entropy > 0.2 && Math.random() < entropy * 0.05) {
+    const tipX = cx + Math.cos(drawAngle) * length;
+    const tipY = cy + Math.sin(drawAngle) * length;
+    spawnParticle(tipX, tipY, color);
+  }
+
+  ctx.restore();
+}
+
+function drawDigitalTime(radius) {
+  const { h, m, s } = getTimeStrings();
+  const timeStr = `${String(h % 12 || 12).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Corrupt the time string based on entropy
+  let displayStr = timeStr;
+  if (entropy > 0.1) {
+    const chars = displayStr.split('');
+    for (let i = 0; i < chars.length; i++) {
+      if (chars[i] === ':') continue;
+      if (Math.random() < entropy * 0.4) {
+        if (mode === 'CORRUPT') {
+          chars[i] = String.fromCharCode(33 + Math.floor(Math.random() * 94));
+        } else if (mode === 'GLITCH') {
+          chars[i] = String(Math.floor(Math.random() * 10));
+        } else if (mode === 'DISSOLVE') {
+          chars[i] = Math.random() < 0.5 ? ' ' : chars[i];
+        } else if (mode === 'SHATTER') {
+          // Offset individual characters
+        } else {
+          chars[i] = String(Math.floor(Math.random() * 10));
+        }
+      }
+    }
+    displayStr = chars.join('');
+  }
+
+  const fontSize = Math.min(W, H) * 0.06;
+  ctx.font = `${fontSize}px 'Courier New', monospace`;
+
+  // Glitch offset
+  let ox = 0, oy = 0;
+  if (mode === 'GLITCH' && Math.random() < entropy * 0.3) {
+    ox = (Math.random() - 0.5) * 20 * entropy;
+    oy = (Math.random() - 0.5) * 10 * entropy;
+  }
+  if (mode === 'MELT') {
+    oy = entropy * 30; // drip down
+  }
+
+  // RGB split at high entropy
+  if (entropy > 0.4) {
+    const split = entropy * 4;
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#f00';
+    ctx.fillText(displayStr, cx + ox - split, cy + radius * 0.35 + oy);
+    ctx.fillStyle = '#0f0';
+    ctx.fillText(displayStr, cx + ox + split, cy + radius * 0.35 + oy - split);
+    ctx.fillStyle = '#00f';
+    ctx.fillText(displayStr, cx + ox, cy + radius * 0.35 + oy + split);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.fillStyle = `rgba(0, 255, 255, ${Math.max(0.1, 0.9 - entropy * 0.5)})`;
+  ctx.fillText(displayStr, cx + ox, cy + radius * 0.35 + oy);
+
+  // AM/PM
+  ctx.font = `${fontSize * 0.4}px 'Courier New', monospace`;
+  ctx.fillStyle = `rgba(0, 255, 255, ${Math.max(0.05, 0.4 - entropy * 0.3)})`;
+  ctx.fillText(ampm, cx + ox, cy + radius * 0.35 + fontSize * 0.7 + oy);
+
+  ctx.restore();
+}
+
+function drawHourNumbers(radius) {
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const fontSize = Math.min(W, H) * 0.035;
+  ctx.font = `bold ${fontSize}px 'Courier New', monospace`;
+
+  for (let i = 1; i <= 12; i++) {
+    if (mode === 'DISSOLVE' && Math.random() < entropy * 0.4) continue;
+
+    const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+    let r = radius * 0.75;
+    let ox = 0, oy = 0;
+
+    if (mode === 'MELT') {
+      oy = Math.max(0, Math.sin(angle + Math.PI/2)) * entropy * 60;
+      oy += Math.sin(Date.now() * 0.001 + i) * entropy * 5;
+    } else if (mode === 'SHATTER') {
+      ox = (Math.random() - 0.5) * entropy * 40;
+      oy = (Math.random() - 0.5) * entropy * 40;
+    } else if (mode === 'GLITCH' && Math.random() < entropy * 0.15) {
+      ox = (Math.random() - 0.5) * 50;
+      oy = (Math.random() - 0.5) * 50;
+    }
+
+    const x = cx + Math.cos(angle) * r + ox;
+    const y = cy + Math.sin(angle) * r + oy;
+
+    let numStr = String(i);
+    if (entropy > 0.3 && mode === 'CORRUPT' && Math.random() < entropy * 0.3) {
+      numStr = String.fromCharCode(33 + Math.floor(Math.random() * 94));
+    }
+
+    ctx.fillStyle = `rgba(0, 255, 255, ${Math.max(0.05, 0.7 - entropy * 0.4)})`;
+    ctx.shadowColor = '#0ff';
+    ctx.shadowBlur = 5 + entropy * 10;
+    ctx.fillText(numStr, x, y);
+
+    if (entropy > 0.5 && Math.random() < entropy * 0.01) {
+      spawnParticle(x, y, '#0ff');
+    }
+  }
+  ctx.restore();
+}
+
+function drawCenterDot() {
+  ctx.beginPath();
+  const jitter = mode === 'SHATTER' ? (Math.random() - 0.5) * entropy * 10 : 0;
+  ctx.arc(cx + jitter, cy + jitter, 5 + entropy * 3, 0, Math.PI * 2);
+  ctx.fillStyle = '#0ff';
+  ctx.shadowColor = '#0ff';
+  ctx.shadowBlur = 15;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+// Scanlines
+function drawScanlines() {
+  if (entropy < 0.2) return;
+  ctx.fillStyle = `rgba(0, 255, 255, ${entropy * 0.03})`;
+  for (let y = 0; y < H; y += 4) {
+    if (Math.random() < 0.5) {
+      ctx.fillRect(0, y, W, 1);
+    }
+  }
+  // Horizontal glitch bars
+  if (mode === 'GLITCH' && entropy > 0.3) {
+    const barCount = Math.floor(entropy * 5);
+    for (let i = 0; i < barCount; i++) {
+      const y = Math.random() * H;
+      const h = 1 + Math.random() * 3;
+      const shift = (Math.random() - 0.5) * entropy * 50;
+      ctx.drawImage(canvas, shift, y, W, h, 0, y, W, h);
+    }
+  }
+}
+
+// Background cracks
+function drawCracks() {
+  if (entropy < 0.4) return;
+  const crackCount = Math.floor((entropy - 0.4) * 20);
+  ctx.strokeStyle = `rgba(0, 255, 255, ${entropy * 0.15})`;
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < crackCount; i++) {
+    ctx.beginPath();
+    let x = cx + (Math.random() - 0.5) * 200;
+    let y = cy + (Math.random() - 0.5) * 200;
+    ctx.moveTo(x, y);
+    const segs = 3 + Math.floor(Math.random() * 5);
+    for (let j = 0; j < segs; j++) {
+      x += (Math.random() - 0.5) * 40;
+      y += (Math.random() - 0.5) * 40;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+// Mouse interaction — click to inject entropy
+canvas.addEventListener('click', (e) => {
+  entropy = Math.min(1, entropy + 0.05);
+  for (let i = 0; i < 20; i++) {
+    spawnParticle(e.clientX, e.clientY, `hsl(${180 + Math.random() * 40}, 100%, 60%)`);
+  }
+});
+
+// Buttons
+document.getElementById('modeBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  modeIdx = (modeIdx + 1) % MODES.length;
+  mode = MODES[modeIdx];
+  document.getElementById('mode-label').textContent = `MODE: ${mode}`;
+});
+
+document.getElementById('resetBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  entropy = 0;
+  particles.length = 0;
+  accelerated = false;
+  document.getElementById('accelBtn').textContent = 'ACCELERATE';
+  document.getElementById('accelBtn').style.borderColor = '#0ff';
+  document.getElementById('accelBtn').style.color = '#0ff';
+});
+
+document.getElementById('accelBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  accelerated = !accelerated;
+  entropyRate = accelerated ? 0.003 : 0.0003;
+  e.target.textContent = accelerated ? 'DECELERATE' : 'ACCELERATE';
+  e.target.style.borderColor = accelerated ? '#f0f' : '#0ff';
+  e.target.style.color = accelerated ? '#f0f' : '#0ff';
+});
+
+// Main loop
+function draw() {
+  // Fade trail
+  ctx.fillStyle = `rgba(0, 0, 0, ${0.3 - entropy * 0.15})`;
+  ctx.fillRect(0, 0, W, H);
+
+  // Increase entropy
+  entropy = Math.min(1, entropy + entropyRate);
+  document.getElementById('entropy-level').textContent = `ENTROPY: ${Math.floor(entropy * 100)}%`;
+
+  const radius = Math.min(W, H) * 0.35;
+  const { h, m, s, ms } = getTimeStrings();
+
+  // Background effects
+  drawCracks();
+
+  // Clock elements
+  drawClockFace(radius);
+  drawTickMarks(radius);
+  drawHourNumbers(radius);
+
+  // Clock hands
+  const secAngle = ((s + ms / 1000) / 60) * Math.PI * 2 - Math.PI / 2;
+  const minAngle = ((m + s / 60) / 60) * Math.PI * 2 - Math.PI / 2;
+  const hrAngle = (((h % 12) + m / 60) / 12) * Math.PI * 2 - Math.PI / 2;
+
+  drawHand(hrAngle, radius * 0.5, 4, 'rgba(0, 255, 255, 1)', 1);
+  drawHand(minAngle, radius * 0.7, 3, 'rgba(0, 200, 255, 1)', 2);
+  drawHand(secAngle, radius * 0.85, 1.5, 'rgba(255, 0, 128, 1)', 3);
+
+  drawCenterDot();
+  drawDigitalTime(radius);
+
+  // Particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].update();
+    particles[i].draw();
+    if (particles[i].life <= 0 || particles[i].y > H + 50) {
+      particles.splice(i, 1);
+    }
+  }
+
+  // Scanlines
+  drawScanlines();
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
