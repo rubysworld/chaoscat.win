@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lava Lamp — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0a;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+  cursor: crosshair;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+canvas { display: block; }
+#ui {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  z-index: 10;
+  align-items: center;
+}
+button {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #fff;
+  padding: 8px 16px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+}
+button:hover { background: rgba(255,255,255,0.15); }
+#title {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255,255,255,0.4);
+  font-size: 14px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  z-index: 10;
+  pointer-events: none;
+}
+#mode-label {
+  color: rgba(255,255,255,0.5);
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+#heat-label {
+  color: rgba(255,255,255,0.5);
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+.lamp-body {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 5;
+}
+</style>
+</head>
+<body>
+<div id="title">LAVA LAMP</div>
+<canvas id="c"></canvas>
+<div id="ui">
+  <span id="heat-label">HEAT: 50%</span>
+  <button id="heat-down">−</button>
+  <button id="heat-up">+</button>
+  <button id="mode-btn">MODE: GROOVY</button>
+  <button id="shake-btn">SHAKE</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, lampX, lampY, lampW, lampH, lampTop, lampBot;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  // Lamp dimensions - tall narrow shape
+  lampW = Math.min(W * 0.35, 280);
+  lampH = H * 0.75;
+  lampX = W / 2 - lampW / 2;
+  lampY = H / 2 - lampH / 2;
+  lampTop = lampY + lampH * 0.08;
+  lampBot = lampY + lampH * 0.92;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Modes
+const MODES = [
+  { name: 'GROOVY', colors: [[255,60,20],[255,140,0],[255,200,30]], bg: [20,5,0], glow: '#ff4400' },
+  { name: 'COSMIC', colors: [[120,0,255],[200,50,255],[255,100,200]], bg: [10,0,20], glow: '#8800ff' },
+  { name: 'OCEAN', colors: [[0,180,255],[0,255,200],[50,100,255]], bg: [0,5,15], glow: '#00aaff' },
+  { name: 'TOXIC', colors: [[0,255,60],[150,255,0],[200,255,50]], bg: [0,10,0], glow: '#00ff44' },
+  { name: 'MOLTEN', colors: [[255,30,0],[255,100,0],[255,200,0]], bg: [15,2,0], glow: '#ff2200' },
+  { name: 'VOID', colors: [[255,255,255],[180,180,200],[120,120,150]], bg: [0,0,0], glow: '#ffffff' },
+];
+let modeIdx = 0;
+let mode = MODES[0];
+
+// Heat controls blob activity
+let heat = 0.5;
+let shaking = 0;
+
+// Blobs
+class Blob {
+  constructor(x, y, r) {
+    this.x = x;
+    this.y = y;
+    this.r = r;
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = -Math.random() * 0.5 - 0.2;
+    this.colorIdx = Math.floor(Math.random() * 3);
+    this.phase = Math.random() * Math.PI * 2;
+    this.pulseSpeed = 0.5 + Math.random() * 1;
+    this.wobble = Math.random() * 0.3 + 0.1;
+  }
+
+  update(dt) {
+    const t = performance.now() * 0.001;
+
+    // Buoyancy - heat determines upward force
+    const buoyancy = (heat - 0.3) * 0.015;
+    // Temperature gradient - hotter at bottom, cooler at top
+    const normalizedY = (this.y - lampTop) / (lampBot - lampTop);
+    const tempForce = normalizedY > 0.7 ? -buoyancy * 2 : (normalizedY < 0.3 ? buoyancy * 0.5 : 0);
+    
+    this.vy += tempForce;
+    // Gravity pulls down slightly
+    this.vy += 0.003;
+    
+    // Damping
+    this.vx *= 0.995;
+    this.vy *= 0.995;
+
+    // Wobble
+    this.vx += Math.sin(t * this.wobble + this.phase) * 0.005 * heat;
+    
+    // Shaking
+    if (shaking > 0) {
+      this.vx += (Math.random() - 0.5) * shaking * 0.3;
+      this.vy += (Math.random() - 0.5) * shaking * 0.3;
+    }
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // Pulse radius
+    this.displayR = this.r + Math.sin(t * this.pulseSpeed + this.phase) * this.r * 0.15;
+
+    // Contain within lamp shape
+    const lampCenterX = W / 2;
+    // Lamp narrows at top and bottom (hourglass-ish)
+    const yNorm = (this.y - lampTop) / (lampBot - lampTop);
+    const squeeze = 1 - Math.pow((yNorm - 0.5) * 2, 4) * 0.4;
+    const maxX = lampW * 0.42 * squeeze;
+    
+    if (this.x - lampCenterX > maxX - this.displayR) {
+      this.x = lampCenterX + maxX - this.displayR;
+      this.vx *= -0.5;
+    }
+    if (this.x - lampCenterX < -(maxX - this.displayR)) {
+      this.x = lampCenterX - maxX + this.displayR;
+      this.vx *= -0.5;
+    }
+    if (this.y < lampTop + this.displayR) {
+      this.y = lampTop + this.displayR;
+      this.vy *= -0.3;
+      this.vy += 0.05; // push back down from top
+    }
+    if (this.y > lampBot - this.displayR) {
+      this.y = lampBot - this.displayR;
+      this.vy *= -0.3;
+      this.vy -= 0.08; // bounce up from bottom heat
+    }
+  }
+}
+
+let blobs = [];
+function initBlobs() {
+  blobs = [];
+  const count = 12 + Math.floor(Math.random() * 6);
+  for (let i = 0; i < count; i++) {
+    const r = 15 + Math.random() * 35;
+    const x = W/2 + (Math.random() - 0.5) * lampW * 0.5;
+    const y = lampTop + Math.random() * (lampBot - lampTop);
+    blobs.push(new Blob(x, y, r));
+  }
+}
+initBlobs();
+
+// Metaball rendering
+function renderMetaballs() {
+  const res = 3; // pixel resolution (lower = sharper but slower)
+  const imgData = ctx.createImageData(W, H);
+  const data = imgData.data;
+  
+  const colors = mode.colors;
+  const bg = mode.bg;
+  
+  // Only render inside lamp area (optimization)
+  const renderLeft = Math.max(0, Math.floor(lampX - 20));
+  const renderRight = Math.min(W, Math.ceil(lampX + lampW + 20));
+  const renderTop = Math.max(0, Math.floor(lampY));
+  const renderBot = Math.min(H, Math.ceil(lampY + lampH));
+
+  for (let py = renderTop; py < renderBot; py += res) {
+    for (let px = renderLeft; px < renderRight; px += res) {
+      // Check if inside lamp shape
+      const yNorm = (py - lampTop) / (lampBot - lampTop);
+      if (yNorm < 0 || yNorm > 1) continue;
+      
+      const squeeze = 1 - Math.pow((yNorm - 0.5) * 2, 4) * 0.4;
+      const maxDist = lampW * 0.42 * squeeze;
+      const dx = px - W/2;
+      if (Math.abs(dx) > maxDist + 5) continue;
+
+      // Calculate metaball field
+      let sum = 0;
+      let cr = 0, cg = 0, cb = 0;
+      let totalWeight = 0;
+      
+      for (let i = 0; i < blobs.length; i++) {
+        const b = blobs[i];
+        const bx = px - b.x;
+        const by = py - b.y;
+        const distSq = bx * bx + by * by;
+        const rSq = b.displayR * b.displayR;
+        const val = rSq / (distSq + 1);
+        sum += val;
+        
+        if (val > 0.01) {
+          const c = colors[b.colorIdx];
+          cr += c[0] * val;
+          cg += c[1] * val;
+          cb += c[2] * val;
+          totalWeight += val;
+        }
+      }
+
+      if (sum > 0.8) {
+        // Inside a blob
+        if (totalWeight > 0) {
+          cr /= totalWeight;
+          cg /= totalWeight;
+          cb /= totalWeight;
+        }
+        
+        // Brightness based on field strength
+        const brightness = Math.min(1.2, sum * 0.6);
+        const alpha = Math.min(255, sum * 200);
+        
+        // Edge glow - brighter at edges of blobs
+        const edgeFactor = sum < 1.5 ? (1.5 - sum) * 1.5 : 0;
+        cr = Math.min(255, cr * brightness + edgeFactor * 60);
+        cg = Math.min(255, cg * brightness + edgeFactor * 60);
+        cb = Math.min(255, cb * brightness + edgeFactor * 40);
+
+        // Fill the pixel block
+        for (let fy = 0; fy < res && py + fy < H; fy++) {
+          for (let fx = 0; fx < res && px + fx < W; fx++) {
+            const idx = ((py + fy) * W + (px + fx)) * 4;
+            data[idx] = cr;
+            data[idx+1] = cg;
+            data[idx+2] = cb;
+            data[idx+3] = alpha;
+          }
+        }
+      }
+    }
+  }
+  
+  ctx.putImageData(imgData, 0, 0);
+}
+
+// Draw lamp frame
+function drawLampFrame() {
+  const cx = W / 2;
+  
+  // Lamp glass outline
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  
+  // Draw lamp shape - slightly curved sides
+  const segments = 40;
+  // Left side
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const y = lampTop + t * (lampBot - lampTop);
+    const squeeze = 1 - Math.pow((t - 0.5) * 2, 4) * 0.4;
+    const x = cx - lampW * 0.42 * squeeze;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  // Bottom
+  const botSqueeze = 1 - Math.pow(0.5 * 2, 4) * 0.4;
+  ctx.lineTo(cx + lampW * 0.42 * (1 - Math.pow((1-0.5)*2,4)*0.4), lampBot);
+  // Right side (reverse)
+  for (let i = segments; i >= 0; i--) {
+    const t = i / segments;
+    const y = lampTop + t * (lampBot - lampTop);
+    const squeeze = 1 - Math.pow((t - 0.5) * 2, 4) * 0.4;
+    const x = cx + lampW * 0.42 * squeeze;
+    ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  
+  // Lamp cap (top)
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  ctx.beginPath();
+  const topSqueeze = 1 - Math.pow((-0.5) * 2, 4) * 0.4;
+  const topW = lampW * 0.42 * topSqueeze;
+  ctx.ellipse(cx, lampTop, topW, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  
+  // Lamp base (bottom)
+  ctx.beginPath();
+  const botW = lampW * 0.42 * botSqueeze;
+  ctx.ellipse(cx, lampBot, botW, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  
+  // Base stand
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  ctx.beginPath();
+  ctx.moveTo(cx - botW, lampBot);
+  ctx.lineTo(cx - botW * 1.2, lampBot + 40);
+  ctx.lineTo(cx + botW * 1.2, lampBot + 40);
+  ctx.lineTo(cx + botW, lampBot);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.stroke();
+  
+  // Top cap
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  ctx.beginPath();
+  ctx.moveTo(cx - topW, lampTop);
+  ctx.lineTo(cx - topW * 0.4, lampTop - 30);
+  ctx.lineTo(cx + topW * 0.4, lampTop - 30);
+  ctx.lineTo(cx + topW, lampTop);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  
+  ctx.restore();
+  
+  // Inner glow at bottom (heat source)
+  const glowGrad = ctx.createRadialGradient(cx, lampBot, 0, cx, lampBot, lampW * 0.5);
+  glowGrad.addColorStop(0, mode.glow + '30');
+  glowGrad.addColorStop(0.5, mode.glow + '10');
+  glowGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = glowGrad;
+  ctx.fillRect(cx - lampW, lampBot - lampW * 0.3, lampW * 2, lampW * 0.6);
+
+  // Glass reflection highlight
+  ctx.save();
+  ctx.globalAlpha = 0.04;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const y = lampTop + t * (lampBot - lampTop);
+    const squeeze = 1 - Math.pow((t - 0.5) * 2, 4) * 0.4;
+    const x = cx - lampW * 0.42 * squeeze + lampW * 0.05;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.lineTo(cx - lampW * 0.25, lampBot);
+  ctx.lineTo(cx - lampW * 0.25, lampTop);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// Blob-blob interaction
+function blobInteraction() {
+  for (let i = 0; i < blobs.length; i++) {
+    for (let j = i + 1; j < blobs.length; j++) {
+      const a = blobs[i], b = blobs[j];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const minDist = (a.displayR + b.displayR) * 0.8;
+      
+      if (dist < minDist && dist > 0) {
+        // Soft repulsion when overlapping too much
+        const force = (minDist - dist) * 0.002;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        a.vx -= nx * force;
+        a.vy -= ny * force;
+        b.vx += nx * force;
+        b.vy += ny * force;
+      }
+    }
+  }
+}
+
+// Mouse interaction - cursor acts as heat source
+let mouseX = -1000, mouseY = -1000;
+canvas.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+canvas.addEventListener('mouseleave', () => { mouseX = -1000; mouseY = -1000; });
+canvas.addEventListener('click', e => {
+  // Click to spawn a new blob near cursor
+  const r = 15 + Math.random() * 25;
+  const b = new Blob(e.clientX, e.clientY, r);
+  b.vy = -1 - Math.random();
+  blobs.push(b);
+  // Cap at 25
+  if (blobs.length > 25) blobs.shift();
+});
+
+// Touch support
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  mouseX = e.touches[0].clientX;
+  mouseY = e.touches[0].clientY;
+}, { passive: false });
+canvas.addEventListener('touchend', () => { mouseX = -1000; mouseY = -1000; });
+
+function applyMouseHeat() {
+  if (mouseX < -500) return;
+  for (const b of blobs) {
+    const dx = b.x - mouseX;
+    const dy = b.y - mouseY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 150) {
+      // Push away from cursor gently + add upward force (heat)
+      const force = (150 - dist) / 150 * 0.05;
+      if (dist > 0) {
+        b.vx += (dx / dist) * force;
+        b.vy -= force * 0.5; // heat pushes up
+      }
+    }
+  }
+}
+
+// Background ambient particles (tiny bubbles in the wax)
+const bubbles = [];
+for (let i = 0; i < 30; i++) {
+  bubbles.push({
+    x: W/2 + (Math.random() - 0.5) * lampW * 0.6,
+    y: lampTop + Math.random() * (lampBot - lampTop),
+    r: 1 + Math.random() * 2,
+    speed: 0.1 + Math.random() * 0.3,
+    phase: Math.random() * Math.PI * 2,
+    alpha: 0.1 + Math.random() * 0.2
+  });
+}
+
+function updateBubbles() {
+  for (const b of bubbles) {
+    b.y -= b.speed * heat;
+    b.x += Math.sin(performance.now() * 0.001 + b.phase) * 0.2;
+    if (b.y < lampTop) {
+      b.y = lampBot;
+      b.x = W/2 + (Math.random() - 0.5) * lampW * 0.5;
+    }
+  }
+}
+
+function drawBubbles() {
+  ctx.save();
+  for (const b of bubbles) {
+    const yNorm = (b.y - lampTop) / (lampBot - lampTop);
+    if (yNorm < 0 || yNorm > 1) continue;
+    const squeeze = 1 - Math.pow((yNorm - 0.5) * 2, 4) * 0.4;
+    const maxDist = lampW * 0.42 * squeeze;
+    if (Math.abs(b.x - W/2) > maxDist) continue;
+    
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${b.alpha * heat})`;
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Animation loop
+let lastTime = performance.now();
+
+function frame(now) {
+  const dt = Math.min((now - lastTime) / 16.67, 3);
+  lastTime = now;
+
+  // Background
+  ctx.fillStyle = `rgb(${mode.bg[0]},${mode.bg[1]},${mode.bg[2]})`;
+  ctx.fillRect(0, 0, W, H);
+
+  // Ambient room glow from lamp
+  const roomGlow = ctx.createRadialGradient(W/2, H/2, lampW * 0.3, W/2, H/2, Math.max(W, H) * 0.6);
+  roomGlow.addColorStop(0, mode.glow + '15');
+  roomGlow.addColorStop(1, 'transparent');
+  ctx.fillStyle = roomGlow;
+  ctx.fillRect(0, 0, W, H);
+
+  // Update
+  shaking *= 0.97;
+  blobInteraction();
+  applyMouseHeat();
+  for (const b of blobs) b.update(dt);
+  updateBubbles();
+
+  // Render metaballs
+  renderMetaballs();
+  
+  // Draw bubbles
+  drawBubbles();
+  
+  // Draw lamp frame on top
+  drawLampFrame();
+
+  requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+
+// UI
+document.getElementById('mode-btn').addEventListener('click', () => {
+  modeIdx = (modeIdx + 1) % MODES.length;
+  mode = MODES[modeIdx];
+  // Reassign blob colors
+  for (const b of blobs) b.colorIdx = Math.floor(Math.random() * 3);
+  document.getElementById('mode-btn').textContent = `MODE: ${mode.name}`;
+});
+
+document.getElementById('heat-up').addEventListener('click', () => {
+  heat = Math.min(1, heat + 0.1);
+  document.getElementById('heat-label').textContent = `HEAT: ${Math.round(heat * 100)}%`;
+});
+
+document.getElementById('heat-down').addEventListener('click', () => {
+  heat = Math.max(0, heat - 0.1);
+  document.getElementById('heat-label').textContent = `HEAT: ${Math.round(heat * 100)}%`;
+});
+
+document.getElementById('shake-btn').addEventListener('click', () => {
+  shaking = 1;
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp') { heat = Math.min(1, heat + 0.05); }
+  if (e.key === 'ArrowDown') { heat = Math.max(0, heat - 0.05); }
+  if (e.key === ' ') { shaking = 1; e.preventDefault(); }
+  if (e.key === 'm' || e.key === 'M') {
+    modeIdx = (modeIdx + 1) % MODES.length;
+    mode = MODES[modeIdx];
+    for (const b of blobs) b.colorIdx = Math.floor(Math.random() * 3);
+    document.getElementById('mode-btn').textContent = `MODE: ${mode.name}`;
+  }
+  document.getElementById('heat-label').textContent = `HEAT: ${Math.round(heat * 100)}%`;
+});
+</script>
+</body>
+</html>
