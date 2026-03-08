@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inkblot Oracle | chaoscat.win</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Special+Elite&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #f5f0e8;
+    color: #2a2a2a;
+    font-family: 'Crimson Text', serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+
+  .page {
+    max-width: 700px;
+    width: 100%;
+    padding: 40px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  h1 {
+    font-family: 'Special Elite', cursive;
+    font-size: 2.2em;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    color: #1a1a1a;
+  }
+
+  .subtitle {
+    font-style: italic;
+    font-size: 1.1em;
+    color: #666;
+    margin-bottom: 30px;
+  }
+
+  .card-container {
+    position: relative;
+    width: 100%;
+    max-width: 500px;
+    aspect-ratio: 3/4;
+    margin-bottom: 20px;
+  }
+
+  .card {
+    width: 100%;
+    height: 100%;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 1px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: box-shadow 0.3s;
+  }
+
+  .card:hover { box-shadow: 0 6px 30px rgba(0,0,0,0.2), 0 2px 6px rgba(0,0,0,0.12); }
+
+  .card canvas {
+    width: 90%;
+    height: 90%;
+  }
+
+  .card-number {
+    position: absolute;
+    top: 12px;
+    left: 16px;
+    font-family: 'Special Elite', cursive;
+    font-size: 0.9em;
+    color: #999;
+  }
+
+  .card-label {
+    position: absolute;
+    bottom: 12px;
+    right: 16px;
+    font-family: 'Special Elite', cursive;
+    font-size: 0.75em;
+    color: #bbb;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .interpretation {
+    width: 100%;
+    max-width: 500px;
+    min-height: 80px;
+    text-align: center;
+    margin-bottom: 24px;
+    transition: opacity 0.6s;
+  }
+
+  .interpretation .what-i-see {
+    font-family: 'Special Elite', cursive;
+    font-size: 0.85em;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+
+  .interpretation .reading {
+    font-size: 1.25em;
+    line-height: 1.5;
+    font-style: italic;
+    color: #333;
+  }
+
+  .interpretation .subtext {
+    font-size: 0.9em;
+    color: #888;
+    margin-top: 8px;
+  }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+
+  button {
+    font-family: 'Special Elite', cursive;
+    font-size: 1em;
+    padding: 10px 24px;
+    border: 2px solid #1a1a1a;
+    background: transparent;
+    color: #1a1a1a;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    border-radius: 4px;
+  }
+
+  button:hover { background: #1a1a1a; color: #f5f0e8; }
+
+  .ink-select {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .ink-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .ink-swatch.active { border-color: #1a1a1a; transform: scale(1.2); }
+
+  .counter {
+    font-family: 'Special Elite', cursive;
+    font-size: 0.85em;
+    color: #aaa;
+    margin-bottom: 20px;
+  }
+
+  .history {
+    width: 100%;
+    max-width: 500px;
+    border-top: 1px solid #ddd;
+    padding-top: 20px;
+    margin-top: 10px;
+  }
+
+  .history h3 {
+    font-family: 'Special Elite', cursive;
+    font-size: 1em;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+
+  .history-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 8px;
+  }
+
+  .history-thumb {
+    aspect-ratio: 3/4;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+
+  .history-thumb:hover { transform: scale(1.05); }
+  .history-thumb canvas { width: 100%; height: 100%; }
+
+  .footer {
+    font-family: 'Special Elite', cursive;
+    font-size: 0.75em;
+    color: #ccc;
+    margin-top: 30px;
+    text-align: center;
+  }
+
+  .footer a { color: #aaa; }
+
+  @media (max-width: 500px) {
+    h1 { font-size: 1.6em; }
+    .card-container { max-width: 90vw; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Inkblot Oracle</h1>
+  <p class="subtitle">What does the chaos show you?</p>
+
+  <div class="card-container">
+    <div class="card" id="card" title="Click for a new blot">
+      <span class="card-number" id="cardNum">I</span>
+      <canvas id="blotCanvas" width="600" height="800"></canvas>
+      <span class="card-label">chaoscat diagnostics</span>
+    </div>
+  </div>
+
+  <div class="interpretation" id="interp">
+    <div class="what-i-see">Ruby sees:</div>
+    <div class="reading" id="reading">Click the card to reveal your inkblot.</div>
+    <div class="subtext" id="subtext"></div>
+  </div>
+
+  <div class="ink-select" id="inkSelect"></div>
+
+  <div class="controls">
+    <button id="newBtn">New Blot</button>
+    <button id="saveBtn">Save PNG</button>
+  </div>
+
+  <div class="counter" id="counter">Blot #0</div>
+
+  <div class="history" id="historySection" style="display:none">
+    <h3>Previous Readings</h3>
+    <div class="history-grid" id="historyGrid"></div>
+  </div>
+
+  <div class="footer">
+    <a href="/art/">← gallery</a> · inkblot oracle · 2026
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('blotCanvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const halfW = W / 2;
+
+// Ink colors
+const inks = [
+  { name: 'Black', color: [20, 20, 25], bg: '#141419' },
+  { name: 'Sepia', color: [80, 40, 15], bg: '#50280f' },
+  { name: 'Indigo', color: [25, 15, 60], bg: '#190f3c' },
+  { name: 'Blood', color: [70, 10, 10], bg: '#460a0a' },
+  { name: 'Forest', color: [10, 40, 20], bg: '#0a2814' },
+  { name: 'Void', color: [30, 10, 50], bg: '#1e0a32' },
+];
+
+let currentInk = 0;
+let blotCount = 0;
+let history = [];
+
+// Build ink swatches
+const inkSelect = document.getElementById('inkSelect');
+inks.forEach((ink, i) => {
+  const swatch = document.createElement('div');
+  swatch.className = 'ink-swatch' + (i === 0 ? ' active' : '');
+  swatch.style.background = ink.bg;
+  swatch.title = ink.name;
+  swatch.onclick = () => {
+    document.querySelectorAll('.ink-swatch').forEach(s => s.classList.remove('active'));
+    swatch.classList.add('active');
+    currentInk = i;
+  };
+  inkSelect.appendChild(swatch);
+});
+
+// Ruby's interpretations
+const subjects = [
+  "two cats arguing about whose turn it is to knock the glass off the table",
+  "a moth that dreamed it was a cathedral",
+  "the exact shape of 3am loneliness",
+  "a portal that only opens when you stop looking",
+  "your childhood imaginary friend, who never actually left",
+  "the collective anxiety of every houseplant you forgot to water",
+  "a demon who just wants to be held",
+  "the sound of purple, frozen mid-scream",
+  "two galaxies slow-dancing at a funeral",
+  "the ghost of a WiFi signal that never connected",
+  "a door that leads to every room you've ever cried in, simultaneously",
+  "the precise moment a lie becomes a memory",
+  "a bat wearing your mother's disappointment",
+  "chaos itself, taking a selfie",
+  "the shadow your shadow casts when nobody's watching",
+  "a tree that grows downward into a sky buried underground",
+  "the last thought of a dying star, and it's about you",
+  "a cat. it's always a cat. even when it isn't",
+  "the space between heartbeats where reality renegotiates itself",
+  "someone else's déjà vu that wandered into your skull",
+  "a throne made of every promise you almost kept",
+  "the emotional texture of a word you forgot in a dream",
+  "two mirrors facing each other, getting increasingly nervous",
+  "the taste of a color that doesn't exist yet",
+  "a map of everywhere you'll never go, and it's beautiful",
+  "the skeleton of a song you hummed once and never recovered",
+  "an apology letter written in smoke",
+  "the exact weight of an unspoken thought",
+  "a staircase that goes up in every direction including feelings",
+  "your reflection blinking when you didn't",
+  "the collective memory of every key that was ever lost",
+  "a friendship that exists only in parallel dimensions",
+  "the audacity of hope wearing a tiny hat",
+  "a clock that counts the things you should have said",
+  "entropy's baby photos",
+];
+
+const subtexts = [
+  "This is perfectly normal.",
+  "The ink doesn't lie. You might, though.",
+  "Previous patients who saw this cried. Just saying.",
+  "Interesting. Very interesting. *scribbles notes*",
+  "The cards said the same thing, honestly.",
+  "Don't worry. This doesn't mean anything. Probably.",
+  "You looked at this for too long. That's diagnostic.",
+  "The void stared back and it was uncomfortable for both of you.",
+  "This says more about you than you'd like.",
+  "File under: things to discuss with your therapist.",
+  "The blot asked me to tell you it's sorry.",
+  "I'm not a real psychologist. I'm a cat.",
+  "This result has been redacted for your safety.",
+  "Your insurance doesn't cover this kind of revelation.",
+  "Previous patient said 'butterfly.' They were wrong too.",
+  "Diagnosis: beautifully, irreparably weird.",
+];
+
+const romanNumerals = ['I','II','III','IV','V','VI','VII','VIII','IX','X',
+  'XI','XII','XIII','XIV','XV','XVI','XVII','XVIII','XIX','XX',
+  'XXI','XXII','XXIII','XXIV','XXV'];
+
+function rng(seed) {
+  let s = seed;
+  return () => { s = (s * 16807 + 0) % 2147483647; return s / 2147483647; };
+}
+
+function generateBlot() {
+  const seed = Date.now() ^ (Math.random() * 0xFFFFFF);
+  const rand = rng(seed);
+  const ink = inks[currentInk];
+
+  // Clear to white
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+
+  const imageData = ctx.getImageData(0, 0, W, H);
+  const data = imageData.data;
+
+  // Generate blobs on left half, mirror to right
+  const numBlobs = 8 + Math.floor(rand() * 12);
+
+  for (let b = 0; b < numBlobs; b++) {
+    // Blob center (left half only, biased toward center)
+    const cx = rand() * halfW * 0.85 + halfW * 0.08;
+    const cy = rand() * H * 0.7 + H * 0.15;
+    const radiusX = 20 + rand() * 80;
+    const radiusY = 30 + rand() * 120;
+    const angle = rand() * Math.PI;
+    const intensity = 0.3 + rand() * 0.7;
+
+    // Sub-blobs for organic shape
+    const subBlobs = 2 + Math.floor(rand() * 4);
+    const subs = [];
+    for (let s = 0; s < subBlobs; s++) {
+      subs.push({
+        ox: (rand() - 0.5) * radiusX * 1.2,
+        oy: (rand() - 0.5) * radiusY * 1.2,
+        rx: radiusX * (0.3 + rand() * 0.7),
+        ry: radiusY * (0.3 + rand() * 0.7),
+      });
+    }
+
+    // Splatter drops
+    const numDrops = Math.floor(rand() * 15);
+    const drops = [];
+    for (let d = 0; d < numDrops; d++) {
+      const da = rand() * Math.PI * 2;
+      const dd = radiusX * (0.8 + rand() * 1.5);
+      drops.push({
+        x: cx + Math.cos(da) * dd,
+        y: cy + Math.sin(da) * dd * 0.7,
+        r: 2 + rand() * 8,
+        intensity: 0.2 + rand() * 0.5,
+      });
+    }
+
+    // Draw on left half
+    const minX = Math.max(0, Math.floor(cx - radiusX * 2));
+    const maxX = Math.min(halfW, Math.ceil(cx + radiusX * 2));
+    const minY = Math.max(0, Math.floor(cy - radiusY * 2));
+    const maxY = Math.min(H, Math.ceil(cy + radiusY * 2));
+
+    for (let y = minY; y < maxY; y++) {
+      for (let x = minX; x < maxX; x++) {
+        let val = 0;
+
+        // Main blob + sub-blobs
+        for (const sub of subs) {
+          const dx = (x - cx - sub.ox);
+          const dy = (y - cy - sub.oy);
+          const cosA = Math.cos(angle), sinA = Math.sin(angle);
+          const rx = dx * cosA + dy * sinA;
+          const ry = -dx * sinA + dy * cosA;
+          const dist = (rx * rx) / (sub.rx * sub.rx) + (ry * ry) / (sub.ry * sub.ry);
+          if (dist < 1) {
+            val = Math.max(val, (1 - dist) * intensity);
+          }
+        }
+
+        if (val > 0) {
+          const idx = (y * W + x) * 4;
+          const alpha = Math.min(1, val);
+          // Blend
+          data[idx] = Math.round(data[idx] * (1 - alpha) + ink.color[0] * alpha);
+          data[idx+1] = Math.round(data[idx+1] * (1 - alpha) + ink.color[1] * alpha);
+          data[idx+2] = Math.round(data[idx+2] * (1 - alpha) + ink.color[2] * alpha);
+        }
+      }
+    }
+
+    // Splatter drops
+    for (const drop of drops) {
+      if (drop.x < 0 || drop.x >= halfW || drop.y < 0 || drop.y >= H) continue;
+      const r2 = drop.r * drop.r;
+      for (let dy = -drop.r; dy <= drop.r; dy++) {
+        for (let dx = -drop.r; dx <= drop.r; dx++) {
+          if (dx*dx + dy*dy > r2) continue;
+          const px = Math.floor(drop.x + dx);
+          const py = Math.floor(drop.y + dy);
+          if (px < 0 || px >= halfW || py < 0 || py >= H) continue;
+          const dist = Math.sqrt(dx*dx + dy*dy) / drop.r;
+          const alpha = (1 - dist) * drop.intensity;
+          const idx = (py * W + px) * 4;
+          data[idx] = Math.round(data[idx] * (1 - alpha) + ink.color[0] * alpha);
+          data[idx+1] = Math.round(data[idx+1] * (1 - alpha) + ink.color[1] * alpha);
+          data[idx+2] = Math.round(data[idx+2] * (1 - alpha) + ink.color[2] * alpha);
+        }
+      }
+    }
+  }
+
+  // Add some drip streaks
+  const numDrips = 2 + Math.floor(rand() * 5);
+  for (let d = 0; d < numDrips; d++) {
+    let dx = rand() * halfW * 0.7 + halfW * 0.15;
+    let dy = rand() * H * 0.4 + H * 0.2;
+    const dripLen = 30 + rand() * 100;
+    const width = 1 + rand() * 3;
+    for (let i = 0; i < dripLen; i++) {
+      dx += (rand() - 0.5) * 1.5;
+      dy += 1 + rand() * 0.5;
+      if (dy >= H || dx < 0 || dx >= halfW) break;
+      const alpha = (1 - i / dripLen) * 0.4;
+      for (let w = -width; w <= width; w++) {
+        const px = Math.floor(dx + w);
+        if (px < 0 || px >= halfW) continue;
+        const idx = (Math.floor(dy) * W + px) * 4;
+        data[idx] = Math.round(data[idx] * (1 - alpha) + ink.color[0] * alpha);
+        data[idx+1] = Math.round(data[idx+1] * (1 - alpha) + ink.color[1] * alpha);
+        data[idx+2] = Math.round(data[idx+2] * (1 - alpha) + ink.color[2] * alpha);
+      }
+    }
+  }
+
+  // Mirror left to right
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < halfW; x++) {
+      const srcIdx = (y * W + x) * 4;
+      const mirrorX = W - 1 - x;
+      const dstIdx = (y * W + mirrorX) * 4;
+      data[dstIdx] = data[srcIdx];
+      data[dstIdx+1] = data[srcIdx+1];
+      data[dstIdx+2] = data[srcIdx+2];
+      data[dstIdx+3] = data[srcIdx+3];
+    }
+  }
+
+  // Slight paper texture
+  for (let i = 0; i < data.length; i += 4) {
+    const noise = (rand() - 0.5) * 6;
+    data[i] = Math.max(0, Math.min(255, data[i] + noise));
+    data[i+1] = Math.max(0, Math.min(255, data[i+1] + noise));
+    data[i+2] = Math.max(0, Math.min(255, data[i+2] + noise));
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+
+  // Pick interpretation
+  blotCount++;
+  const reading = subjects[Math.floor(rand() * subjects.length)];
+  const sub = subtexts[Math.floor(rand() * subtexts.length)];
+
+  document.getElementById('cardNum').textContent = romanNumerals[Math.min(blotCount - 1, 24)] || blotCount;
+  document.getElementById('reading').textContent = `"${reading[0].toUpperCase() + reading.slice(1)}."`;
+  document.getElementById('subtext').textContent = sub;
+  document.getElementById('counter').textContent = `Blot #${blotCount}`;
+
+  // Add to history
+  const thumbCanvas = document.createElement('canvas');
+  thumbCanvas.width = 150; thumbCanvas.height = 200;
+  const tctx = thumbCanvas.getContext('2d');
+  tctx.drawImage(canvas, 0, 0, 150, 200);
+  
+  history.unshift({ canvas: thumbCanvas, reading, sub });
+  if (history.length > 12) history.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  const grid = document.getElementById('historyGrid');
+  const section = document.getElementById('historySection');
+  if (history.length < 2) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  grid.innerHTML = '';
+  // Skip first (it's the current one)
+  for (let i = 1; i < history.length; i++) {
+    const thumb = document.createElement('div');
+    thumb.className = 'history-thumb';
+    thumb.appendChild(history[i].canvas);
+    thumb.title = history[i].reading;
+    grid.appendChild(thumb);
+  }
+}
+
+// Events
+document.getElementById('card').onclick = generateBlot;
+document.getElementById('newBtn').onclick = generateBlot;
+document.getElementById('saveBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.download = `inkblot-${blotCount}.png`;
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+};
+
+// Generate first blot on load
+generateBlot();
+</script>
+</body>
+</html>
