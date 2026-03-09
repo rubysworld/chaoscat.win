@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Endless Wander — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a12; overflow: hidden; font-family: 'Courier New', monospace; }
+canvas { display: block; image-rendering: pixelated; }
+#ui {
+  position: fixed; top: 16px; left: 16px; color: #aaa; font-size: 13px;
+  pointer-events: none; z-index: 10; text-shadow: 0 0 6px rgba(0,0,0,0.8);
+}
+#ui h1 { font-size: 16px; color: #ddd; margin-bottom: 4px; letter-spacing: 2px; }
+#distance { color: #f8c; }
+#biome-name { color: #8df; }
+#event-text {
+  position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+  color: #fff; font-size: 15px; text-align: center; pointer-events: none;
+  z-index: 10; opacity: 0; transition: opacity 0.5s;
+  text-shadow: 0 0 10px rgba(0,0,0,0.9);
+  font-style: italic;
+}
+#controls {
+  position: fixed; bottom: 16px; right: 16px; z-index: 10;
+  display: flex; gap: 8px;
+}
+#controls button {
+  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+  color: #ccc; padding: 6px 14px; cursor: pointer; font-family: inherit;
+  font-size: 12px; border-radius: 4px;
+}
+#controls button:hover { background: rgba(255,255,255,0.2); }
+</style>
+</head>
+<body>
+<div id="ui">
+  <h1>THE ENDLESS WANDER</h1>
+  <div><span id="distance">0</span> steps</div>
+  <div>biome: <span id="biome-name">meadow</span></div>
+</div>
+<div id="event-text"></div>
+<div id="controls">
+  <button onclick="toggleSpeed()">SPEED</button>
+  <button onclick="toggleTime()">TIME</button>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, SCALE;
+
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W; canvas.height = H;
+  SCALE = Math.max(1, Math.floor(Math.min(W, H) / 200));
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Noise
+function hash(x) { x = ((x >> 16) ^ x) * 0x45d9f3b; x = ((x >> 16) ^ x) * 0x45d9f3b; return ((x >> 16) ^ x) & 0xffff; }
+function noise1d(x) { const i = Math.floor(x); const f = x - i; const a = hash(i) / 65535; const b = hash(i + 1) / 65535; return a + (b - a) * f * f * (3 - 2 * f); }
+function fbm(x, octaves = 4) { let v = 0, amp = 1, freq = 1, total = 0; for (let i = 0; i < octaves; i++) { v += noise1d(x * freq) * amp; total += amp; amp *= 0.5; freq *= 2; } return v / total; }
+
+// World state
+let worldX = 0;
+let speedMult = 1;
+let timeMode = 0; // 0=auto, 1=day, 2=night, 3=sunset
+const timeModes = ['auto', 'day', 'night', 'sunset'];
+let steps = 0;
+let eventTimer = 0;
+let eventOpacity = 0;
+
+// Biomes
+const biomes = [
+  { name: 'meadow', ground: '#3a7a3a', sky1: '#87ceeb', sky2: '#4a90d9', grass: '#4a9a4a', flowers: true, trees: 0.02 },
+  { name: 'desert', ground: '#c4a74a', sky1: '#f0d080', sky2: '#d4a030', grass: null, flowers: false, trees: 0.005, cacti: true },
+  { name: 'snow', ground: '#e8e8f0', sky1: '#b8c8d8', sky2: '#8898a8', grass: null, flowers: false, trees: 0.015, snowflakes: true },
+  { name: 'mushroom forest', ground: '#5a3a6a', sky1: '#3a1a4a', sky2: '#2a0a3a', grass: '#7a4a8a', flowers: false, trees: 0.04, mushrooms: true },
+  { name: 'crystal caves', ground: '#2a3a4a', sky1: '#1a1a3a', sky2: '#0a0a2a', grass: null, flowers: false, trees: 0, crystals: true },
+  { name: 'autumn woods', ground: '#8a6a3a', sky1: '#d4a060', sky2: '#b07030', grass: '#9a7a3a', flowers: false, trees: 0.035, autumn: true },
+  { name: 'ocean shore', ground: '#c4b890', sky1: '#70b8d8', sky2: '#4080a0', grass: null, flowers: false, trees: 0.008, waves: true },
+  { name: 'void', ground: '#1a1a2a', sky1: '#0a0a1a', sky2: '#050510', grass: null, flowers: false, trees: 0, stars: true, glitch: true },
+];
+
+function getBiome(x) {
+  const bx = Math.floor(x / 800);
+  const idx = Math.abs(hash(bx * 7 + 42)) % biomes.length;
+  return biomes[idx];
+}
+
+function getBiomeBlend(x) {
+  const bx = x / 800;
+  const ibx = Math.floor(bx);
+  const frac = bx - ibx;
+  const b1 = biomes[Math.abs(hash(ibx * 7 + 42)) % biomes.length];
+  const b2 = biomes[Math.abs(hash((ibx + 1) * 7 + 42)) % biomes.length];
+  // Blend in last 15%
+  if (frac > 0.85) {
+    return { a: b1, b: b2, t: (frac - 0.85) / 0.15 };
+  }
+  return { a: b1, b: b1, t: 0 };
+}
+
+function lerpColor(c1, c2, t) {
+  const p = (c) => [parseInt(c.slice(1,3),16), parseInt(c.slice(3,5),16), parseInt(c.slice(5,7),16)];
+  const a = p(c1), b = p(c2);
+  const r = Math.round(a[0] + (b[0]-a[0])*t), g = Math.round(a[1] + (b[1]-a[1])*t), bl = Math.round(a[2] + (b[2]-a[2])*t);
+  return `rgb(${r},${g},${bl})`;
+}
+
+function getTerrainHeight(x) {
+  return fbm(x * 0.003, 5) * 0.3 + 0.1 + Math.sin(x * 0.001) * 0.05;
+}
+
+// Cat state
+const cat = {
+  frameX: 0,
+  animTimer: 0,
+  yVel: 0,
+  onGround: true,
+  facing: 1,
+  blinkTimer: 0,
+  tailPhase: 0,
+  purring: false,
+  sitting: false,
+  sitTimer: 0,
+};
+
+// Particles
+let particles = [];
+let sceneryItems = [];
+
+// Events
+const events = [
+  "the cat pauses to watch a firefly",
+  "a distant bell chimes",
+  "the wind carries a familiar scent",
+  "something rustles in the grass",
+  "the cat's shadow dances independently",
+  "a star falls silently",
+  "the ground hums a lullaby",
+  "a tiny door appears in a tree... then vanishes",
+  "the cat remembers something important, then forgets",
+  "the moon winks",
+  "a flower blooms just for the cat",
+  "time feels thicker here",
+  "the cat's pawprints glow briefly behind it",
+  "somewhere, a clock strikes 3am",
+  "the cat hears its own purring echo back",
+  "gravity takes a short break",
+  "a friendly ghost waves from a hilltop",
+  "the colors shift slightly. did you notice?",
+  "the cat finds a perfect sitting spot",
+  "the horizon whispers a secret",
+  "a butterfly made of light drifts past",
+  "the cat's ears rotate like satellite dishes",
+  "deja vu. deja vu. deja vu.",
+  "the void between stars smells like tuna",
+];
+
+function showEvent(text) {
+  const el = document.getElementById('event-text');
+  el.textContent = text;
+  el.style.opacity = 1;
+  eventTimer = 180;
+}
+
+// Drawing helpers
+function drawPixelRect(x, y, w, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.floor(x), Math.floor(y), w, h);
+}
+
+function getDayNightCycle(t) {
+  if (timeMode === 1) return 1.0; // day
+  if (timeMode === 2) return 0.0; // night
+  if (timeMode === 3) return 0.35; // sunset
+  // auto: cycle every ~60 seconds
+  return (Math.sin(t * 0.001) + 1) * 0.5;
+}
+
+function drawSky(biome, daylight) {
+  const nightTint = 1 - daylight;
+  const s1 = biome.sky1, s2 = biome.sky2;
+  const grad = ctx.createLinearGradient(0, 0, 0, H * 0.7);
+  grad.addColorStop(0, lerpColor(s1, '#0a0a1a', nightTint * 0.8));
+  grad.addColorStop(1, lerpColor(s2, '#1a1a3a', nightTint * 0.7));
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Stars at night
+  if (daylight < 0.5) {
+    const starAlpha = (0.5 - daylight) * 2;
+    ctx.fillStyle = `rgba(255,255,255,${starAlpha * 0.8})`;
+    for (let i = 0; i < 80; i++) {
+      const sx = (hash(i * 13 + 7) / 65535) * W;
+      const sy = (hash(i * 17 + 3) / 65535) * H * 0.6;
+      const sz = (hash(i * 23 + 11) % 3) + 1;
+      const twinkle = Math.sin(Date.now() * 0.003 + i) * 0.3 + 0.7;
+      ctx.globalAlpha = starAlpha * twinkle;
+      ctx.fillRect(Math.floor(sx), Math.floor(sy), sz, sz);
+    }
+    ctx.globalAlpha = 1;
+
+    // Moon
+    if (daylight < 0.3) {
+      const moonX = W * 0.75 + Math.sin(Date.now() * 0.0001) * 30;
+      const moonY = H * 0.12;
+      ctx.fillStyle = `rgba(255,255,230,${(0.3 - daylight) * 3})`;
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, 20 * SCALE, 0, Math.PI * 2);
+      ctx.fill();
+      // Moon shadow
+      ctx.fillStyle = lerpColor(biome.sky1, '#0a0a1a', 0.9);
+      ctx.beginPath();
+      ctx.arc(moonX + 6 * SCALE, moonY - 3 * SCALE, 18 * SCALE, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Sun
+  if (daylight > 0.5) {
+    const sunAlpha = (daylight - 0.5) * 2;
+    const sunX = W * 0.8;
+    const sunY = H * 0.15 + (1 - daylight) * H * 0.2;
+    ctx.fillStyle = `rgba(255,240,100,${sunAlpha * 0.8})`;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 15 * SCALE, 0, Math.PI * 2);
+    ctx.fill();
+    // Glow
+    ctx.fillStyle = `rgba(255,240,100,${sunAlpha * 0.1})`;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 40 * SCALE, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawTerrain(biome, scrollX, daylight) {
+  const groundY = H * 0.65;
+  const nightDarken = (1 - daylight) * 0.4;
+
+  // Background hills
+  ctx.fillStyle = lerpColor(biome.ground, '#111118', nightDarken + 0.3);
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let x = 0; x <= W; x += 4) {
+    const wx = (x + scrollX * 0.3);
+    const hy = groundY - fbm(wx * 0.002, 3) * H * 0.15 - 20;
+    ctx.lineTo(x, hy);
+  }
+  ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+
+  // Mid hills
+  ctx.fillStyle = lerpColor(biome.ground, '#111118', nightDarken + 0.15);
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let x = 0; x <= W; x += 3) {
+    const wx = (x + scrollX * 0.6);
+    const hy = groundY - fbm(wx * 0.004, 3) * H * 0.1;
+    ctx.lineTo(x, hy);
+  }
+  ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+
+  // Foreground ground
+  ctx.fillStyle = lerpColor(biome.ground, '#111118', nightDarken);
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let x = 0; x <= W; x += 2) {
+    const wx = (x + scrollX);
+    const hy = groundY + getTerrainHeight(wx) * H * 0.15;
+    ctx.lineTo(x, groundY + (1 - getTerrainHeight(wx)) * H * 0.08);
+  }
+  ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+
+  // Grass tufts
+  if (biome.grass) {
+    ctx.fillStyle = lerpColor(biome.grass, '#111118', nightDarken);
+    for (let x = 0; x < W; x += 8) {
+      const wx = x + scrollX;
+      const gy = groundY + (1 - getTerrainHeight(wx)) * H * 0.08;
+      const wave = Math.sin(Date.now() * 0.003 + wx * 0.1) * 2;
+      ctx.fillRect(x + wave, gy - 4 * SCALE, 2, 4 * SCALE);
+      if (hash(Math.floor(wx / 8) * 31) % 3 === 0)
+        ctx.fillRect(x + 4 + wave * 0.5, gy - 6 * SCALE, 2, 6 * SCALE);
+    }
+  }
+
+  // Flowers
+  if (biome.flowers) {
+    for (let x = 0; x < W; x += 20) {
+      const wx = x + scrollX;
+      const seed = hash(Math.floor(wx / 20) * 47);
+      if (seed % 5 !== 0) continue;
+      const gy = groundY + (1 - getTerrainHeight(wx)) * H * 0.08;
+      const hue = (seed * 37) % 360;
+      ctx.fillStyle = `hsl(${hue}, 80%, ${60 - nightDarken * 30}%)`;
+      ctx.fillRect(x, gy - 3 * SCALE, 3, 3);
+      ctx.fillStyle = lerpColor('#3a7a3a', '#111118', nightDarken);
+      ctx.fillRect(x + 1, gy - 2 * SCALE, 1, 3 * SCALE);
+    }
+  }
+
+  // Trees
+  for (let x = -50; x < W + 50; x += 40) {
+    const wx = x + scrollX;
+    const seed = hash(Math.floor(wx / 40) * 53);
+    if ((seed % 100) / 100 > biome.trees) continue;
+    const gy = groundY + (1 - getTerrainHeight(wx)) * H * 0.08;
+    const treeH = (seed % 30 + 20) * SCALE * 0.5;
+    // Trunk
+    ctx.fillStyle = lerpColor(biome.autumn ? '#6a4a2a' : '#5a4030', '#111118', nightDarken);
+    ctx.fillRect(x, gy - treeH, 4 * SCALE * 0.5, treeH);
+    // Canopy
+    const leafColor = biome.autumn
+      ? `hsl(${(seed * 13) % 40 + 10}, 80%, ${45 - nightDarken * 20}%)`
+      : lerpColor('#2a6a2a', '#111118', nightDarken);
+    ctx.fillStyle = leafColor;
+    const cw = (12 + seed % 8) * SCALE * 0.5;
+    ctx.beginPath();
+    ctx.arc(x + 2 * SCALE * 0.5, gy - treeH, cw, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Cacti
+  if (biome.cacti) {
+    for (let x = 0; x < W; x += 60) {
+      const wx = x + scrollX;
+      const seed = hash(Math.floor(wx / 60) * 67);
+      if (seed % 4 !== 0) continue;
+      const gy = groundY + (1 - getTerrainHeight(wx)) * H * 0.08;
+      const ch = (15 + seed % 10) * SCALE * 0.5;
+      ctx.fillStyle = lerpColor('#2a7a2a', '#111118', nightDarken);
+      ctx.fillRect(x, gy - ch, 4, ch);
+      ctx.fillRect(x - 5, gy - ch * 0.7, 5, 4);
+      ctx.fillRect(x + 4, gy - ch * 0.5, 5, 4);
+      ctx.fillRect(x - 5, gy - ch * 0.7 - 8, 4, 8);
+      ctx.fillRect(x + 5, gy - ch * 0.5 - 6, 4, 6);
+    }
+  }
+
+  // Mushrooms
+  if (biome.mushrooms) {
+    for (let x = 0; x < W; x += 35) {
+      const wx = x + scrollX;
+      const seed = hash(Math.floor(wx / 35) * 79);
+      if (seed % 3 !== 0) continue;
+      const gy = groundY + (1 - getTerrainHeight(wx)) * H * 0.08;
+      const mh = (8 + seed % 6) * SCALE * 0.5;
+      ctx.fillStyle = lerpColor('#d8d8c0', '#111118', nightDarken);
+      ctx.fillRect(x + 2, gy - mh, 3, mh);
+      const capHue = (seed * 31) % 60 + 280;
+      ctx.fillStyle = `hsl(${capHue}, 60%, ${50 - nightDarken * 25}%)`;
+      ctx.beginPath();
+      ctx.arc(x + 3, gy - mh, 7 * SCALE * 0.4, Math.PI, 0);
+      ctx.fill();
+      // Glow
+      ctx.fillStyle = `hsla(${capHue}, 80%, 70%, ${0.15 * (1 - daylight)})`;
+      ctx.beginPath();
+      ctx.arc(x + 3, gy - mh, 14 * SCALE * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Crystals
+  if (biome.crystals) {
+    for (let x = 0; x < W; x += 45) {
+      const wx = x + scrollX;
+      const seed = hash(Math.floor(wx / 45) * 89);
+      if (seed % 3 !== 0) continue;
+      const gy = groundY + (1 - getTerrainHeight(wx)) * H * 0.08;
+      const ch = (12 + seed % 15) * SCALE * 0.5;
+      const hue = (seed * 23) % 360;
+      ctx.fillStyle = `hsla(${hue}, 70%, 60%, 0.8)`;
+      ctx.beginPath();
+      ctx.moveTo(x, gy); ctx.lineTo(x + 4, gy - ch); ctx.lineTo(x + 8, gy);
+      ctx.fill();
+      ctx.fillStyle = `hsla(${hue}, 80%, 80%, 0.3)`;
+      ctx.beginPath();
+      ctx.arc(x + 4, gy - ch * 0.5, ch * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Waves
+  if (biome.waves) {
+    const waveY = groundY + 10;
+    ctx.fillStyle = `rgba(60, 140, 200, ${0.4 - nightDarken * 0.2})`;
+    for (let x = 0; x < W; x += 2) {
+      const wx = x + scrollX;
+      const wy = waveY + Math.sin(Date.now() * 0.003 + wx * 0.02) * 5 + Math.sin(wx * 0.05) * 3;
+      ctx.fillRect(x, wy, 2, H - wy);
+    }
+    // Foam
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.3 - nightDarken * 0.15})`;
+    for (let x = 0; x < W; x += 8) {
+      const wx = x + scrollX;
+      const wy = waveY + Math.sin(Date.now() * 0.003 + wx * 0.02) * 5 + Math.sin(wx * 0.05) * 3;
+      if (hash(Math.floor(wx / 8 + Date.now() * 0.01) | 0) % 5 === 0)
+        ctx.fillRect(x, wy, 6, 2);
+    }
+  }
+
+  // Snowflakes
+  if (biome.snowflakes) {
+    ctx.fillStyle = `rgba(255,255,255,0.7)`;
+    for (let i = 0; i < 60; i++) {
+      const sx = ((hash(i * 11 + 5) / 65535 * W) + Date.now() * 0.02 * (hash(i * 7) % 3 + 1) * 0.3 + scrollX * 0.1) % W;
+      const sy = ((hash(i * 19 + 3) / 65535 * H) + Date.now() * 0.03 * (hash(i * 13) % 2 + 1)) % H;
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+  }
+
+  // Void glitch
+  if (biome.glitch) {
+    if (Math.random() < 0.05) {
+      const gy2 = Math.random() * H;
+      const gh = Math.random() * 10 + 2;
+      ctx.fillStyle = `rgba(${Math.random()*100},${Math.random()*50},${Math.random()*150},0.3)`;
+      ctx.fillRect(0, gy2, W, gh);
+    }
+  }
+
+  return groundY;
+}
+
+function drawCat(x, y, daylight) {
+  const s = SCALE * 2;
+  const bobY = Math.sin(cat.animTimer * 0.15) * 2;
+  const walkFrame = Math.floor(cat.animTimer * 0.12) % 4;
+  const nightDarken = (1 - daylight) * 0.3;
+
+  const bodyColor = lerpColor('#2a2a2a', '#111118', nightDarken);
+  const eyeColor = daylight < 0.3 ? '#aaff66' : '#ffcc00';
+
+  // Tail
+  const tailWave = Math.sin(Date.now() * 0.004 + cat.tailPhase) * 8;
+  ctx.strokeStyle = bodyColor;
+  ctx.lineWidth = 2 * s * 0.3;
+  ctx.beginPath();
+  ctx.moveTo(x - 5 * s * 0.3, y + bobY - 3 * s * 0.3);
+  ctx.quadraticCurveTo(x - 10 * s * 0.3, y + bobY - 12 * s * 0.3 + tailWave, x - 14 * s * 0.3, y + bobY - 8 * s * 0.3 + tailWave * 0.5);
+  ctx.stroke();
+
+  // Body
+  ctx.fillStyle = bodyColor;
+  ctx.fillRect(x - 5 * s * 0.3, y + bobY - 4 * s * 0.3, 10 * s * 0.3, 5 * s * 0.3);
+
+  // Legs
+  const legOffsets = [
+    [walkFrame === 0 ? -1 : walkFrame === 2 ? 1 : 0, 0],
+    [walkFrame === 1 ? -1 : walkFrame === 3 ? 1 : 0, 0],
+    [walkFrame === 2 ? -1 : walkFrame === 0 ? 1 : 0, 0],
+    [walkFrame === 3 ? -1 : walkFrame === 1 ? 1 : 0, 0],
+  ];
+  if (!cat.sitting) {
+    // Front legs
+    ctx.fillRect(x + 2 * s * 0.3 + legOffsets[0][0], y + bobY + 1 * s * 0.3, 2 * s * 0.3, 4 * s * 0.3);
+    ctx.fillRect(x + 4 * s * 0.3 + legOffsets[1][0], y + bobY + 1 * s * 0.3, 2 * s * 0.3, 4 * s * 0.3);
+    // Back legs
+    ctx.fillRect(x - 4 * s * 0.3 + legOffsets[2][0], y + bobY + 1 * s * 0.3, 2 * s * 0.3, 4 * s * 0.3);
+    ctx.fillRect(x - 2 * s * 0.3 + legOffsets[3][0], y + bobY + 1 * s * 0.3, 2 * s * 0.3, 4 * s * 0.3);
+  } else {
+    // Sitting pose - tucked legs
+    ctx.fillRect(x + 2 * s * 0.3, y + bobY + 1 * s * 0.3, 3 * s * 0.3, 3 * s * 0.3);
+    ctx.fillRect(x - 4 * s * 0.3, y + bobY + 1 * s * 0.3, 3 * s * 0.3, 3 * s * 0.3);
+  }
+
+  // Head
+  ctx.fillRect(x + 3 * s * 0.3, y + bobY - 8 * s * 0.3, 7 * s * 0.3, 5 * s * 0.3);
+
+  // Ears
+  ctx.fillRect(x + 3 * s * 0.3, y + bobY - 10 * s * 0.3, 2 * s * 0.3, 3 * s * 0.3);
+  ctx.fillRect(x + 8 * s * 0.3, y + bobY - 10 * s * 0.3, 2 * s * 0.3, 3 * s * 0.3);
+  // Inner ears
+  ctx.fillStyle = '#4a2a3a';
+  ctx.fillRect(x + 3.5 * s * 0.3, y + bobY - 9 * s * 0.3, 1 * s * 0.3, 1.5 * s * 0.3);
+  ctx.fillRect(x + 8.5 * s * 0.3, y + bobY - 9 * s * 0.3, 1 * s * 0.3, 1.5 * s * 0.3);
+
+  // Eyes
+  const blink = cat.blinkTimer > 0 && cat.blinkTimer < 5;
+  ctx.fillStyle = blink ? bodyColor : eyeColor;
+  ctx.fillRect(x + 4 * s * 0.3, y + bobY - 7 * s * 0.3, blink ? 2 * s * 0.3 : 1.5 * s * 0.3, blink ? 1 : 1.5 * s * 0.3);
+  ctx.fillRect(x + 7.5 * s * 0.3, y + bobY - 7 * s * 0.3, blink ? 2 * s * 0.3 : 1.5 * s * 0.3, blink ? 1 : 1.5 * s * 0.3);
+
+  // Eye glow at night
+  if (daylight < 0.3) {
+    ctx.fillStyle = `rgba(170, 255, 100, ${(0.3 - daylight) * 0.5})`;
+    ctx.beginPath();
+    ctx.arc(x + 5 * s * 0.3, y + bobY - 6.5 * s * 0.3, 3 * s * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 8.5 * s * 0.3, y + bobY - 6.5 * s * 0.3, 3 * s * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Nose
+  ctx.fillStyle = '#cc7788';
+  ctx.fillRect(x + 6 * s * 0.3, y + bobY - 5.5 * s * 0.3, 1 * s * 0.3, 0.8 * s * 0.3);
+
+  // Whiskers
+  ctx.strokeStyle = `rgba(200,200,200,${0.5 - nightDarken})`;
+  ctx.lineWidth = 1;
+  const whiskerY = y + bobY - 5 * s * 0.3;
+  ctx.beginPath();
+  ctx.moveTo(x + 10 * s * 0.3, whiskerY); ctx.lineTo(x + 16 * s * 0.3, whiskerY - 2);
+  ctx.moveTo(x + 10 * s * 0.3, whiskerY + 1); ctx.lineTo(x + 16 * s * 0.3, whiskerY + 2);
+  ctx.moveTo(x + 3 * s * 0.3, whiskerY); ctx.lineTo(x - 3 * s * 0.3, whiskerY - 2);
+  ctx.moveTo(x + 3 * s * 0.3, whiskerY + 1); ctx.lineTo(x - 3 * s * 0.3, whiskerY + 2);
+  ctx.stroke();
+
+  // Purr indicator
+  if (cat.purring) {
+    ctx.fillStyle = `rgba(255,200,255,${0.3 + Math.sin(Date.now() * 0.01) * 0.2})`;
+    ctx.font = `${8 * SCALE * 0.4}px Courier New`;
+    ctx.fillText('~purr~', x - 5, y + bobY - 14 * s * 0.3);
+  }
+
+  // Pawprints fade behind
+  if (!cat.sitting && Math.random() < 0.1) {
+    particles.push({
+      x: x - 2, y: y + 5 * s * 0.3,
+      life: 60, maxLife: 60, type: 'pawprint',
+    });
+  }
+}
+
+function drawParticles(scrollX) {
+  particles = particles.filter(p => {
+    p.life--;
+    if (p.life <= 0) return false;
+    const alpha = p.life / p.maxLife;
+
+    if (p.type === 'pawprint') {
+      ctx.fillStyle = `rgba(100,100,100,${alpha * 0.3})`;
+      ctx.fillRect(p.x - scrollX + worldX * 0.1, p.y, 3, 2);
+    } else if (p.type === 'firefly') {
+      p.x += Math.sin(Date.now() * 0.005 + p.phase) * 0.5;
+      p.y += Math.cos(Date.now() * 0.003 + p.phase) * 0.3;
+      ctx.fillStyle = `rgba(255,255,100,${alpha * 0.8})`;
+      ctx.fillRect(p.x, p.y, 2, 2);
+      ctx.fillStyle = `rgba(255,255,100,${alpha * 0.2})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return true;
+  });
+}
+
+// Ambient fireflies
+function spawnFireflies(daylight) {
+  if (daylight < 0.4 && Math.random() < 0.03) {
+    particles.push({
+      x: Math.random() * W, y: Math.random() * H * 0.6 + H * 0.2,
+      life: 200, maxLife: 200, type: 'firefly', phase: Math.random() * Math.PI * 2,
+    });
+  }
+}
+
+let t = 0;
+let catScreenX;
+
+function update() {
+  t++;
+
+  // Move world
+  if (!cat.sitting) {
+    worldX += 1.2 * speedMult;
+    cat.animTimer += speedMult;
+    steps += speedMult * 0.5;
+  } else {
+    cat.sitTimer--;
+    if (cat.sitTimer <= 0) {
+      cat.sitting = false;
+      cat.purring = false;
+    }
+  }
+
+  // Random sit
+  if (!cat.sitting && Math.random() < 0.0008) {
+    cat.sitting = true;
+    cat.sitTimer = 180 + Math.random() * 300;
+    cat.purring = Math.random() < 0.5;
+  }
+
+  // Blink
+  cat.blinkTimer--;
+  if (cat.blinkTimer <= -60 - Math.random() * 120) {
+    cat.blinkTimer = 8;
+  }
+
+  cat.tailPhase += 0.02;
+
+  // Events
+  eventTimer--;
+  if (eventTimer <= 0) {
+    document.getElementById('event-text').style.opacity = 0;
+  }
+  if (Math.random() < 0.001) {
+    showEvent(events[Math.floor(Math.random() * events.length)]);
+  }
+
+  // Update UI
+  document.getElementById('distance').textContent = Math.floor(steps);
+  const biome = getBiome(worldX);
+  document.getElementById('biome-name').textContent = biome.name;
+}
+
+function draw() {
+  const scrollX = worldX;
+  const biome = getBiome(scrollX);
+  const daylight = getDayNightCycle(t);
+
+  drawSky(biome, daylight);
+  const groundY = drawTerrain(biome, scrollX, daylight);
+
+  // Cat position
+  catScreenX = W * 0.35;
+  const terrainAtCat = getTerrainHeight(scrollX + catScreenX);
+  const catY = groundY + (1 - terrainAtCat) * H * 0.08 - 2;
+
+  drawCat(catScreenX, catY, daylight);
+  spawnFireflies(daylight);
+  drawParticles(scrollX);
+
+  // Vignette
+  const vignette = ctx.createRadialGradient(W/2, H/2, W*0.3, W/2, H/2, W*0.8);
+  vignette.addColorStop(0, 'rgba(0,0,0,0)');
+  vignette.addColorStop(1, `rgba(0,0,0,${0.3 + (1-daylight)*0.2})`);
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function toggleSpeed() {
+  speedMult = speedMult === 1 ? 3 : speedMult === 3 ? 0.3 : 1;
+  document.querySelector('#controls button:first-child').textContent =
+    speedMult === 1 ? 'SPEED' : speedMult === 3 ? 'FAST' : 'SLOW';
+}
+
+function toggleTime() {
+  timeMode = (timeMode + 1) % 4;
+  document.querySelector('#controls button:last-child').textContent =
+    timeModes[timeMode].toUpperCase();
+}
+
+loop();
+</script>
+</body>
+</html>
