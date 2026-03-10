@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Double Trouble | Ruby's Art</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0a0f;
+  color: #e0e0e0;
+  font-family: 'Space Mono', monospace;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+}
+
+canvas {
+  display: block;
+  flex: 1;
+  width: 100%;
+  cursor: crosshair;
+}
+
+#ui {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 10;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #fff;
+  padding: 8px 16px;
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  backdrop-filter: blur(10px);
+}
+.btn:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.4); }
+.btn.active { background: rgba(255,100,200,0.3); border-color: rgba(255,100,200,0.6); }
+
+#title {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 14px;
+  color: rgba(255,255,255,0.4);
+  z-index: 10;
+  text-align: center;
+  pointer-events: none;
+}
+
+#info {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: rgba(255,255,255,0.25);
+  z-index: 10;
+  text-align: center;
+  pointer-events: none;
+}
+
+#stats {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  z-index: 10;
+  text-align: right;
+  pointer-events: none;
+  line-height: 1.6;
+}
+</style>
+</head>
+<body>
+
+<div id="title">DOUBLE TROUBLE</div>
+<div id="info">click to add pendulums · drag to set angle · scroll for gravity</div>
+<div id="stats"></div>
+
+<canvas id="c"></canvas>
+
+<div id="ui">
+  <button class="btn" onclick="clearAll()">CLEAR</button>
+  <button class="btn" onclick="addBurst()">BURST</button>
+  <button class="btn" onclick="cycleMode()">MODE: <span id="modeLabel">NEON</span></button>
+  <button class="btn" id="trailBtn" onclick="toggleTrails()">TRAILS: ON</button>
+  <button class="btn" onclick="togglePause()">PAUSE</button>
+  <button class="btn" onclick="cycleSpeed()">SPEED: <span id="speedLabel">1×</span></button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const statsEl = document.getElementById('stats');
+
+let W, H, cx, cy;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cx = W / 2;
+  cy = H / 2 - 30;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Physics
+const dt = 0.003;
+let gravity = 1.5;
+let paused = false;
+let stepsPerFrame = 4;
+let speedIdx = 1;
+const speeds = [0.5, 1, 2, 4];
+const speedLabels = ['0.5×', '1×', '2×', '4×'];
+
+// Visual
+const modes = ['NEON', 'FIRE', 'ICE', 'VOID', 'AURORA'];
+let modeIdx = 0;
+let showTrails = true;
+let trailCanvas, trailCtx;
+
+function initTrailCanvas() {
+  trailCanvas = document.createElement('canvas');
+  trailCanvas.width = W;
+  trailCanvas.height = H;
+  trailCtx = trailCanvas.getContext('2d');
+}
+initTrailCanvas();
+window.addEventListener('resize', () => { initTrailCanvas(); });
+
+// Pendulums
+let pendulums = [];
+
+class DoublePendulum {
+  constructor(a1, a2, l1, l2, m1, m2, hue) {
+    this.a1 = a1; this.a2 = a2;
+    this.v1 = 0; this.v2 = 0;
+    this.l1 = l1; this.l2 = l2;
+    this.m1 = m1; this.m2 = m2;
+    this.hue = hue;
+    this.trail = [];
+    this.maxTrail = 800;
+    this.energy0 = this.totalEnergy();
+    this.age = 0;
+  }
+
+  totalEnergy() {
+    const g = gravity * 500;
+    const { a1, a2, v1, v2, l1, l2, m1, m2 } = this;
+    const ke = 0.5 * m1 * l1*l1 * v1*v1
+             + 0.5 * m2 * (l1*l1*v1*v1 + l2*l2*v2*v2 + 2*l1*l2*v1*v2*Math.cos(a1-a2));
+    const pe = -(m1+m2)*g*l1*Math.cos(a1) - m2*g*l2*Math.cos(a2);
+    return ke + pe;
+  }
+
+  step(dt) {
+    const g = gravity * 500;
+    const { a1, a2, v1, v2, l1, l2, m1, m2 } = this;
+    const da = a1 - a2;
+    const M = m1 + m2;
+
+    const den1 = l1 * (2*m1 + m2 - m2*Math.cos(2*da));
+    const num1 = -g*(2*m1+m2)*Math.sin(a1) - m2*g*Math.sin(a1-2*a2)
+               - 2*Math.sin(da)*m2*(v2*v2*l2 + v1*v1*l1*Math.cos(da));
+    const acc1 = num1 / den1;
+
+    const den2 = l2 * (2*m1 + m2 - m2*Math.cos(2*da));
+    const num2 = 2*Math.sin(da)*(v1*v1*l1*M + g*M*Math.cos(a1) + v2*v2*l2*m2*Math.cos(da));
+    const acc2 = num2 / den2;
+
+    this.v1 += acc1 * dt;
+    this.v2 += acc2 * dt;
+    // tiny damping for stability
+    this.v1 *= 0.9999;
+    this.v2 *= 0.9999;
+    this.a1 += this.v1 * dt;
+    this.a2 += this.v2 * dt;
+    this.age += dt;
+
+    // trail point (tip of second arm)
+    const x2 = cx + l1*Math.sin(this.a1) + l2*Math.sin(this.a2);
+    const y2 = cy + l1*Math.cos(this.a1) + l2*Math.cos(this.a2);
+    this.trail.push({x: x2, y: y2});
+    if (this.trail.length > this.maxTrail) this.trail.shift();
+  }
+
+  getPoints() {
+    const x1 = cx + this.l1 * Math.sin(this.a1);
+    const y1 = cy + this.l1 * Math.cos(this.a1);
+    const x2 = x1 + this.l2 * Math.sin(this.a2);
+    const y2 = y1 + this.l2 * Math.cos(this.a2);
+    return { x1, y1, x2, y2 };
+  }
+
+  getColor(alpha = 1) {
+    const mode = modes[modeIdx];
+    switch(mode) {
+      case 'NEON': return `hsla(${this.hue}, 100%, 65%, ${alpha})`;
+      case 'FIRE': return `hsla(${(this.hue % 60)}, 100%, ${50 + (this.hue%30)}%, ${alpha})`;
+      case 'ICE': return `hsla(${180 + (this.hue % 60)}, 80%, 65%, ${alpha})`;
+      case 'VOID': return `hsla(0, 0%, ${50 + (this.hue % 40)}%, ${alpha})`;
+      case 'AURORA': return `hsla(${90 + (this.hue % 180)}, 90%, 60%, ${alpha})`;
+    }
+  }
+}
+
+function addPendulum(a1, a2) {
+  const l1 = 80 + Math.random() * 60;
+  const l2 = 80 + Math.random() * 60;
+  const hue = (pendulums.length * 47 + Math.random() * 30) % 360;
+  pendulums.push(new DoublePendulum(a1, a2, l1, l2, 1, 1, hue));
+}
+
+function addBurst() {
+  const baseA1 = Math.PI * 0.75;
+  const baseA2 = Math.PI * 0.5;
+  for (let i = 0; i < 12; i++) {
+    const a1 = baseA1 + (i - 6) * 0.005;
+    const a2 = baseA2 + Math.random() * 0.01 - 0.005;
+    addPendulum(a1, a2);
+  }
+}
+
+function clearAll() {
+  pendulums = [];
+  trailCtx.clearRect(0, 0, W, H);
+}
+
+function cycleMode() {
+  modeIdx = (modeIdx + 1) % modes.length;
+  document.getElementById('modeLabel').textContent = modes[modeIdx];
+  trailCtx.clearRect(0, 0, W, H);
+}
+
+function toggleTrails() {
+  showTrails = !showTrails;
+  document.getElementById('trailBtn').textContent = `TRAILS: ${showTrails ? 'ON' : 'OFF'}`;
+  if (!showTrails) trailCtx.clearRect(0, 0, W, H);
+}
+
+function togglePause() { paused = !paused; }
+
+function cycleSpeed() {
+  speedIdx = (speedIdx + 1) % speeds.length;
+  stepsPerFrame = Math.round(speeds[speedIdx] * 4);
+  document.getElementById('speedLabel').textContent = speedLabels[speedIdx];
+}
+
+// Mouse interaction
+let dragging = false;
+let dragStart = null;
+
+canvas.addEventListener('mousedown', (e) => {
+  dragging = true;
+  dragStart = { x: e.clientX, y: e.clientY };
+});
+
+canvas.addEventListener('mouseup', (e) => {
+  if (dragging && dragStart) {
+    const dx = e.clientX - cx;
+    const dy = e.clientY - cy;
+    const a1 = Math.atan2(dx, dy);
+    
+    const dragDx = e.clientX - dragStart.x;
+    const dragDy = e.clientY - dragStart.y;
+    const dragDist = Math.sqrt(dragDx*dragDx + dragDy*dragDy);
+    
+    let a2;
+    if (dragDist < 5) {
+      // Simple click - random second angle
+      a2 = a1 + (Math.random() - 0.5) * Math.PI;
+    } else {
+      // Drag - use drag direction for second angle
+      a2 = Math.atan2(dragDx, dragDy);
+    }
+    addPendulum(a1, a2);
+  }
+  dragging = false;
+  dragStart = null;
+});
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  gravity = Math.max(0.1, Math.min(5, gravity + e.deltaY * 0.001));
+}, { passive: false });
+
+// Touch
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const t = e.touches[0];
+  dragging = true;
+  dragStart = { x: t.clientX, y: t.clientY };
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  if (dragging && dragStart) {
+    const dx = dragStart.x - cx;
+    const dy = dragStart.y - cy;
+    const a1 = Math.atan2(dx, dy);
+    const a2 = a1 + (Math.random() - 0.5) * Math.PI;
+    addPendulum(a1, a2);
+  }
+  dragging = false;
+}, { passive: false });
+
+// Draw
+function drawTrails() {
+  // Fade old trails
+  trailCtx.fillStyle = 'rgba(10,10,15,0.02)';
+  trailCtx.fillRect(0, 0, W, H);
+  
+  for (const p of pendulums) {
+    if (p.trail.length < 2) continue;
+    const last = p.trail.length - 1;
+    trailCtx.beginPath();
+    trailCtx.moveTo(p.trail[last-1].x, p.trail[last-1].y);
+    trailCtx.lineTo(p.trail[last].x, p.trail[last].y);
+    trailCtx.strokeStyle = p.getColor(0.8);
+    trailCtx.lineWidth = 1.5;
+    trailCtx.stroke();
+  }
+}
+
+function render() {
+  // Clear main canvas
+  ctx.fillStyle = 'rgba(10,10,15,1)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw trail canvas underneath
+  if (showTrails) {
+    ctx.drawImage(trailCanvas, 0, 0);
+  }
+
+  // Pivot point
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fill();
+
+  // Draw pendulums
+  for (const p of pendulums) {
+    const { x1, y1, x2, y2 } = p.getPoints();
+    const color = p.getColor(0.9);
+    
+    // Arms
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = p.getColor(0.4);
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Joint
+    ctx.beginPath();
+    ctx.arc(x1, y1, 3, 0, Math.PI*2);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // Bob
+    ctx.beginPath();
+    ctx.arc(x2, y2, 5, 0, Math.PI*2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    
+    // Glow
+    ctx.beginPath();
+    ctx.arc(x2, y2, 8, 0, Math.PI*2);
+    ctx.fillStyle = p.getColor(0.15);
+    ctx.fill();
+  }
+
+  // Stats
+  statsEl.innerHTML = `pendulums: ${pendulums.length}<br>gravity: ${gravity.toFixed(2)}`;
+}
+
+function loop() {
+  if (!paused) {
+    for (let s = 0; s < stepsPerFrame; s++) {
+      for (const p of pendulums) {
+        p.step(dt);
+      }
+    }
+    if (showTrails) drawTrails();
+  }
+  render();
+  requestAnimationFrame(loop);
+}
+
+// Start with a few pendulums
+addBurst();
+loop();
+</script>
+</body>
+</html>
