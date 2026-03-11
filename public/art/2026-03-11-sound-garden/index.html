@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sound Garden 🔊🌸 — Ruby's Art</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a12; overflow: hidden; font-family: 'Courier New', monospace; cursor: crosshair; }
+canvas { display: block; }
+#ui {
+  position: fixed; top: 16px; left: 16px; z-index: 10;
+  color: #8fa; font-size: 13px; pointer-events: none;
+  text-shadow: 0 0 8px #8fa4;
+}
+#ui h1 { font-size: 20px; margin-bottom: 4px; }
+#ui .sub { opacity: 0.6; font-size: 11px; }
+#controls {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 10; display: flex; gap: 10px; align-items: center;
+}
+#controls button {
+  background: #1a1a2e; border: 1px solid #8fa; color: #8fa;
+  padding: 8px 16px; font-family: inherit; font-size: 12px;
+  cursor: pointer; border-radius: 4px; pointer-events: all;
+  transition: all 0.2s;
+}
+#controls button:hover { background: #8fa; color: #0a0a12; }
+#controls button.active { background: #8fa; color: #0a0a12; }
+#stats {
+  position: fixed; top: 16px; right: 16px; z-index: 10;
+  color: #8fa; font-size: 11px; text-align: right; opacity: 0.6;
+  text-shadow: 0 0 8px #8fa4;
+}
+#start-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: #0a0a12ee; display: flex; align-items: center;
+  justify-content: center; flex-direction: column; color: #8fa;
+  cursor: pointer;
+}
+#start-overlay h1 { font-size: 36px; margin-bottom: 12px; }
+#start-overlay p { opacity: 0.6; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="start-overlay">
+  <h1>🌸 Sound Garden 🌸</h1>
+  <p>click anywhere to begin</p>
+  <p style="margin-top:8px;opacity:0.4;font-size:11px">plant flowers that sing</p>
+</div>
+<div id="ui">
+  <h1>🌸 Sound Garden</h1>
+  <div class="sub">click to plant · flowers sing · chaos grows</div>
+</div>
+<div id="stats">
+  <div id="flower-count">flowers: 0</div>
+  <div id="harmony">harmony: —</div>
+</div>
+<div id="controls">
+  <button id="btn-scale" class="active">PENTATONIC</button>
+  <button id="btn-wind">WIND: OFF</button>
+  <button id="btn-clear">UPROOT ALL</button>
+</div>
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+resize();
+addEventListener('resize', resize);
+
+// Audio
+let audioCtx = null;
+let masterGain = null;
+let reverbNode = null;
+
+function initAudio() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.3;
+  
+  // Create reverb via convolver
+  reverbNode = audioCtx.createConvolver();
+  const rate = audioCtx.sampleRate;
+  const length = rate * 3;
+  const impulse = audioCtx.createBuffer(2, length, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = impulse.getChannelData(ch);
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.5);
+    }
+  }
+  reverbNode.buffer = impulse;
+  
+  const dryGain = audioCtx.createGain();
+  dryGain.gain.value = 0.6;
+  const wetGain = audioCtx.createGain();
+  wetGain.gain.value = 0.4;
+  
+  masterGain.connect(dryGain).connect(audioCtx.destination);
+  masterGain.connect(reverbNode).connect(wetGain).connect(audioCtx.destination);
+}
+
+// Scales
+const scales = {
+  PENTATONIC: [0, 2, 4, 7, 9],    // C D E G A
+  MINOR: [0, 2, 3, 5, 7, 8, 10],  // natural minor
+  LYDIAN: [0, 2, 4, 6, 7, 9, 11], // dreamy
+  WHOLE: [0, 2, 4, 6, 8, 10],     // whole tone (floaty)
+};
+const scaleNames = Object.keys(scales);
+let scaleIdx = 0;
+let currentScale = scales.PENTATONIC;
+
+function getFreq(yRatio) {
+  // Map y position to pitch. Top = high, bottom = low
+  const octave = 3 + Math.floor((1 - yRatio) * 3); // octaves 3-5
+  const degreeIdx = Math.floor(yRatio * currentScale.length * 2) % currentScale.length;
+  const semitone = currentScale[degreeIdx];
+  const midi = 12 * octave + semitone;
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+// Flower colors based on frequency
+function freqToColor(freq) {
+  const hue = ((freq - 130) / 800 * 360 + 120) % 360;
+  return { h: hue, s: 70, l: 60 };
+}
+
+// Flowers
+const flowers = [];
+let wind = false;
+const MAX_FLOWERS = 40;
+
+class Flower {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.yRatio = y / H;
+    this.freq = getFreq(this.yRatio);
+    this.color = freqToColor(this.freq);
+    this.phase = Math.random() * Math.PI * 2;
+    this.growthPhase = Math.random() * Math.PI * 2;
+    this.size = 0;
+    this.maxSize = 15 + Math.random() * 25;
+    this.stemH = 30 + Math.random() * 60;
+    this.petals = 4 + Math.floor(Math.random() * 5); // 4-8 petals
+    this.petalShape = Math.random(); // 0=round, 1=pointy
+    this.born = performance.now();
+    this.alive = true;
+    this.swayOffset = Math.random() * 100;
+    this.singTimer = 0;
+    this.singInterval = 2000 + Math.random() * 6000; // sing every 2-8 seconds
+    this.glowIntensity = 0;
+    this.noteLength = 0.3 + Math.random() * 0.7;
+    this.waveType = ['sine', 'triangle', 'sine', 'sine'][Math.floor(Math.random() * 4)];
+    // particles
+    this.particles = [];
+  }
+
+  sing() {
+    if (!audioCtx || !this.alive) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    // Slight detune for organic feel
+    osc.frequency.value = this.freq * (1 + (Math.random() - 0.5) * 0.02);
+    osc.type = this.waveType;
+    
+    const dur = this.noteLength;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.15 * (this.size / this.maxSize), now + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    
+    osc.connect(gain).connect(masterGain);
+    osc.start(now);
+    osc.stop(now + dur + 0.1);
+    
+    this.glowIntensity = 1;
+    
+    // Spawn note particles
+    for (let i = 0; i < 3; i++) {
+      this.particles.push({
+        x: this.x + (Math.random() - 0.5) * 10,
+        y: this.y - this.stemH - this.size,
+        vx: (Math.random() - 0.5) * 2,
+        vy: -1 - Math.random() * 2,
+        life: 1,
+        size: 2 + Math.random() * 3,
+      });
+    }
+  }
+
+  update(dt, t) {
+    // Grow
+    if (this.size < this.maxSize) {
+      this.size += dt * 0.02 * this.maxSize; // full growth in ~3 seconds
+      if (this.size > this.maxSize) this.size = this.maxSize;
+    }
+    
+    // Singing
+    this.singTimer += dt;
+    if (this.singTimer >= this.singInterval && this.size > this.maxSize * 0.3) {
+      this.sing();
+      this.singTimer = 0;
+      this.singInterval = 2000 + Math.random() * 6000;
+    }
+    
+    // Glow decay
+    this.glowIntensity *= 0.95;
+    
+    // Sway
+    this.phase += dt * 0.001;
+    
+    // Wind
+    if (wind) {
+      this.swayOffset += dt * 0.003;
+    }
+    
+    // Update particles
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= dt * 0.001;
+      if (p.life <= 0) this.particles.splice(i, 1);
+    }
+  }
+
+  draw(t) {
+    const sway = Math.sin(this.phase + this.swayOffset) * (wind ? 15 : 5);
+    const growRatio = this.size / this.maxSize;
+    
+    // Stem
+    const stemTop = this.y - this.stemH * growRatio;
+    ctx.strokeStyle = `hsla(120, 50%, 30%, ${0.6 + growRatio * 0.4})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(this.x, this.y);
+    // Curved stem
+    ctx.quadraticCurveTo(this.x + sway * 0.5, this.y - this.stemH * growRatio * 0.5, this.x + sway, stemTop);
+    ctx.stroke();
+    
+    // Leaves (small)
+    if (growRatio > 0.4) {
+      const lx = this.x + sway * 0.3;
+      const ly = this.y - this.stemH * growRatio * 0.4;
+      ctx.fillStyle = `hsla(110, 60%, 35%, 0.7)`;
+      ctx.beginPath();
+      ctx.ellipse(lx - 6, ly, 8, 3, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(lx + 6, ly - 5, 7, 3, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Flower head
+    const fx = this.x + sway;
+    const fy = stemTop;
+    const s = this.size * growRatio;
+    
+    if (s > 2) {
+      // Glow
+      if (this.glowIntensity > 0.05) {
+        const grad = ctx.createRadialGradient(fx, fy, 0, fx, fy, s * 3);
+        grad.addColorStop(0, `hsla(${this.color.h}, 80%, 70%, ${this.glowIntensity * 0.4})`);
+        grad.addColorStop(1, `hsla(${this.color.h}, 80%, 70%, 0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(fx, fy, s * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Petals
+      for (let i = 0; i < this.petals; i++) {
+        const a = (i / this.petals) * Math.PI * 2 + t * 0.0003 + this.phase;
+        const px = fx + Math.cos(a) * s * 0.4;
+        const py = fy + Math.sin(a) * s * 0.4;
+        
+        ctx.fillStyle = `hsla(${this.color.h + i * 8}, ${this.color.s}%, ${this.color.l + this.glowIntensity * 20}%, 0.8)`;
+        ctx.beginPath();
+        ctx.ellipse(px, py, s * 0.6, s * (0.25 + this.petalShape * 0.2), a, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Center
+      ctx.fillStyle = `hsla(${this.color.h + 40}, 90%, ${40 + this.glowIntensity * 30}%, 0.9)`;
+      ctx.beginPath();
+      ctx.arc(fx, fy, s * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Note particles
+    for (const p of this.particles) {
+      ctx.fillStyle = `hsla(${this.color.h}, 80%, 80%, ${p.life})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Musical note symbol
+      ctx.fillStyle = `hsla(${this.color.h}, 80%, 90%, ${p.life * 0.8})`;
+      ctx.font = `${10 + p.size * 2}px serif`;
+      ctx.fillText('♪', p.x + 4, p.y - 4);
+    }
+  }
+}
+
+// Fireflies (ambient)
+const fireflies = [];
+for (let i = 0; i < 30; i++) {
+  fireflies.push({
+    x: Math.random() * 2000,
+    y: Math.random() * 2000,
+    phase: Math.random() * Math.PI * 2,
+    speed: 0.2 + Math.random() * 0.5,
+    size: 1 + Math.random() * 2,
+  });
+}
+
+// Ground
+function drawGround(t) {
+  // Gradient ground
+  const grad = ctx.createLinearGradient(0, H * 0.75, 0, H);
+  grad.addColorStop(0, '#0a0a12');
+  grad.addColorStop(0.3, '#0d1a0d');
+  grad.addColorStop(1, '#0a150a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, H * 0.75, W, H * 0.25);
+  
+  // Grass blades
+  ctx.strokeStyle = '#1a3a1a';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < W; i += 8) {
+    const h = 5 + Math.sin(i * 0.1 + t * 0.001) * 3;
+    const sway = wind ? Math.sin(t * 0.002 + i * 0.05) * 4 : Math.sin(t * 0.001 + i * 0.05) * 1;
+    ctx.beginPath();
+    ctx.moveTo(i, H);
+    ctx.quadraticCurveTo(i + sway, H - h * 0.6, i + sway * 1.5, H - h);
+    ctx.stroke();
+  }
+}
+
+// Stars
+const stars = [];
+for (let i = 0; i < 80; i++) {
+  stars.push({ x: Math.random(), y: Math.random() * 0.6, size: Math.random() * 1.5, phase: Math.random() * Math.PI * 2 });
+}
+
+function drawStars(t) {
+  for (const s of stars) {
+    const bright = 0.3 + 0.3 * Math.sin(t * 0.001 + s.phase);
+    ctx.fillStyle = `rgba(200, 220, 255, ${bright})`;
+    ctx.beginPath();
+    ctx.arc(s.x * W, s.y * H, s.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Proximity harmonics — flowers near each other sing in response
+function checkProximity() {
+  for (let i = 0; i < flowers.length; i++) {
+    for (let j = i + 1; j < flowers.length; j++) {
+      const dx = flowers[i].x - flowers[j].x;
+      const dy = flowers[i].y - flowers[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 150 && flowers[i].glowIntensity > 0.5) {
+        // Nearby flower responds with slight delay
+        if (flowers[j].singTimer > flowers[j].singInterval * 0.5) {
+          flowers[j].singTimer = flowers[j].singInterval; // trigger soon
+        }
+      }
+    }
+  }
+}
+
+// Main loop
+let lastTime = performance.now();
+let started = false;
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(now - lastTime, 50);
+  lastTime = now;
+  
+  // Clear with slight trail
+  ctx.fillStyle = 'rgba(10, 10, 18, 0.3)';
+  ctx.fillRect(0, 0, W, H);
+  
+  // Sky gradient
+  ctx.fillStyle = '#0a0a12';
+  ctx.fillRect(0, 0, W, H);
+  
+  drawStars(now);
+  
+  // Fireflies
+  for (const f of fireflies) {
+    f.x += Math.sin(now * 0.001 * f.speed + f.phase) * 0.5;
+    f.y += Math.cos(now * 0.0007 * f.speed + f.phase * 2) * 0.3;
+    if (f.x < 0) f.x = W; if (f.x > W) f.x = 0;
+    if (f.y < 0) f.y = H * 0.7; if (f.y > H * 0.7) f.y = 0;
+    const bright = 0.3 + 0.5 * Math.sin(now * 0.003 + f.phase);
+    ctx.fillStyle = `hsla(60, 100%, 70%, ${bright})`;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.size * bright, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  drawGround(now);
+  
+  // Connection lines between nearby flowers
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < flowers.length; i++) {
+    for (let j = i + 1; j < flowers.length; j++) {
+      const dx = flowers[i].x - flowers[j].x;
+      const dy = flowers[i].y - flowers[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 200) {
+        const alpha = (1 - dist / 200) * 0.15 * (flowers[i].glowIntensity + flowers[j].glowIntensity + 0.1);
+        ctx.strokeStyle = `hsla(${(flowers[i].color.h + flowers[j].color.h) / 2}, 60%, 50%, ${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(flowers[i].x, flowers[i].y - flowers[i].stemH * (flowers[i].size / flowers[i].maxSize));
+        ctx.lineTo(flowers[j].x, flowers[j].y - flowers[j].stemH * (flowers[j].size / flowers[j].maxSize));
+        ctx.stroke();
+      }
+    }
+  }
+  
+  // Update & draw flowers
+  for (const f of flowers) {
+    f.update(dt, now);
+    f.draw(now);
+  }
+  
+  checkProximity();
+  
+  // Update UI
+  document.getElementById('flower-count').textContent = `flowers: ${flowers.length}`;
+  if (flowers.length > 0) {
+    const freqs = flowers.map(f => f.freq).sort((a, b) => a - b);
+    const range = freqs[freqs.length - 1] - freqs[0];
+    document.getElementById('harmony').textContent = `range: ${Math.round(range)}hz`;
+  }
+}
+
+// Start overlay
+document.getElementById('start-overlay').addEventListener('click', () => {
+  if (!started) {
+    started = true;
+    document.getElementById('start-overlay').style.display = 'none';
+    initAudio();
+  }
+});
+
+// Plant flowers
+canvas.addEventListener('click', (e) => {
+  if (!started) return;
+  if (flowers.length >= MAX_FLOWERS) {
+    // Remove oldest
+    flowers.shift();
+  }
+  flowers.push(new Flower(e.clientX, e.clientY));
+});
+
+// Scale button
+document.getElementById('btn-scale').addEventListener('click', () => {
+  scaleIdx = (scaleIdx + 1) % scaleNames.length;
+  const name = scaleNames[scaleIdx];
+  currentScale = scales[name];
+  document.getElementById('btn-scale').textContent = name;
+  // Update existing flower frequencies
+  for (const f of flowers) {
+    f.freq = getFreq(f.yRatio);
+    f.color = freqToColor(f.freq);
+  }
+});
+
+// Wind button
+document.getElementById('btn-wind').addEventListener('click', () => {
+  wind = !wind;
+  document.getElementById('btn-wind').textContent = `WIND: ${wind ? 'ON' : 'OFF'}`;
+  document.getElementById('btn-wind').classList.toggle('active', wind);
+});
+
+// Clear button
+document.getElementById('btn-clear').addEventListener('click', () => {
+  flowers.length = 0;
+});
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
