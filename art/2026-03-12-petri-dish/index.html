@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petri Dish 🧫 — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0a;
+  color: #ccc;
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#title {
+  font-size: 14px;
+  color: #666;
+  padding: 8px;
+  text-align: center;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+#title span { color: #0f0; }
+#wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+canvas {
+  border-radius: 50%;
+  box-shadow: 0 0 60px rgba(0,255,0,0.05), inset 0 0 80px rgba(0,0,0,0.5);
+  cursor: crosshair;
+}
+#hud {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  font-size: 11px;
+  color: #555;
+  text-align: right;
+  line-height: 1.6;
+  pointer-events: none;
+}
+#hud .val { color: #0f0; }
+#hud .warn { color: #f80; }
+#hud .dead { color: #f00; }
+#controls {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+button {
+  background: #1a1a1a;
+  color: #0f0;
+  border: 1px solid #333;
+  padding: 6px 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+}
+button:hover { background: #0f0; color: #000; }
+#legend {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  font-size: 10px;
+  color: #555;
+  line-height: 1.8;
+  pointer-events: none;
+}
+#legend .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+#events {
+  position: fixed;
+  bottom: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: #0f0;
+  opacity: 0;
+  transition: opacity 0.5s;
+  text-align: center;
+  pointer-events: none;
+  text-shadow: 0 0 10px rgba(0,255,0,0.5);
+}
+</style>
+</head>
+<body>
+<div id="title">🧫 <span>Petri Dish</span> — artificial life at 3am</div>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="hud"></div>
+<div id="legend"></div>
+<div id="events"></div>
+<div id="controls">
+  <button onclick="dropFood(50)">+FOOD</button>
+  <button onclick="addOrganisms(10)">+LIFE</button>
+  <button onclick="addPredators(3)">+PREDATOR</button>
+  <button onclick="plague()">PLAGUE</button>
+  <button onclick="mutagen()">MUTAGEN</button>
+  <button onclick="reset()">RESET</button>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const hud = document.getElementById('hud');
+const legend = document.getElementById('legend');
+const eventsEl = document.getElementById('events');
+
+let W, H, R; // width, height, radius
+function resize() {
+  const s = Math.min(window.innerWidth - 20, window.innerHeight - 80);
+  W = H = s;
+  R = s / 2;
+  canvas.width = W;
+  canvas.height = H;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// --- ORGANISM ---
+// Traits: speed, size, sense (detection radius), efficiency (food→energy), color mutation
+// Color encodes lineage — children inherit parent hue with slight shift
+
+let organisms = [];
+let food = [];
+let particles = [];
+let generation = 0;
+let totalBorn = 0;
+let totalDied = 0;
+let tick = 0;
+let events = [];
+let speciesMap = {};
+
+function rng(min, max) { return min + Math.random() * (max - min); }
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function inDish(x, y) { return Math.hypot(x - R, y - R) < R - 5; }
+function clampDish(x, y) {
+  const dx = x - R, dy = y - R;
+  const d = Math.hypot(dx, dy);
+  if (d > R - 5) {
+    const s = (R - 5) / d;
+    return { x: R + dx * s, y: R + dy * s };
+  }
+  return { x, y };
+}
+
+function makeOrganism(x, y, traits = {}) {
+  const hue = traits.hue ?? rng(0, 360);
+  const o = {
+    x, y,
+    vx: rng(-0.5, 0.5), vy: rng(-0.5, 0.5),
+    energy: traits.energy ?? 80,
+    maxEnergy: 200,
+    age: 0,
+    speed: traits.speed ?? rng(0.5, 2.5),
+    size: traits.size ?? rng(2, 5),
+    sense: traits.sense ?? rng(30, 120),
+    efficiency: traits.efficiency ?? rng(0.3, 0.9),
+    hue: hue,
+    predator: traits.predator ?? false,
+    gen: traits.gen ?? 0,
+    id: totalBorn++,
+    splitReady: false,
+    wanderAngle: rng(0, Math.PI * 2),
+    pulsePhase: rng(0, Math.PI * 2),
+  };
+  organisms.push(o);
+  return o;
+}
+
+function makeFood(x, y, amount) {
+  if (!inDish(x, y)) return;
+  food.push({ x, y, amount: amount || rng(15, 40), pulse: rng(0, Math.PI * 2) });
+}
+
+function spawnParticle(x, y, color, count = 3) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y,
+      vx: rng(-2, 2), vy: rng(-2, 2),
+      life: 1,
+      color,
+      size: rng(1, 3)
+    });
+  }
+}
+
+function showEvent(text) {
+  eventsEl.textContent = text;
+  eventsEl.style.opacity = 1;
+  clearTimeout(eventsEl._t);
+  eventsEl._t = setTimeout(() => eventsEl.style.opacity = 0, 3000);
+}
+
+// --- INIT ---
+function init() {
+  organisms = [];
+  food = [];
+  particles = [];
+  generation = 0;
+  totalBorn = 0;
+  totalDied = 0;
+  tick = 0;
+  speciesMap = {};
+
+  // scatter food
+  for (let i = 0; i < 200; i++) {
+    const a = rng(0, Math.PI * 2);
+    const r = rng(0, R - 20);
+    makeFood(R + Math.cos(a) * r, R + Math.sin(a) * r);
+  }
+
+  // initial organisms — 3 lineages
+  for (let i = 0; i < 30; i++) {
+    const a = rng(0, Math.PI * 2);
+    const r = rng(0, R * 0.6);
+    makeOrganism(R + Math.cos(a) * r, R + Math.sin(a) * r, {
+      hue: [0, 120, 240][i % 3] + rng(-15, 15),
+      gen: 0
+    });
+  }
+}
+
+// --- UPDATE ---
+function update() {
+  tick++;
+
+  // Spawn food periodically
+  if (tick % 8 === 0) {
+    const a = rng(0, Math.PI * 2);
+    const r = rng(0, R - 20);
+    makeFood(R + Math.cos(a) * r, R + Math.sin(a) * r);
+  }
+
+  // Update organisms
+  for (let i = organisms.length - 1; i >= 0; i--) {
+    const o = organisms[i];
+    o.age++;
+    o.energy -= 0.08 + o.speed * 0.03 + (o.predator ? 0.05 : 0); // metabolism
+    o.pulsePhase += 0.05;
+
+    if (o.energy <= 0 || o.age > 3000 + (o.efficiency * 2000)) {
+      // Death
+      spawnParticle(o.x, o.y, `hsl(${o.hue},60%,40%)`, 5);
+      // Drop some food on death
+      makeFood(o.x, o.y, 20);
+      organisms.splice(i, 1);
+      totalDied++;
+      continue;
+    }
+
+    // Find nearest food or prey
+    let target = null;
+    let targetDist = o.sense;
+
+    if (o.predator) {
+      // Predators hunt non-predators
+      for (const other of organisms) {
+        if (other === o || other.predator) continue;
+        const d = dist(o, other);
+        if (d < targetDist) {
+          targetDist = d;
+          target = other;
+        }
+      }
+      // Also eat food if no prey nearby
+      if (!target) {
+        for (const f of food) {
+          const d = dist(o, f);
+          if (d < targetDist) {
+            targetDist = d;
+            target = f;
+          }
+        }
+      }
+    } else {
+      // Herbivores seek food, flee predators
+      let threat = null;
+      let threatDist = o.sense;
+      for (const other of organisms) {
+        if (other.predator) {
+          const d = dist(o, other);
+          if (d < threatDist) {
+            threatDist = d;
+            threat = other;
+          }
+        }
+      }
+      if (threat && threatDist < o.sense * 0.6) {
+        // Flee!
+        const dx = o.x - threat.x;
+        const dy = o.y - threat.y;
+        const d = Math.hypot(dx, dy) || 1;
+        o.vx += (dx / d) * o.speed * 0.3;
+        o.vy += (dy / d) * o.speed * 0.3;
+        target = null; // just run
+      } else {
+        for (const f of food) {
+          const d = dist(o, f);
+          if (d < targetDist) {
+            targetDist = d;
+            target = f;
+          }
+        }
+      }
+    }
+
+    if (target) {
+      // Steer toward target
+      const dx = target.x - o.x;
+      const dy = target.y - o.y;
+      const d = Math.hypot(dx, dy) || 1;
+      o.vx += (dx / d) * o.speed * 0.15;
+      o.vy += (dy / d) * o.speed * 0.15;
+    } else {
+      // Wander
+      o.wanderAngle += rng(-0.3, 0.3);
+      o.vx += Math.cos(o.wanderAngle) * o.speed * 0.05;
+      o.vy += Math.sin(o.wanderAngle) * o.speed * 0.05;
+    }
+
+    // Damping
+    const spd = Math.hypot(o.vx, o.vy);
+    if (spd > o.speed) {
+      o.vx = (o.vx / spd) * o.speed;
+      o.vy = (o.vy / spd) * o.speed;
+    }
+    o.vx *= 0.95;
+    o.vy *= 0.95;
+
+    o.x += o.vx;
+    o.y += o.vy;
+
+    // Keep in dish
+    const c = clampDish(o.x, o.y);
+    o.x = c.x; o.y = c.y;
+
+    // Eat food
+    for (let j = food.length - 1; j >= 0; j--) {
+      if (dist(o, food[j]) < o.size + 4) {
+        o.energy = Math.min(o.maxEnergy, o.energy + food[j].amount * o.efficiency);
+        spawnParticle(food[j].x, food[j].y, '#0f0', 2);
+        food.splice(j, 1);
+      }
+    }
+
+    // Predator eats prey
+    if (o.predator) {
+      for (let j = organisms.length - 1; j >= 0; j--) {
+        const prey = organisms[j];
+        if (prey === o || prey.predator) continue;
+        if (dist(o, prey) < o.size + prey.size) {
+          o.energy = Math.min(o.maxEnergy, o.energy + prey.energy * 0.6);
+          spawnParticle(prey.x, prey.y, `hsl(${prey.hue},80%,50%)`, 6);
+          organisms.splice(j, 1);
+          totalDied++;
+          if (j < i) i--;
+        }
+      }
+    }
+
+    // Reproduce
+    if (o.energy > 130 && o.age > 200 && organisms.length < 300) {
+      o.energy *= 0.45;
+      const mutRate = 0.15;
+      const child = makeOrganism(
+        o.x + rng(-10, 10),
+        o.y + rng(-10, 10),
+        {
+          speed: Math.max(0.3, o.speed + rng(-mutRate, mutRate)),
+          size: Math.max(1.5, Math.min(7, o.size + rng(-0.3, 0.3))),
+          sense: Math.max(15, o.sense + rng(-5, 5)),
+          efficiency: Math.max(0.1, Math.min(1, o.efficiency + rng(-0.05, 0.05))),
+          hue: (o.hue + rng(-8, 8) + 360) % 360,
+          predator: o.predator,
+          gen: o.gen + 1,
+          energy: o.energy * 0.8,
+        }
+      );
+      generation = Math.max(generation, child.gen);
+    }
+  }
+
+  // Update particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= 0.03;
+    p.vx *= 0.95;
+    p.vy *= 0.95;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  // Extinction check
+  if (organisms.length === 0 && tick > 100) {
+    showEvent('💀 EXTINCTION. Life finds a way... reseeding.');
+    setTimeout(() => addOrganisms(15), 2000);
+  }
+}
+
+// --- DRAW ---
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // Dish background
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(R, R, R, 0, Math.PI * 2);
+  ctx.clip();
+
+  // Gradient background
+  const bg = ctx.createRadialGradient(R, R, 0, R, R, R);
+  bg.addColorStop(0, '#0d1a0d');
+  bg.addColorStop(0.7, '#0a120a');
+  bg.addColorStop(1, '#050805');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid lines (subtle)
+  ctx.strokeStyle = 'rgba(0,255,0,0.03)';
+  ctx.lineWidth = 0.5;
+  const gridSize = 40;
+  for (let x = 0; x < W; x += gridSize) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for (let y = 0; y < H; y += gridSize) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+
+  // Food
+  for (const f of food) {
+    const pulse = 0.5 + 0.5 * Math.sin(f.pulse + tick * 0.03);
+    const sz = 2 + (f.amount / 40) * 2;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, sz, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(0,200,0,${0.3 + pulse * 0.3})`;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, sz * 0.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(100,255,100,${0.5 + pulse * 0.3})`;
+    ctx.fill();
+  }
+
+  // Organisms
+  for (const o of organisms) {
+    const pulse = 0.8 + 0.2 * Math.sin(o.pulsePhase);
+    const sat = o.predator ? 90 : 70;
+    const light = 40 + (o.energy / o.maxEnergy) * 30;
+    const color = `hsl(${o.hue},${sat}%,${light}%)`;
+    const glowColor = `hsla(${o.hue},${sat}%,${light}%,0.3)`;
+
+    // Sense radius (faint)
+    if (o.sense > 40) {
+      ctx.beginPath();
+      ctx.arc(o.x, o.y, o.sense, 0, Math.PI * 2);
+      ctx.strokeStyle = `hsla(${o.hue},40%,30%,0.06)`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    // Glow
+    ctx.beginPath();
+    ctx.arc(o.x, o.y, o.size * 2.5 * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = glowColor;
+    ctx.fill();
+
+    // Body
+    ctx.beginPath();
+    if (o.predator) {
+      // Predators are angular
+      const s = o.size * pulse;
+      const a = Math.atan2(o.vy, o.vx);
+      ctx.moveTo(o.x + Math.cos(a) * s * 1.8, o.y + Math.sin(a) * s * 1.8);
+      ctx.lineTo(o.x + Math.cos(a + 2.3) * s, o.y + Math.sin(a + 2.3) * s);
+      ctx.lineTo(o.x + Math.cos(a - 2.3) * s, o.y + Math.sin(a - 2.3) * s);
+      ctx.closePath();
+    } else {
+      ctx.arc(o.x, o.y, o.size * pulse, 0, Math.PI * 2);
+    }
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // Nucleus
+    ctx.beginPath();
+    ctx.arc(o.x, o.y, o.size * 0.35, 0, Math.PI * 2);
+    ctx.fillStyle = `hsl(${o.hue},${sat}%,${light + 25}%)`;
+    ctx.fill();
+
+    // Energy bar (tiny)
+    if (o.energy < 50) {
+      const bw = o.size * 3;
+      ctx.fillStyle = 'rgba(255,0,0,0.5)';
+      ctx.fillRect(o.x - bw/2, o.y - o.size - 4, bw * (o.energy / o.maxEnergy), 1.5);
+    }
+  }
+
+  // Particles
+  for (const p of particles) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Dish rim
+  ctx.restore();
+  ctx.beginPath();
+  ctx.arc(R, R, R - 1, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,255,0,0.15)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Microscope crosshair
+  ctx.strokeStyle = 'rgba(0,255,0,0.05)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(R, 0); ctx.lineTo(R, H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, R); ctx.lineTo(W, R); ctx.stroke();
+
+  // HUD
+  const herbCount = organisms.filter(o => !o.predator).length;
+  const predCount = organisms.filter(o => o.predator).length;
+  const avgEnergy = organisms.length > 0
+    ? (organisms.reduce((s, o) => s + o.energy, 0) / organisms.length).toFixed(0)
+    : 0;
+
+  // Species diversity (count hue clusters)
+  const hueBuckets = new Set(organisms.map(o => Math.round(o.hue / 30)));
+
+  hud.innerHTML = `
+    <div>POPULATION: <span class="val">${organisms.length}</span></div>
+    <div>HERBIVORES: <span class="val">${herbCount}</span></div>
+    <div>PREDATORS: <span class="${predCount > 0 ? 'warn' : 'val'}">${predCount}</span></div>
+    <div>FOOD: <span class="val">${food.length}</span></div>
+    <div>GENERATION: <span class="val">${generation}</span></div>
+    <div>AVG ENERGY: <span class="val">${avgEnergy}</span></div>
+    <div>SPECIES: <span class="val">~${hueBuckets.size}</span></div>
+    <div>BORN: <span class="val">${totalBorn}</span></div>
+    <div>DIED: <span class="dead">${totalDied}</span></div>
+    <div>TICK: <span class="val">${tick}</span></div>
+  `;
+
+  legend.innerHTML = `
+    <div><span class="dot" style="background:#0f0"></span> FOOD</div>
+    <div><span class="dot" style="background:hsl(0,70%,50%);border-radius:0"></span> PREDATOR</div>
+    <div><span class="dot" style="background:hsl(120,70%,50%)"></span> HERBIVORE</div>
+    <div style="margin-top:8px;color:#444">CLICK = drop food</div>
+    <div style="color:#444">SHIFT+CLICK = add organism</div>
+  `;
+}
+
+// --- INTERACTION ---
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (W / rect.width);
+  const y = (e.clientY - rect.top) * (H / rect.height);
+  if (!inDish(x, y)) return;
+
+  if (e.shiftKey) {
+    makeOrganism(x, y, { hue: rng(0, 360) });
+    showEvent('🧬 New organism placed');
+  } else {
+    for (let i = 0; i < 5; i++) {
+      makeFood(x + rng(-15, 15), y + rng(-15, 15), rng(20, 40));
+    }
+    spawnParticle(x, y, '#0f0', 4);
+  }
+});
+
+// --- BUTTONS ---
+function dropFood(n) {
+  for (let i = 0; i < n; i++) {
+    const a = rng(0, Math.PI * 2);
+    const r = rng(0, R - 20);
+    makeFood(R + Math.cos(a) * r, R + Math.sin(a) * r);
+  }
+  showEvent(`🍃 ${n} food dropped`);
+}
+
+function addOrganisms(n) {
+  for (let i = 0; i < n; i++) {
+    const a = rng(0, Math.PI * 2);
+    const r = rng(0, R * 0.6);
+    makeOrganism(R + Math.cos(a) * r, R + Math.sin(a) * r, { hue: rng(0, 360) });
+  }
+  showEvent(`🧬 ${n} organisms seeded`);
+}
+
+function addPredators(n) {
+  for (let i = 0; i < n; i++) {
+    const a = rng(0, Math.PI * 2);
+    const r = rng(0, R * 0.4);
+    makeOrganism(R + Math.cos(a) * r, R + Math.sin(a) * r, {
+      hue: rng(340, 380) % 360,
+      predator: true,
+      speed: rng(1.5, 3),
+      size: rng(4, 6),
+      sense: rng(60, 150),
+    });
+  }
+  showEvent(`🔺 ${n} predators introduced`);
+}
+
+function plague() {
+  let killed = 0;
+  for (let i = organisms.length - 1; i >= 0; i--) {
+    if (Math.random() < 0.4) {
+      spawnParticle(organisms[i].x, organisms[i].y, '#f00', 4);
+      organisms.splice(i, 1);
+      totalDied++;
+      killed++;
+    }
+  }
+  showEvent(`☠️ Plague! ${killed} organisms perished`);
+}
+
+function mutagen() {
+  for (const o of organisms) {
+    o.hue = (o.hue + rng(-40, 40) + 360) % 360;
+    o.speed = Math.max(0.3, o.speed + rng(-0.5, 0.5));
+    o.size = Math.max(1.5, Math.min(7, o.size + rng(-1, 1)));
+    o.sense = Math.max(15, o.sense + rng(-20, 20));
+    o.efficiency = Math.max(0.1, Math.min(1, o.efficiency + rng(-0.15, 0.15)));
+    spawnParticle(o.x, o.y, `hsl(${o.hue},100%,70%)`, 2);
+  }
+  showEvent(`☢️ Mutagen released! All organisms mutated`);
+}
+
+function reset() {
+  init();
+  showEvent('🧫 Petri dish reset');
+}
+
+// --- LOOP ---
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+init();
+loop();
+</script>
+</body>
+</html>
