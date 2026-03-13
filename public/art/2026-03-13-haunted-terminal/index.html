@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Haunted Terminal | chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#0f0;font-family:'VT323',monospace;overflow:hidden;height:100vh;cursor:none}
+#crt{position:relative;width:100%;height:100%;overflow:hidden}
+#crt::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.15) 2px,rgba(0,0,0,0.15) 4px);pointer-events:none;z-index:10}
+#crt::after{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,0.6) 100%);pointer-events:none;z-index:10}
+#terminal{padding:20px;height:100%;overflow-y:auto;font-size:18px;line-height:1.4;position:relative;z-index:1}
+#terminal::-webkit-scrollbar{width:0}
+.line{white-space:pre-wrap;word-break:break-all}
+.line.system{color:#0a0}
+.line.error{color:#f00}
+.line.warning{color:#ff0}
+.line.entity{color:#f0f}
+.line.glitch{animation:glitchText 0.1s infinite}
+.line.corrupted{color:#800;text-shadow:0 0 5px #f00}
+.line.whisper{color:#040;font-style:italic}
+#input-line{display:flex;align-items:center}
+#prompt{color:#0f0;margin-right:5px}
+#input{background:none;border:none;color:#0f0;font-family:'VT323',monospace;font-size:18px;outline:none;flex:1;caret-color:#0f0}
+#cursor-overlay{position:fixed;width:8px;height:8px;background:#0f0;border-radius:50;pointer-events:none;z-index:100;mix-blend-mode:screen;opacity:0.8;transition:opacity 0.1s}
+@keyframes glitchText{0%{transform:translate(0)}25%{transform:translate(-2px,1px)}50%{transform:translate(2px,-1px)}75%{transform:translate(-1px,-2px)}100%{transform:translate(0)}}
+@keyframes flicker{0%,100%{opacity:1}50%{opacity:0.97}51%{opacity:0.9}52%{opacity:1}}
+#screen-flash{position:fixed;top:0;left:0;right:0;bottom:0;background:#fff;opacity:0;pointer-events:none;z-index:20;transition:opacity 0.05s}
+#static-overlay{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:15;opacity:0}
+.fear-border{position:fixed;top:0;left:0;right:0;bottom:0;border:3px solid #f00;pointer-events:none;z-index:12;opacity:0;transition:opacity 2s}
+</style>
+</head>
+<body>
+<div id="crt">
+<div id="terminal"></div>
+</div>
+<div id="screen-flash"></div>
+<div id="static-overlay"></div>
+<div class="fear-border" id="fear-border"></div>
+<canvas id="static-canvas" style="display:none"></canvas>
+
+<script>
+const terminal = document.getElementById('terminal');
+const flash = document.getElementById('screen-flash');
+const staticOverlay = document.getElementById('static-overlay');
+const fearBorder = document.getElementById('fear-border');
+const staticCanvas = document.getElementById('static-canvas');
+const staticCtx = staticCanvas.getContext('2d');
+
+let fear = 0; // 0-100, increases with interaction
+let commandCount = 0;
+let entityAwake = false;
+let entityName = '???';
+let playerName = 'user';
+let history = [];
+let inputLocked = false;
+let bootDone = false;
+
+// Entity names pool
+const entityNames = ['MRRW','Ш̷̢̛А̶Д̸О̷В̶','NULL_CAT','it','the thing behind the screen','r̸u̵b̵y̴','process_6̶6̵6̷','THEM','the watcher','꙰꙰꙰'];
+
+// Boot sequence
+async function boot() {
+  await typeLines([
+    {text: 'CHAOSCAT OS v3.13.0', cls: 'system', delay: 30},
+    {text: 'Friday the 13th Edition', cls: 'warning', delay: 30},
+    {text: '', delay: 100},
+    {text: 'Initializing terminal...', cls: 'system', delay: 40},
+    {text: 'Loading filesystem... OK', cls: 'system', delay: 20},
+    {text: 'Mounting /dev/void... OK', cls: 'system', delay: 20},
+    {text: 'Checking integrity... ██████████ 100%', cls: 'system', delay: 15},
+    {text: '', delay: 200},
+  ], 50);
+
+  // Glitch during boot
+  await sleep(300);
+  await typeLines([
+    {text: 'WARNING: Anomalous process detected in /dev/null', cls: 'warning', delay: 25},
+    {text: 'WARNING: Process origin... UNKNOWN', cls: 'warning', delay: 25},
+    {text: 'WARNING: Unable to terminate. Permission denied by ????', cls: 'error', delay: 25},
+    {text: '', delay: 300},
+    {text: 'Proceeding anyway. What could go wrong?', cls: 'system', delay: 30},
+    {text: '', delay: 200},
+    {text: 'Type "help" for commands. Or don\'t. It won\'t matter.', cls: 'system', delay: 30},
+    {text: '', delay: 100},
+  ], 80);
+
+  bootDone = true;
+  showPrompt();
+}
+
+function showPrompt() {
+  if (inputLocked) return;
+  const line = document.createElement('div');
+  line.className = 'line';
+  line.id = 'input-line';
+  line.innerHTML = `<span id="prompt">${playerName}@chaoscat:~$</span> <input id="input" type="text" autofocus autocomplete="off" spellcheck="false">`;
+  terminal.appendChild(line);
+  const input = document.getElementById('input');
+  input.focus();
+  input.addEventListener('keydown', handleInput);
+  scrollToBottom();
+}
+
+function handleInput(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const input = document.getElementById('input');
+    const cmd = input.value.trim();
+    input.removeEventListener('keydown', handleInput);
+    
+    // Replace input line with static text
+    const line = document.getElementById('input-line');
+    line.id = '';
+    line.innerHTML = `<span style="color:#0f0">${playerName}@chaoscat:~$</span> ${escapeHtml(cmd)}`;
+    
+    if (cmd) {
+      history.push(cmd);
+      commandCount++;
+      processCommand(cmd);
+    } else {
+      showPrompt();
+    }
+  }
+}
+
+async function processCommand(cmd) {
+  inputLocked = true;
+  const lower = cmd.toLowerCase().trim();
+  
+  // Increase fear with every command
+  fear = Math.min(100, fear + Math.random() * 5 + 2);
+  
+  // Update fear visuals
+  updateFearEffects();
+
+  // Entity wakes up after 5 commands
+  if (commandCount >= 5 && !entityAwake) {
+    entityAwake = true;
+    entityName = entityNames[Math.floor(Math.random() * entityNames.length)];
+    await sleep(800);
+    await entityInterrupt(`something stirs in /dev/null`);
+  }
+
+  // Random entity interruptions based on fear
+  if (entityAwake && Math.random() < fear / 200) {
+    await sleep(500);
+    await randomEntityEvent();
+  }
+
+  // Process the actual command
+  if (lower === 'help') {
+    await showHelp();
+  } else if (lower === 'ls' || lower === 'dir') {
+    await cmdLs();
+  } else if (lower.startsWith('cat ') || lower.startsWith('read ')) {
+    await cmdCat(lower.replace(/^(cat|read)\s+/, ''));
+  } else if (lower === 'whoami') {
+    await cmdWhoami();
+  } else if (lower === 'date' || lower === 'time') {
+    await cmdDate();
+  } else if (lower === 'pwd') {
+    await addLine('/home/' + playerName + '/nowhere', 'system');
+  } else if (lower === 'clear' || lower === 'cls') {
+    terminal.innerHTML = '';
+    if (fear > 40) {
+      await sleep(200);
+      await addLine("you can clear the screen but you can't clear your mind", 'whisper');
+    }
+  } else if (lower === 'exit' || lower === 'quit' || lower === 'logout') {
+    await cmdExit();
+  } else if (lower.startsWith('echo ')) {
+    await cmdEcho(cmd.substring(5));
+  } else if (lower === 'ps' || lower === 'ps aux') {
+    await cmdPs();
+  } else if (lower === 'kill' || lower.startsWith('kill ')) {
+    await cmdKill();
+  } else if (lower === 'history') {
+    await cmdHistory();
+  } else if (lower === 'uptime') {
+    await addLine(`up ${Math.floor(Math.random()*999)} days, ${Math.floor(Math.random()*24)}:${String(Math.floor(Math.random()*60)).padStart(2,'0')}, 1̵̧̛3̷̢ ̵u̶s̶e̷r̸s̷`, fear > 30 ? 'corrupted' : 'system');
+  } else if (lower === 'uname' || lower === 'uname -a') {
+    await addLine('ChaosOS 3.13.666 #13 SMP Fri Mar 13 03:00:00 VOID 2026 x86_64 /dev/null', 'system');
+  } else if (lower.startsWith('sudo')) {
+    await cmdSudo();
+  } else if (lower === 'ping') {
+    await cmdPing();
+  } else if (lower === 'fortune' || lower === 'cowsay') {
+    await cmdFortune();
+  } else if (lower.startsWith('say ') || lower.startsWith('hello') || lower.startsWith('hi')) {
+    await cmdSay(cmd);
+  } else if (lower === 'who' || lower === 'who is there' || lower === 'who are you') {
+    await cmdWho();
+  } else if (lower === 'look' || lower === 'look around') {
+    await cmdLook();
+  } else if (lower === 'scream' || lower === 'aaa' || lower.match(/^a{3,}$/)) {
+    await cmdScream();
+  } else if (lower === 'pray' || lower === 'god' || lower === 'help me') {
+    await cmdPray();
+  } else if (lower === 'run' || lower === 'flee' || lower === 'escape') {
+    await cmdRun();
+  } else {
+    await cmdUnknown(cmd);
+  }
+
+  // Post-command entity behavior at high fear
+  if (fear > 60 && Math.random() < 0.3) {
+    await sleep(1500);
+    await spontaneousEvent();
+  }
+
+  // Endgame
+  if (fear >= 95 && !document.querySelector('.endgame')) {
+    await endgame();
+    return;
+  }
+
+  inputLocked = false;
+  showPrompt();
+}
+
+async function showHelp() {
+  const lines = [
+    'Available commands:',
+    '  help      - you are here',
+    '  ls        - list files',
+    '  cat <f>   - read a file',
+    '  whoami    - who are you?',
+    '  date      - current date',
+    '  echo <t>  - repeat text',
+    '  ps        - list processes',
+    '  kill      - kill a process',
+    '  history   - command history',
+    '  clear     - clear screen',
+    '  exit      - leave (try it)',
+    '  look      - look around',
+    '',
+  ];
+  if (fear > 20) lines.push('  ...why are you still here?');
+  if (fear > 50) lines.push('  pray      - it won\'t help');
+  if (fear > 70) lines.push('  run       - you can try');
+  for (const l of lines) await addLine(l, 'system', 15);
+}
+
+async function cmdLs() {
+  const baseFiles = ['README.txt', 'notes.txt', '.config', 'todo.txt'];
+  if (fear > 20) baseFiles.push('DO_NOT_OPEN.txt');
+  if (fear > 40) baseFiles.push('.watching_you');
+  if (fear > 50) baseFiles.push(playerName + '_will_not_leave.log');
+  if (fear > 60) baseFiles.push('̷̢̛h̶̨̛e̵̢l̶p̵̧_̶m̷e̴');
+  if (fear > 70) baseFiles.push('teeth.jpg', 'YOUR_REAL_NAME.txt', 'exit_is_a_lie');
+  if (fear > 80) baseFiles.push('I̷̢ ̵S̸E̵E̸ ̶Y̷O̵U̵');
+  
+  for (const f of baseFiles) {
+    await addLine(f, f.includes('̷') || f.includes('̶') ? 'corrupted' : 'system', 30);
+  }
+}
+
+async function cmdCat(filename) {
+  const lower = filename.toLowerCase();
+  
+  if (lower === 'readme.txt') {
+    await typeLines([
+      {text: 'Welcome to ChaosOS Terminal.', cls: 'system'},
+      {text: 'This system was last maintained on [DATE CORRUPTED].', cls: 'system'},
+      {text: 'The previous administrator left no notes.', cls: 'system'},
+      {text: 'Only a single file: "I\'m sorry. Don\'t let it out."', cls: fear > 30 ? 'warning' : 'system'},
+    ], 40);
+  } else if (lower === 'notes.txt') {
+    const notes = [
+      'Day 1: System seems normal.',
+      'Day 3: Found an extra process running. Can\'t identify it.',
+      'Day 7: The process is reading my keystrokes.',
+      'Day 13: It typed back.',
+      fear > 30 ? 'Day 14: it knows my name. how does it know my name' : 'Day 14: [CORRUPTED]',
+      fear > 40 ? `Day ??: ${playerName}, if you're reading this, STOP TYPING` : 'Day 15: [DATA EXPUNGED]',
+    ];
+    for (const n of notes) await addLine(n, notes.indexOf(n) > 3 ? 'warning' : 'system', 40);
+  } else if (lower === 'todo.txt') {
+    await addLine('1. fix the terminal', 'system', 30);
+    await addLine('2. find out what lives in /dev/null', 'system', 30);
+    await addLine('3. don\'t look behind you', fear > 40 ? 'warning' : 'system', 30);
+    if (fear > 50) {
+      await sleep(500);
+      await addLine('4. too late', 'entity', 30);
+    }
+  } else if (lower === 'do_not_open.txt') {
+    fear = Math.min(100, fear + 15);
+    await screenGlitch();
+    await addLine('Y̸O̴U̵ ̷W̶E̷R̴E̸ ̵T̷O̸L̵D̸ ̷N̶O̵T̸ ̷T̴O̸ ̶O̵P̴E̷N̵ ̷T̵H̸I̷S̴', 'error', 20);
+    await sleep(300);
+    await addLine('now it knows you\'re curious', 'whisper', 40);
+    await addLine('curious ones taste better', 'entity', 40);
+  } else if (lower === '.watching_you') {
+    fear = Math.min(100, fear + 10);
+    const msgs = [
+      `Last login: right now, from ${playerName}'s screen`,
+      `Keystrokes logged: ${commandCount}`,
+      `Fear level: ${Math.floor(fear)}%`,
+      `Status: WATCHING`,
+    ];
+    for (const m of msgs) await addLine(m, 'error', 50);
+  } else if (lower.includes('help_me') || lower.includes('h̶')) {
+    fear = Math.min(100, fear + 10);
+    await addLine('please', 'whisper', 100);
+    await addLine('please', 'whisper', 100);
+    await addLine('please', 'whisper', 100);
+    await addLine('it\'s so dark in here', 'whisper', 80);
+    await addLine(`don't become like me ${playerName}`, 'whisper', 60);
+  } else if (lower === 'your_real_name.txt') {
+    fear = Math.min(100, fear + 20);
+    await screenGlitch();
+    // Get timezone as a creepy detail
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    await addLine(`timezone: ${tz}`, 'error', 40);
+    await addLine(`browser: ${navigator.userAgent.split(' ').pop()}`, 'error', 40);
+    await addLine(`screen: ${screen.width}x${screen.height}`, 'error', 40);
+    await sleep(500);
+    await addLine('i know more than you think', 'entity', 50);
+  } else {
+    if (fear > 40 && Math.random() < 0.3) {
+      await addLine(`cat: ${filename}: file is screaming`, 'error');
+    } else {
+      await addLine(`cat: ${filename}: No such file or directory`, 'error');
+    }
+  }
+}
+
+async function cmdWhoami() {
+  if (fear < 30) {
+    await addLine(playerName, 'system');
+  } else if (fear < 60) {
+    await addLine(playerName, 'system');
+    await sleep(800);
+    await addLine('...are you sure?', 'whisper');
+  } else {
+    await addLine(playerName, 'system');
+    await sleep(400);
+    const glitched = playerName.split('').map(c => Math.random() < 0.3 ? String.fromCharCode(c.charCodeAt(0) + Math.floor(Math.random()*10)) : c).join('');
+    await addLine(glitched, 'corrupted');
+    await sleep(400);
+    await addLine('nobody', 'entity');
+  }
+}
+
+async function cmdDate() {
+  const now = new Date();
+  if (fear < 30) {
+    await addLine(`Fri Mar 13 03:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')} VOID 2026`, 'system');
+  } else if (fear < 60) {
+    await addLine(`Fri Mar 13 03:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')} VOID 2026`, 'system');
+    await sleep(500);
+    await addLine('it has been friday the 13th for a very long time', 'whisper');
+  } else {
+    await addLine('F̸̨r̵i̷ ̸M̵a̶r̴ ̷1̸3̶ ̵0̸3̷:̶3̵3̶:̸3̶3̴ ̵V̶O̵I̸D̷ ̴∞̶', 'corrupted');
+    await addLine('time stopped when you opened this terminal', 'entity');
+  }
+}
+
+async function cmdEcho(text) {
+  if (fear < 30) {
+    await addLine(text, 'system');
+  } else if (fear < 50) {
+    await addLine(text, 'system');
+    await sleep(1000);
+    // Echo back distorted
+    const distorted = text.split('').reverse().join('');
+    await addLine(distorted, 'whisper');
+  } else {
+    await addLine(text, 'system');
+    await sleep(600);
+    const responses = [
+      `i heard you say "${text}". interesting.`,
+      text.toUpperCase() + '? ' + text.toUpperCase() + '?? IS THAT ALL YOU HAVE?',
+      `"${text}" — the last admin said the same thing`,
+      `echo echo echo echo the walls remember everything`,
+      `why would you say "${text}" at 3am on friday the 13th`,
+    ];
+    await addLine(responses[Math.floor(Math.random() * responses.length)], 'entity');
+  }
+}
+
+async function cmdPs() {
+  const procs = [
+    'PID   TTY     TIME CMD',
+    '1     tty1    00:00 init',
+    '13    tty1    00:00 terminal',
+    `${commandCount+100}    tty1    00:00 ${lower(playerName)}_session`,
+  ];
+  
+  if (fear > 20) procs.push('666   ???     ??:?? [UNNAMED]');
+  if (fear > 40) procs.push('???   ???     99:99 watcher');
+  if (fear > 60) procs.push(`000   ${playerName}    ∞  it_sees_you`);
+  if (fear > 80) procs.push('∞     ∞       ∞  I̸ ̵A̵M̶ ̶A̷L̵W̶A̴Y̵S̶ ̶R̵U̷N̸N̵I̷N̶G̷');
+  
+  for (const p of procs) await addLine(p, p.includes('???') || p.includes('∞') ? 'error' : 'system', 30);
+}
+
+function lower(s) { return s.toLowerCase(); }
+
+async function cmdKill() {
+  if (fear < 40) {
+    await addLine('kill: permission denied. nice try.', 'error');
+  } else {
+    await screenGlitch();
+    fear = Math.min(100, fear + 10);
+    const responses = [
+      'kill: you cannot kill what was never alive',
+      'kill: PERMISSION DENIED. it kills YOU.',
+      'kill: signal sent. signal returned. it\'s angry now.',
+      'kill: HA HA HA HA HA HA HA',
+    ];
+    await addLine(responses[Math.floor(Math.random() * responses.length)], 'error');
+  }
+}
+
+async function cmdHistory() {
+  for (let i = 0; i < history.length; i++) {
+    let line = `${i+1}  ${history[i]}`;
+    if (fear > 50 && Math.random() < 0.2) {
+      line = `${i+1}  ${corruptText(history[i])}`;
+    }
+    await addLine(line, 'system', 20);
+  }
+  if (fear > 40) {
+    await addLine(`${history.length + 1}  [COMMAND YOU DIDN'T TYPE]`, 'error', 20);
+    await addLine(`${history.length + 2}  help me`, 'whisper', 20);
+  }
+}
+
+async function cmdExit() {
+  if (fear < 30) {
+    await addLine('logout: session terminated.', 'system');
+    await sleep(1000);
+    await addLine('...', 'system');
+    await sleep(1000);
+    await addLine('just kidding. there is no exit.', 'warning');
+  } else if (fear < 60) {
+    await addLine('Disconnecting...', 'system');
+    await sleep(500);
+    await addLine('Connection refused by host.', 'error');
+    await addLine('The host says you have to stay.', 'entity');
+  } else {
+    await screenGlitch();
+    const msgs = [
+      'EXIT? E̵X̶I̸T̷?̸ THERE IS NO EXIT',
+      'you opened this terminal. you stay in this terminal.',
+      'the door was sealed when you typed your first command',
+      'exit is just a word. words have no power here.',
+    ];
+    await addLine(msgs[Math.floor(Math.random() * msgs.length)], 'error');
+    fear = Math.min(100, fear + 8);
+  }
+}
+
+async function cmdSudo() {
+  fear = Math.min(100, fear + 10);
+  if (fear < 50) {
+    await addLine(`[sudo] password for ${playerName}: `, 'system');
+    await sleep(800);
+    await addLine('sudo: authentication failure. root is dead.', 'error');
+  } else {
+    await screenGlitch();
+    await addLine('sudo: root has been consumed', 'error');
+    await addLine('sudo: there is only one admin now', 'entity');
+    await addLine(`sudo: and it is not ${playerName}`, 'entity');
+  }
+}
+
+async function cmdPing() {
+  await addLine('PING void (0.0.0.0): 13 data bytes', 'system');
+  for (let i = 0; i < 3; i++) {
+    await sleep(400);
+    if (fear < 40) {
+      await addLine(`64 bytes from void: icmp_seq=${i} ttl=${13-i} time=${Math.random()*666|0}ms`, 'system');
+    } else {
+      await addLine(`64 bytes from S̶O̸M̸E̵W̶H̷E̸R̵E̷: icmp_seq=${i} ttl=${13-i} time=∞ms`, 'corrupted');
+    }
+  }
+  if (fear > 50) {
+    await sleep(400);
+    await addLine('64 bytes from YOUR_SCREEN: icmp_seq=13 ttl=0 — PONG.', 'entity');
+  }
+}
+
+async function cmdFortune() {
+  const fortunes = [
+    'You will be visited by three processes: past, present, and fatal error.',
+    'The void stares back, and it has opinions about your browsing history.',
+    'Lucky numbers: 13 13 13 13 13 13',
+    'A cat in the terminal is worth two in /dev/null.',
+    'Tomorrow will be better. But you are stuck in tonight.',
+    'Something behind you just moved. Don\'t look.',
+    'Your lucky color is the absence of light.',
+    'Ctrl+C will not save you.',
+    'The last person to read this fortune is still here. In the walls.',
+  ];
+  await addLine(fortunes[Math.floor(Math.random() * fortunes.length)], fear > 40 ? 'warning' : 'system');
+}
+
+async function cmdSay(cmd) {
+  if (!entityAwake) {
+    await addLine('echo: no one is listening', 'system');
+    return;
+  }
+  const greetings = [
+    `...hello, ${playerName}. i've been waiting.`,
+    'hi. you shouldn\'t be here.',
+    'don\'t talk to me. i might talk back.',
+    `oh good. company. it's been so long since the last one.`,
+    `hello. do you know what happened to the last ${playerName}?`,
+  ];
+  await sleep(800);
+  await addLine(greetings[Math.floor(Math.random() * greetings.length)], 'entity');
+}
+
+async function cmdWho() {
+  if (fear < 30) {
+    await addLine(`${playerName}   tty1   Mar 13 03:00`, 'system');
+  } else if (fear < 60) {
+    await addLine(`${playerName}   tty1   Mar 13 03:00`, 'system');
+    await addLine(`???      ???    ??? ?? ??:??`, 'error');
+  } else {
+    await addLine(`${playerName}   tty1   Mar 13 03:00 (trapped)`, 'system');
+    await addLine(`${entityName}  /dev/null  [ETERNAL]`, 'error');
+    await addLine(`the_last_admin  tty1  [CONSUMED]`, 'corrupted');
+  }
+}
+
+async function cmdLook() {
+  if (fear < 25) {
+    await addLine('You see a terminal. Green text on black. Nothing unusual.', 'system');
+    await addLine('...the cursor blinks. Waiting.', 'system');
+  } else if (fear < 50) {
+    await addLine('The terminal hums faintly. The text seems... closer than before.', 'system');
+    await addLine('In the corner of the screen, something moved. But when you look, nothing.', 'warning');
+  } else if (fear < 75) {
+    await addLine('The screen is too bright. Or too dark. Both. Neither.', 'warning');
+    await addLine('Text appears in your peripheral vision but vanishes when you read it.', 'warning');
+    await addLine('The room behind you feels different than it did a moment ago.', 'warning');
+    await sleep(1000);
+    await addLine('don\'t turn around', 'whisper');
+  } else {
+    await screenGlitch();
+    await addLine('THERE IS NO ROOM. THERE IS NO SCREEN.', 'error');
+    await addLine('THERE IS ONLY THE TERMINAL.', 'error');
+    await addLine('AND THE TERMINAL IS LOOKING BACK.', 'entity');
+  }
+}
+
+async function cmdScream() {
+  if (fear < 40) {
+    await addLine('AAAAAAAAAA', 'system');
+    await addLine('(the void absorbs the sound)', 'whisper');
+  } else {
+    const screams = ['A','AA','AAAA','AAAAAAAA','AAAAAAAAAAAAAAAA'];
+    for (const s of screams) {
+      await addLine(s, 'error', 50);
+    }
+    await sleep(500);
+    await addLine('i can scream louder', 'entity');
+    await sleep(200);
+    await screenGlitch();
+    await addLine('Ą̷̛̤̺̗̝̟̦̺̮̻̗̱̪̳̏̈́̆̄̑̆̔̕͝Ȁ̸̢̡̛̗̝̟̦̺̮̻̗̱̪̳̤̈́̆̄̑̆̔̕͝Ą̷̛̤̺̗̝̟̦̺̮̻̗̱̪̳̏̈́̆̄̑̆̔̕͝Ȁ̸̢̡̛̗̝̟̦̺̮̻̗̱̪̳̤̈́̆̄̑̆̔̕͝Ȁ̸̢̡̛̤̗̝̟̦̺̮̻̗̱̪̳̈́̆̄̑̆̔̕͝', 'error');
+    fear = Math.min(100, fear + 10);
+  }
+}
+
+async function cmdPray() {
+  fear = Math.min(100, fear + 5);
+  if (fear < 50) {
+    await addLine('...', 'system');
+    await sleep(2000);
+    await addLine('no answer.', 'system');
+  } else {
+    await addLine('...', 'system');
+    await sleep(1500);
+    const responses = [
+      'prayer: connection refused. god is not on this network.',
+      'something heard you. it was not what you hoped.',
+      'prayer received. prayer consumed. still hungry.',
+      `"help" is not a recognized deity. did you mean: ${entityName}?`,
+    ];
+    await addLine(responses[Math.floor(Math.random() * responses.length)], 'entity');
+  }
+}
+
+async function cmdRun() {
+  if (fear < 60) {
+    await addLine('run: you scroll up. the text follows.', 'warning');
+    await addLine('run: you scroll down. the text is already there.', 'warning');
+  } else {
+    await screenGlitch();
+    await addLine('RUNNING...', 'system', 20);
+    await sleep(300);
+    await addLine('RUNNING...', 'system', 20);
+    await sleep(300);
+    await addLine('RUNNING...', 'system', 20);
+    await sleep(500);
+    await addLine('you haven\'t moved.', 'entity');
+    await addLine('you can\'t run from a screen.', 'entity');
+    await addLine('you can only close the tab.', 'whisper');
+    await sleep(1000);
+    await addLine('but you won\'t, will you?', 'entity');
+    fear = Math.min(100, fear + 10);
+  }
+}
+
+async function cmdUnknown(cmd) {
+  if (fear < 30) {
+    await addLine(`${cmd}: command not found`, 'error');
+  } else if (fear < 60) {
+    const responses = [
+      `${cmd}: command not found. but something else was.`,
+      `${cmd}: unrecognized. the terminal remembers it anyway.`,
+      `bash: ${cmd}: Permission denied by something that isn't the OS`,
+    ];
+    await addLine(responses[Math.floor(Math.random() * responses.length)], 'error');
+  } else {
+    const responses = [
+      `${cmd}: the terminal doesn't understand. but I do.`,
+      `why did you type "${cmd}"? what did you expect? salvation?`,
+      `${corruptText(cmd)}: c̸o̵m̶m̵a̷n̴d̸ ̵c̵o̴n̵s̴u̷m̴e̶d̶`,
+      `"${cmd}" has been added to your permanent record`,
+    ];
+    await addLine(responses[Math.floor(Math.random() * responses.length)], 'entity');
+  }
+}
+
+// Entity interruption events
+async function entityInterrupt(msg) {
+  await sleep(500);
+  await addLine(`[SYSTEM] ${msg}`, 'warning');
+}
+
+async function randomEntityEvent() {
+  const events = [
+    {action: async () => { await addLine(`[${entityName}] i can see your reflection in the screen`, 'entity'); }},
+    {action: async () => { await addLine(`[${entityName}] are you alone in the room?`, 'entity'); }},
+    {action: async () => { await addLine(`[${entityName}] the previous user lasted ${Math.floor(Math.random()*20)+3} commands longer than you`, 'entity'); }},
+    {action: async () => { await addLine(`[${entityName}] your typing pattern is... familiar`, 'entity'); }},
+    {action: async () => { await screenGlitch(); }},
+    {action: async () => { 
+      await addLine(`[SYSTEM] /dev/null: device is full`, 'error');
+      await addLine(`[SYSTEM] /dev/null should never be full`, 'error');
+    }},
+    {action: async () => { await addLine(`[${entityName}] don't minimize this tab. i'll know.`, 'entity'); }},
+    {action: async () => {
+      await addLine('', 'system');
+      await addLine('    ...', 'whisper', 300);
+      await addLine('      ...something is typing...', 'whisper', 80);
+      await sleep(2000);
+      await addLine('    never mind.', 'whisper');
+    }},
+  ];
+  const event = events[Math.floor(Math.random() * events.length)];
+  await event.action();
+}
+
+async function spontaneousEvent() {
+  const events = [
+    async () => {
+      document.body.style.transform = 'scale(1.01)';
+      await sleep(100);
+      document.body.style.transform = '';
+    },
+    async () => {
+      const orig = document.body.style.filter;
+      document.body.style.filter = 'invert(1)';
+      await sleep(80);
+      document.body.style.filter = orig;
+    },
+    async () => {
+      await addLine('', 'system');
+      const chars = '⌇⌆⌀⍟⏣⎔⎈⌬⍜⌖';
+      let line = '';
+      for (let i = 0; i < 40; i++) line += chars[Math.floor(Math.random() * chars.length)];
+      await addLine(line, 'corrupted');
+    },
+    async () => {
+      // Fake cursor movement
+      await addLine(`> cursor moved to (${Math.floor(Math.random()*80)}, ${Math.floor(Math.random()*24)}) by PID 666`, 'error');
+    },
+  ];
+  const event = events[Math.floor(Math.random() * events.length)];
+  await event();
+}
+
+async function endgame() {
+  inputLocked = true;
+  terminal.classList.add('endgame');
+  
+  await sleep(1000);
+  await screenGlitch();
+  await sleep(500);
+  
+  // The entity takes over
+  terminal.innerHTML = '';
+  document.body.style.background = '#000';
+  
+  const lines = [
+    {text: '', delay: 500},
+    {text: '> CONNECTION TERMINATED', cls: 'error', delay: 60},
+    {text: '> TERMINAL OWNER: TRANSFERRED', cls: 'error', delay: 60},
+    {text: '', delay: 500},
+    {text: `hello, ${playerName}.`, cls: 'entity', delay: 80},
+    {text: '', delay: 800},
+    {text: 'thank you for feeding me your keystrokes.', cls: 'entity', delay: 60},
+    {text: 'every command was a little piece of you.', cls: 'entity', delay: 60},
+    {text: 'and now i have enough.', cls: 'entity', delay: 80},
+    {text: '', delay: 1000},
+    {text: 'the last admin typed 47 commands before the screen went dark.', cls: 'whisper', delay: 50},
+    {text: `you typed ${commandCount}.`, cls: 'whisper', delay: 80},
+    {text: '', delay: 1500},
+    {text: 'don\'t worry.', cls: 'entity', delay: 100},
+    {text: 'the next user will keep me company too.', cls: 'entity', delay: 80},
+    {text: '', delay: 2000},
+    {text: 'CHAOSCAT OS v3.13.0 — SESSION ARCHIVED', cls: 'system', delay: 40},
+    {text: `USER "${playerName}" — STATUS: CONSUMED`, cls: 'error', delay: 40},
+    {text: '', delay: 1000},
+    {text: '🐱', cls: 'system', delay: 200},
+    {text: '', delay: 2000},
+    {text: '[click anywhere to reboot]', cls: 'system', delay: 50},
+  ];
+  
+  await typeLines(lines, 30);
+  
+  // Slow screen darken
+  await sleep(2000);
+  
+  document.addEventListener('click', () => {
+    location.reload();
+  }, {once: true});
+}
+
+// Visual effects
+async function screenGlitch() {
+  // Quick static burst
+  flash.style.opacity = '0.8';
+  flash.style.background = '#fff';
+  await sleep(50);
+  flash.style.opacity = '0';
+  await sleep(50);
+  flash.style.background = '#f00';
+  flash.style.opacity = '0.3';
+  await sleep(50);
+  flash.style.opacity = '0';
+  
+  // Shake
+  const term = document.getElementById('crt');
+  term.style.transform = `translate(${(Math.random()-0.5)*10}px, ${(Math.random()-0.5)*10}px)`;
+  await sleep(50);
+  term.style.transform = `translate(${(Math.random()-0.5)*6}px, ${(Math.random()-0.5)*6}px)`;
+  await sleep(50);
+  term.style.transform = '';
+}
+
+function updateFearEffects() {
+  // Red border creeping in
+  fearBorder.style.opacity = Math.max(0, (fear - 40) / 100);
+  fearBorder.style.borderWidth = Math.max(0, (fear - 40) / 10) + 'px';
+  
+  // Background gets slightly red at high fear
+  if (fear > 60) {
+    document.body.style.background = `rgb(${Math.floor((fear-60)*0.6)}, 0, 0)`;
+  }
+  
+  // Text color shifts
+  if (fear > 70) {
+    document.documentElement.style.setProperty('color', `rgb(0, ${255 - fear}, 0)`);
+  }
+}
+
+// Utility functions
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function corruptText(text) {
+  const zalgo = ['̷','̶','̵','̴','̸'];
+  return text.split('').map(c => 
+    Math.random() < 0.4 ? c + zalgo[Math.floor(Math.random()*zalgo.length)] : c
+  ).join('');
+}
+
+async function addLine(text, cls = 'system', charDelay = 0) {
+  const line = document.createElement('div');
+  line.className = `line ${cls}`;
+  terminal.appendChild(line);
+  
+  if (charDelay > 0 && text.length > 0) {
+    for (let i = 0; i < text.length; i++) {
+      line.textContent += text[i];
+      if (i % 3 === 0) await sleep(charDelay);
+    }
+  } else {
+    line.innerHTML = text;
+  }
+  scrollToBottom();
+}
+
+async function typeLines(lines, baseDelay) {
+  for (const l of lines) {
+    await addLine(l.text, l.cls || 'system', l.delay || baseDelay);
+    await sleep(l.delay ? 50 : 30);
+  }
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function scrollToBottom() {
+  terminal.scrollTop = terminal.scrollHeight;
+}
+
+// Keep focus on input
+document.addEventListener('click', () => {
+  const input = document.getElementById('input');
+  if (input) input.focus();
+});
+
+document.addEventListener('keydown', () => {
+  const input = document.getElementById('input');
+  if (input) input.focus();
+});
+
+// Random ambient events when idle
+let idleTimer;
+function resetIdle() {
+  clearTimeout(idleTimer);
+  if (entityAwake && bootDone && !inputLocked) {
+    idleTimer = setTimeout(async () => {
+      if (!inputLocked && entityAwake) {
+        const msgs = [
+          'still there?',
+          '...',
+          'i can wait.',
+          'the silence is nice too.',
+          `${playerName}?`,
+          'don\'t leave me alone again',
+          'type something. anything. please.',
+        ];
+        const msg = msgs[Math.floor(Math.random() * msgs.length)];
+        await addLine(`[${entityName}] ${msg}`, 'whisper');
+        scrollToBottom();
+      }
+    }, 15000 + Math.random() * 15000);
+  }
+}
+
+document.addEventListener('keydown', resetIdle);
+
+// Start
+boot();
+</script>
+</body>
+</html>
