@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strange Attractors — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; cursor: crosshair; }
+canvas { display: block; }
+#ui {
+  position: fixed; top: 16px; left: 16px; z-index: 10;
+  color: #aaa; font-size: 12px; pointer-events: none;
+  text-shadow: 0 0 8px rgba(0,0,0,0.8);
+}
+#ui h1 { font-size: 18px; color: #fff; margin-bottom: 4px; letter-spacing: 2px; }
+#ui .sub { color: #666; font-size: 10px; margin-bottom: 12px; }
+#attractor-name { font-size: 14px; color: #0ff; margin-bottom: 2px; }
+#attractor-desc { color: #888; font-size: 10px; max-width: 300px; margin-bottom: 12px; }
+#controls {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 10; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+}
+#controls button {
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  color: #ccc; padding: 6px 14px; font-family: 'Courier New', monospace;
+  font-size: 11px; cursor: pointer; border-radius: 3px; pointer-events: all;
+  transition: all 0.2s;
+}
+#controls button:hover { background: rgba(255,255,255,0.15); color: #fff; }
+#controls button.active { border-color: #0ff; color: #0ff; background: rgba(0,255,255,0.1); }
+#stats {
+  position: fixed; top: 16px; right: 16px; z-index: 10;
+  color: #555; font-size: 10px; text-align: right;
+  pointer-events: none;
+}
+#equation {
+  position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+  z-index: 10; color: #333; font-size: 10px; text-align: center;
+  pointer-events: none; font-style: italic;
+}
+</style>
+</head>
+<body>
+<div id="ui">
+  <h1>STRANGE ATTRACTORS</h1>
+  <div class="sub">chaoscat.win — 2026.03.16</div>
+  <div id="attractor-name"></div>
+  <div id="attractor-desc"></div>
+</div>
+<div id="stats">
+  <div id="particle-count"></div>
+  <div id="iterations"></div>
+</div>
+<div id="equation"></div>
+<div id="controls"></div>
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// --- ATTRACTORS ---
+const attractors = {
+  lorenz: {
+    name: 'Lorenz Attractor',
+    desc: 'The butterfly. Edward Lorenz, 1963. Sensitive dependence on initial conditions — the birth of chaos theory.',
+    eq: 'dx/dt = σ(y-x)   dy/dt = x(ρ-z)-y   dz/dt = xy-βz',
+    params: { sigma: 10, rho: 28, beta: 8/3 },
+    dt: 0.003,
+    scale: 12,
+    offset: [0, 0, -25],
+    step(p, par) {
+      const dx = par.sigma * (p[1] - p[0]);
+      const dy = p[0] * (par.rho - p[2]) - p[1];
+      const dz = p[0] * p[1] - par.beta * p[2];
+      return [dx, dy, dz];
+    },
+    spawn() { return [0.1 + Math.random()*0.5, 0.1 + Math.random()*0.5, 0.1 + Math.random()*0.5]; }
+  },
+  rossler: {
+    name: 'Rössler Attractor',
+    desc: 'Otto Rössler, 1976. A simpler chaos — one scroll spiraling outward, then snapping back.',
+    eq: 'dx/dt = -y-z   dy/dt = x+ay   dz/dt = b+z(x-c)',
+    params: { a: 0.2, b: 0.2, c: 5.7 },
+    dt: 0.005,
+    scale: 18,
+    offset: [0, 0, -5],
+    step(p, par) {
+      const dx = -p[1] - p[2];
+      const dy = p[0] + par.a * p[1];
+      const dz = par.b + p[2] * (p[0] - par.c);
+      return [dx, dy, dz];
+    },
+    spawn() { return [1 + Math.random(), 1 + Math.random(), 1 + Math.random()]; }
+  },
+  aizawa: {
+    name: 'Aizawa Attractor',
+    desc: 'A spinning top of chaos. Spirals that never quite close, tracing a ghostly torus.',
+    eq: 'dx/dt = (z-β)x-δy   dy/dt = δx+(z-β)y   dz/dt = γ+αz-z³/3-(x²+y²)(1+εz)+ζzx³',
+    params: { a: 0.95, b: 0.7, c: 0.6, d: 3.5, e: 0.25, f: 0.1 },
+    dt: 0.003,
+    scale: 100,
+    offset: [0, 0, -0.5],
+    step(p, par) {
+      const x=p[0], y=p[1], z=p[2];
+      const dx = (z - par.b)*x - par.d*y;
+      const dy = par.d*x + (z - par.b)*y;
+      const dz = par.c + par.a*z - z*z*z/3 - (x*x+y*y)*(1+par.e*z) + par.f*z*x*x*x;
+      return [dx, dy, dz];
+    },
+    spawn() { return [0.1, 0, 0]; }
+  },
+  thomas: {
+    name: 'Thomas Attractor',
+    desc: 'René Thomas, 1999. Dissipative chaos — a particle lost in a strange, looping labyrinth.',
+    eq: 'dx/dt = sin(y)-bx   dy/dt = sin(z)-by   dz/dt = sin(x)-bz',
+    params: { b: 0.208186 },
+    dt: 0.02,
+    scale: 60,
+    offset: [0, 0, 0],
+    step(p, par) {
+      const dx = Math.sin(p[1]) - par.b * p[0];
+      const dy = Math.sin(p[2]) - par.b * p[1];
+      const dz = Math.sin(p[0]) - par.b * p[2];
+      return [dx, dy, dz];
+    },
+    spawn() { return [1.1, 1.1, -0.01]; }
+  },
+  halvorsen: {
+    name: 'Halvorsen Attractor',
+    desc: 'Three-fold symmetry. A trefoil knot made of chaos, spinning through itself forever.',
+    eq: 'dx/dt = -ax-4y-4z-y²   dy/dt = -ay-4z-4x-z²   dz/dt = -az-4x-4y-x²',
+    params: { a: 1.89 },
+    dt: 0.003,
+    scale: 14,
+    offset: [0, 0, 0],
+    step(p, par) {
+      const x=p[0], y=p[1], z=p[2];
+      const dx = -par.a*x - 4*y - 4*z - y*y;
+      const dy = -par.a*y - 4*z - 4*x - z*z;
+      const dz = -par.a*z - 4*x - 4*y - x*x;
+      return [dx, dy, dz];
+    },
+    spawn() { return [-1.48, -1.51, 2.04]; }
+  },
+  dadras: {
+    name: 'Dadras Attractor',
+    desc: 'Dadras & Momeni, 2009. A newer chaos — two scrolls twisting like DNA caught in a hurricane.',
+    eq: 'dx/dt = y-px+qyz   dy/dt = ry-xz+z   dz/dt = sxy-ez',
+    params: { p: 3, q: 2.7, r: 1.7, s: 2, e: 9 },
+    dt: 0.003,
+    scale: 16,
+    offset: [0, 0, 0],
+    step(p, par) {
+      const x=p[0], y=p[1], z=p[2];
+      const dx = y - par.p*x + par.q*y*z;
+      const dy = par.r*y - x*z + z;
+      const dz = par.s*x*y - par.e*z;
+      return [dx, dy, dz];
+    },
+    spawn() { return [1.1, 2.1, -2]; }
+  }
+};
+
+// --- COLOR PALETTES ---
+const palettes = {
+  neon: { name: 'NEON', bg: [0,0,0], fn: (t,d) => `hsla(${(t*120+d*2)%360},100%,60%,` },
+  ember: { name: 'EMBER', bg: [5,0,0], fn: (t,d) => `hsla(${(t*20+d*0.5)%60},100%,${50+d*0.1}%,` },
+  ice: { name: 'ICE', bg: [0,2,5], fn: (t,d) => `hsla(${180+(t*30+d*0.3)%60},80%,${55+d*0.1}%,` },
+  void: { name: 'VOID', bg: [2,0,5], fn: (t,d) => `hsla(${270+(t*15+d*0.2)%40},70%,${50+d*0.1}%,` },
+  spectrum: { name: 'SPECTRUM', bg: [0,0,0], fn: (t,d) => `hsla(${(t*60+d*3)%360},90%,55%,` }
+};
+
+// --- STATE ---
+let currentAttractor = 'lorenz';
+let currentPalette = 'neon';
+let particles = [];
+const PARTICLE_COUNT = 800;
+const TRAIL_LENGTH = 80;
+let rotX = -0.4, rotY = 0, autoRotate = true;
+let mouseDown = false, lastMX = 0, lastMY = 0;
+let time = 0, totalIterations = 0;
+let trailCanvas, trailCtx;
+
+function initTrailCanvas() {
+  trailCanvas = document.createElement('canvas');
+  trailCanvas.width = W;
+  trailCanvas.height = H;
+  trailCtx = trailCanvas.getContext('2d');
+  trailCtx.fillStyle = '#000';
+  trailCtx.fillRect(0, 0, W, H);
+}
+initTrailCanvas();
+
+window.addEventListener('resize', () => {
+  resize();
+  initTrailCanvas();
+});
+
+function initParticles() {
+  const att = attractors[currentAttractor];
+  particles = [];
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const base = att.spawn();
+    // Tiny variation for each particle
+    particles.push({
+      pos: [base[0] + (Math.random()-0.5)*0.01, base[1] + (Math.random()-0.5)*0.01, base[2] + (Math.random()-0.5)*0.01],
+      trail: [],
+      birth: i * 0.5 // stagger
+    });
+  }
+  initTrailCanvas();
+  totalIterations = 0;
+}
+
+// --- 3D PROJECTION ---
+function project(p) {
+  const att = attractors[currentAttractor];
+  let x = (p[0] + att.offset[0]);
+  let y = (p[1] + att.offset[1]);
+  let z = (p[2] + att.offset[2]);
+
+  // Rotate Y
+  let cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+  let x1 = x * cosY - z * sinY;
+  let z1 = x * sinY + z * cosY;
+
+  // Rotate X
+  let cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+  let y1 = y * cosX - z1 * sinX;
+  let z2 = y * sinX + z1 * cosX;
+
+  const scale = att.scale;
+  const perspective = 800;
+  const d = perspective / (perspective + z2 * scale * 0.3);
+
+  return [
+    W/2 + x1 * scale * d,
+    H/2 + y1 * scale * d,
+    d // depth for sizing/alpha
+  ];
+}
+
+// --- SIMULATION ---
+function stepSimulation() {
+  const att = attractors[currentAttractor];
+  const dt = att.dt;
+
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    if (time < p.birth) continue;
+
+    const d = att.step(p.pos, att.params);
+    p.pos[0] += d[0] * dt;
+    p.pos[1] += d[1] * dt;
+    p.pos[2] += d[2] * dt;
+
+    // Check for divergence
+    const mag = p.pos[0]*p.pos[0] + p.pos[1]*p.pos[1] + p.pos[2]*p.pos[2];
+    if (mag > 1e6 || isNaN(mag)) {
+      const base = att.spawn();
+      p.pos = [base[0] + (Math.random()-0.5)*0.01, base[1] + (Math.random()-0.5)*0.01, base[2] + (Math.random()-0.5)*0.01];
+      p.trail = [];
+      continue;
+    }
+
+    const proj = project(p.pos);
+    p.trail.push(proj);
+    if (p.trail.length > TRAIL_LENGTH) p.trail.shift();
+  }
+
+  if (autoRotate) {
+    rotY += 0.002;
+  }
+  time += 1;
+  totalIterations += particles.length;
+}
+
+// --- RENDER ---
+function render() {
+  const pal = palettes[currentPalette];
+
+  // Fade trail canvas
+  trailCtx.fillStyle = `rgba(${pal.bg[0]},${pal.bg[1]},${pal.bg[2]},0.03)`;
+  trailCtx.fillRect(0, 0, W, H);
+
+  // Draw new trail segments
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    if (p.trail.length < 2) continue;
+
+    const len = p.trail.length;
+    const last = p.trail[len - 1];
+    const prev = p.trail[len - 2];
+
+    const alpha = 0.4 * last[2];
+    const colorStr = pal.fn(time * 0.01 + i * 0.1, i);
+
+    trailCtx.beginPath();
+    trailCtx.moveTo(prev[0], prev[1]);
+    trailCtx.lineTo(last[0], last[1]);
+    trailCtx.strokeStyle = colorStr + Math.min(alpha, 0.6) + ')';
+    trailCtx.lineWidth = 0.8 * last[2];
+    trailCtx.stroke();
+  }
+
+  // Composite
+  ctx.drawImage(trailCanvas, 0, 0);
+
+  // Draw bright particle heads
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    if (p.trail.length < 1) continue;
+    const last = p.trail[p.trail.length - 1];
+    const colorStr = palettes[currentPalette].fn(time * 0.01 + i * 0.1, i);
+    ctx.fillStyle = colorStr + (0.8 * last[2]) + ')';
+    const r = 1.2 * last[2];
+    ctx.fillRect(last[0] - r/2, last[1] - r/2, r, r);
+  }
+
+  // Update stats
+  document.getElementById('particle-count').textContent = `${particles.filter(p=>p.trail.length>0).length} particles`;
+  document.getElementById('iterations').textContent = `${(totalIterations/1e6).toFixed(1)}M iterations`;
+}
+
+// --- CONTROLS ---
+function buildControls() {
+  const div = document.getElementById('controls');
+  div.innerHTML = '';
+
+  // Attractor buttons
+  for (const key of Object.keys(attractors)) {
+    const btn = document.createElement('button');
+    btn.textContent = attractors[key].name.split(' ')[0].toUpperCase();
+    btn.className = key === currentAttractor ? 'active' : '';
+    btn.onclick = () => { currentAttractor = key; initParticles(); buildControls(); updateInfo(); };
+    div.appendChild(btn);
+  }
+
+  // Separator
+  const sep = document.createElement('span');
+  sep.style.width = '8px';
+  div.appendChild(sep);
+
+  // Palette buttons
+  for (const key of Object.keys(palettes)) {
+    const btn = document.createElement('button');
+    btn.textContent = palettes[key].name;
+    btn.className = key === currentPalette ? 'active' : '';
+    btn.onclick = () => { currentPalette = key; initTrailCanvas(); buildControls(); };
+    div.appendChild(btn);
+  }
+
+  // Auto-rotate
+  const rotBtn = document.createElement('button');
+  rotBtn.textContent = autoRotate ? '⟳ AUTO' : '⟳ MANUAL';
+  rotBtn.className = autoRotate ? 'active' : '';
+  rotBtn.onclick = () => { autoRotate = !autoRotate; buildControls(); };
+  div.appendChild(rotBtn);
+
+  // Reset
+  const resetBtn = document.createElement('button');
+  resetBtn.textContent = 'RESET';
+  resetBtn.onclick = () => { initParticles(); };
+  div.appendChild(resetBtn);
+}
+
+function updateInfo() {
+  const att = attractors[currentAttractor];
+  document.getElementById('attractor-name').textContent = att.name;
+  document.getElementById('attractor-desc').textContent = att.desc;
+  document.getElementById('equation').textContent = att.eq;
+}
+
+// --- MOUSE ---
+canvas.addEventListener('mousedown', e => { mouseDown = true; lastMX = e.clientX; lastMY = e.clientY; });
+canvas.addEventListener('mouseup', () => { mouseDown = false; });
+canvas.addEventListener('mousemove', e => {
+  if (!mouseDown) return;
+  const dx = e.clientX - lastMX;
+  const dy = e.clientY - lastMY;
+  rotY += dx * 0.005;
+  rotX += dy * 0.005;
+  lastMX = e.clientX;
+  lastMY = e.clientY;
+  autoRotate = false;
+  buildControls();
+});
+
+// Touch
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  mouseDown = true;
+  lastMX = e.touches[0].clientX;
+  lastMY = e.touches[0].clientY;
+}, { passive: false });
+canvas.addEventListener('touchend', () => { mouseDown = false; });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!mouseDown) return;
+  const dx = e.touches[0].clientX - lastMX;
+  const dy = e.touches[0].clientY - lastMY;
+  rotY += dx * 0.005;
+  rotX += dy * 0.005;
+  lastMX = e.touches[0].clientX;
+  lastMY = e.touches[0].clientY;
+  autoRotate = false;
+  buildControls();
+}, { passive: false });
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  const keys = Object.keys(attractors);
+  const idx = keys.indexOf(currentAttractor);
+  if (e.key === 'ArrowRight') { currentAttractor = keys[(idx+1) % keys.length]; initParticles(); buildControls(); updateInfo(); }
+  if (e.key === 'ArrowLeft') { currentAttractor = keys[(idx-1+keys.length) % keys.length]; initParticles(); buildControls(); updateInfo(); }
+  if (e.key === ' ') { autoRotate = !autoRotate; buildControls(); e.preventDefault(); }
+});
+
+// --- MAIN LOOP ---
+function loop() {
+  stepSimulation();
+  render();
+  requestAnimationFrame(loop);
+}
+
+initParticles();
+buildControls();
+updateInfo();
+loop();
+</script>
+</body>
+</html>
