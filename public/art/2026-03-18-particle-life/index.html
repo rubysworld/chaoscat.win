@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Particle Life | chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; cursor: crosshair; }
+canvas { display: block; }
+#ui {
+  position: fixed; top: 12px; left: 12px; color: #aaa; font-size: 13px;
+  pointer-events: none; z-index: 10; text-shadow: 0 0 6px #000;
+}
+#ui h1 { font-size: 18px; color: #fff; margin-bottom: 4px; letter-spacing: 2px; }
+#ui .sub { font-size: 11px; color: #666; margin-bottom: 10px; }
+#controls {
+  position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px; z-index: 10;
+}
+#controls button {
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+  color: #ccc; padding: 6px 14px; font-family: 'Courier New', monospace;
+  font-size: 12px; cursor: pointer; border-radius: 3px; transition: all 0.2s;
+}
+#controls button:hover { background: rgba(255,255,255,0.15); color: #fff; }
+#matrix-display {
+  position: fixed; top: 12px; right: 12px; z-index: 10;
+  pointer-events: none; text-shadow: 0 0 6px #000;
+}
+#matrix-display canvas { border: 1px solid rgba(255,255,255,0.1); border-radius: 3px; }
+#info {
+  position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+  color: #555; font-size: 11px; z-index: 10; pointer-events: none;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+<div id="ui">
+  <h1>PARTICLE LIFE</h1>
+  <div class="sub">artificial chemistry · emergent ecosystems</div>
+  <div id="stats"></div>
+</div>
+<div id="matrix-display"><canvas id="matrixCanvas" width="1" height="1"></canvas></div>
+<div id="info">click to disturb · scroll to zoom · R to randomize rules · space to pause</div>
+<div id="controls">
+  <button onclick="randomizeRules()">RANDOMIZE</button>
+  <button onclick="cycleSpecies()">SPECIES: <span id="specLabel">6</span></button>
+  <button onclick="cyclePreset()">PRESET</button>
+  <button onclick="toggleTrails()">TRAILS: <span id="trailLabel">ON</span></button>
+  <button onclick="resetParticles()">RESET</button>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const matCanvas = document.getElementById('matrixCanvas');
+const matCtx = matCanvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Config
+let numSpecies = 6;
+let numParticles = 1200;
+const maxDist = 120;
+const friction = 0.5;
+const forceFactor = 0.8;
+let paused = false;
+let trails = true;
+let zoom = 1;
+let panX = 0, panY = 0;
+
+// Colors for species
+const COLORS = [
+  '#ff3366', '#33ccff', '#66ff33', '#ffcc00', '#cc66ff', '#ff6633',
+  '#33ffcc', '#ff33cc', '#99ff33', '#3399ff', '#ff9933', '#33ff66'
+];
+
+// Attraction matrix: rules[i][j] = how species i feels about species j (-1 to 1)
+let rules = [];
+
+// Particles
+let particles = [];
+
+function randomRule() {
+  return Math.random() * 2 - 1; // -1 to 1
+}
+
+function randomizeRules() {
+  rules = [];
+  for (let i = 0; i < numSpecies; i++) {
+    rules[i] = [];
+    for (let j = 0; j < numSpecies; j++) {
+      rules[i][j] = randomRule();
+    }
+  }
+  drawMatrix();
+}
+
+const PRESETS = [
+  { name: 'CHAOS', gen: () => { for(let i=0;i<numSpecies;i++) for(let j=0;j<numSpecies;j++) rules[i][j]=Math.random()*2-1; }},
+  { name: 'SYMBIOSIS', gen: () => { for(let i=0;i<numSpecies;i++) for(let j=0;j<numSpecies;j++) { rules[i][j] = i===j ? -0.3+Math.random()*0.2 : 0.3+Math.random()*0.5; } }},
+  { name: 'PREDATOR', gen: () => { for(let i=0;i<numSpecies;i++) for(let j=0;j<numSpecies;j++) { rules[i][j] = j===(i+1)%numSpecies ? 0.8 : (i===(j+1)%numSpecies ? -0.8 : Math.random()*0.4-0.2); } }},
+  { name: 'CLUSTERS', gen: () => { for(let i=0;i<numSpecies;i++) for(let j=0;j<numSpecies;j++) { rules[i][j] = i===j ? 0.5+Math.random()*0.3 : -0.5-Math.random()*0.3; } }},
+  { name: 'SNAKES', gen: () => { for(let i=0;i<numSpecies;i++) for(let j=0;j<numSpecies;j++) { rules[i][j] = j===(i+1)%numSpecies ? 0.6 : (i===j ? 0.1 : -0.1); } }},
+  { name: 'ORBITS', gen: () => { for(let i=0;i<numSpecies;i++) for(let j=0;j<numSpecies;j++) { const d=(j-i+numSpecies)%numSpecies; rules[i][j] = d===1?0.7:(d===numSpecies-1?-0.7:(i===j?-0.2:0)); } }},
+];
+let presetIdx = -1;
+
+function cyclePreset() {
+  presetIdx = (presetIdx + 1) % PRESETS.length;
+  rules = [];
+  for (let i = 0; i < numSpecies; i++) rules[i] = new Array(numSpecies).fill(0);
+  PRESETS[presetIdx].gen();
+  drawMatrix();
+}
+
+function resetParticles() {
+  particles = [];
+  for (let i = 0; i < numParticles; i++) {
+    particles.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: 0, vy: 0,
+      species: i % numSpecies
+    });
+  }
+}
+
+function cycleSpecies() {
+  const opts = [3, 4, 5, 6, 8, 10];
+  const idx = opts.indexOf(numSpecies);
+  numSpecies = opts[(idx + 1) % opts.length];
+  document.getElementById('specLabel').textContent = numSpecies;
+  randomizeRules();
+  resetParticles();
+}
+
+function toggleTrails() {
+  trails = !trails;
+  document.getElementById('trailLabel').textContent = trails ? 'ON' : 'OFF';
+}
+
+function drawMatrix() {
+  const s = numSpecies;
+  const cellSize = Math.max(8, Math.min(16, Math.floor(120 / s)));
+  const pad = 2;
+  const totalW = s * (cellSize + pad) + pad;
+  matCanvas.width = totalW;
+  matCanvas.height = totalW;
+  matCtx.fillStyle = 'rgba(0,0,0,0.7)';
+  matCtx.fillRect(0, 0, totalW, totalW);
+  for (let i = 0; i < s; i++) {
+    for (let j = 0; j < s; j++) {
+      const v = rules[i][j]; // -1 to 1
+      const x = pad + j * (cellSize + pad);
+      const y = pad + i * (cellSize + pad);
+      if (v > 0) {
+        const g = Math.floor(v * 255);
+        matCtx.fillStyle = `rgb(0,${g},${Math.floor(g*0.5)})`;
+      } else {
+        const r = Math.floor(-v * 255);
+        matCtx.fillStyle = `rgb(${r},${Math.floor(r*0.2)},0)`;
+      }
+      matCtx.fillRect(x, y, cellSize, cellSize);
+    }
+  }
+}
+
+// Physics
+function step() {
+  const n = particles.length;
+  for (let i = 0; i < n; i++) {
+    let fx = 0, fy = 0;
+    const pi = particles[i];
+    for (let j = 0; j < n; j++) {
+      if (i === j) continue;
+      const pj = particles[j];
+      let dx = pj.x - pi.x;
+      let dy = pj.y - pi.y;
+      // Wrap around
+      if (dx > W/2) dx -= W;
+      if (dx < -W/2) dx += W;
+      if (dy > H/2) dy -= H;
+      if (dy < -H/2) dy += H;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist > 0 && dist < maxDist) {
+        const rule = rules[pi.species][pj.species];
+        // Force profile: repel when very close, then attract/repel based on rule
+        let f;
+        const halfDist = maxDist * 0.4;
+        if (dist < halfDist) {
+          // Universal short-range repulsion + rule-based
+          f = (dist / halfDist - 1) * 1.5; // repulsion
+        } else {
+          // Rule-based force
+          const t = (dist - halfDist) / (maxDist - halfDist);
+          f = rule * (1 - Math.abs(2 * t - 1));
+        }
+        fx += (dx / dist) * f;
+        fy += (dy / dist) * f;
+      }
+    }
+    pi.vx = (pi.vx + fx * forceFactor) * (1 - friction);
+    pi.vy = (pi.vy + fy * forceFactor) * (1 - friction);
+  }
+  // Update positions
+  for (let i = 0; i < n; i++) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    // Wrap
+    if (p.x < 0) p.x += W;
+    if (p.x >= W) p.x -= W;
+    if (p.y < 0) p.y += H;
+    if (p.y >= H) p.y -= H;
+  }
+}
+
+function draw() {
+  if (trails) {
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  const n = particles.length;
+  for (let i = 0; i < n; i++) {
+    const p = particles[i];
+    const col = COLORS[p.species % COLORS.length];
+    const r = 2.5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = col;
+    ctx.fill();
+  }
+}
+
+function loop() {
+  if (!paused) step();
+  draw();
+  // Stats
+  document.getElementById('stats').textContent = `${particles.length} particles · ${numSpecies} species`;
+  requestAnimationFrame(loop);
+}
+
+// Input
+window.addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') { randomizeRules(); }
+  if (e.key === ' ') { paused = !paused; e.preventDefault(); }
+});
+
+canvas.addEventListener('click', e => {
+  // Disturb: push particles away from click
+  const cx = e.clientX, cy = e.clientY;
+  for (const p of particles) {
+    const dx = p.x - cx, dy = p.y - cy;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    if (dist < 150 && dist > 0) {
+      const f = (150 - dist) / 150 * 5;
+      p.vx += (dx/dist) * f;
+      p.vy += (dy/dist) * f;
+    }
+  }
+});
+
+// Init
+randomizeRules();
+resetParticles();
+loop();
+</script>
+</body>
+</html>
