@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Burn After Typing 🔥 — chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Special+Elite&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0604;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  cursor: default;
+  font-family: 'Special Elite', 'Courier New', monospace;
+}
+
+canvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+#typing-area {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+#text-container {
+  position: relative;
+  width: 100%;
+  max-width: 700px;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#hidden-input {
+  position: absolute;
+  opacity: 0;
+  width: 0; height: 0;
+  pointer-events: none;
+}
+
+#rendered-text {
+  font-family: 'Special Elite', 'Courier New', monospace;
+  font-size: 28px;
+  line-height: 1.6;
+  color: #e8d5b0;
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 700px;
+  text-shadow: 0 0 10px rgba(255, 160, 50, 0.3);
+  min-height: 40px;
+  cursor: text;
+  user-select: none;
+}
+
+#rendered-text .char {
+  display: inline-block;
+  transition: color 0.15s, opacity 0.15s;
+  position: relative;
+}
+
+#rendered-text .char.burning {
+  animation: char-burn 1.2s forwards;
+}
+
+@keyframes char-burn {
+  0% { color: #e8d5b0; transform: none; }
+  15% { color: #ff6600; text-shadow: 0 0 8px #ff4400, 0 0 20px #ff2200; }
+  40% { color: #ff3300; transform: scale(1.1) translateY(-2px); text-shadow: 0 0 15px #ff0000; }
+  70% { color: #441100; transform: scale(0.8) translateY(4px); opacity: 0.5; }
+  100% { color: transparent; transform: scale(0.3) translateY(10px); opacity: 0; }
+}
+
+#rendered-text .char.space { width: 0.3em; }
+
+.prompt {
+  color: #5a4a3a;
+  font-size: 18px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 30px;
+  text-align: center;
+  opacity: 0.7;
+  transition: opacity 0.5s;
+}
+
+.prompt.hidden { opacity: 0; }
+
+.cursor-blink {
+  display: inline-block;
+  width: 2px;
+  height: 28px;
+  background: #e8d5b0;
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+#burn-btn {
+  margin-top: 40px;
+  padding: 12px 36px;
+  background: transparent;
+  border: 1px solid #5a3a1a;
+  color: #8a5a2a;
+  font-family: 'Special Elite', monospace;
+  font-size: 16px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#burn-btn.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#burn-btn:hover {
+  border-color: #ff6600;
+  color: #ff6600;
+  text-shadow: 0 0 10px rgba(255, 100, 0, 0.5);
+  box-shadow: 0 0 20px rgba(255, 60, 0, 0.2);
+}
+
+#ash-counter {
+  position: fixed;
+  bottom: 20px;
+  right: 24px;
+  color: #3a2a1a;
+  font-family: 'Special Elite', monospace;
+  font-size: 13px;
+  z-index: 3;
+  letter-spacing: 1px;
+}
+
+#subtitle {
+  position: fixed;
+  bottom: 20px;
+  left: 24px;
+  color: #3a2a1a;
+  font-family: 'Special Elite', monospace;
+  font-size: 13px;
+  z-index: 3;
+}
+
+#subtitle a {
+  color: #5a3a1a;
+  text-decoration: none;
+}
+
+.vignette {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.7) 100%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+#mode-bar {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  z-index: 5;
+  display: flex;
+  gap: 10px;
+}
+
+.mode-btn {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid #3a2a1a;
+  color: #5a4a3a;
+  font-family: 'Special Elite', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.3s;
+}
+
+.mode-btn.active {
+  border-color: #8a5a2a;
+  color: #c88a3a;
+}
+
+.mode-btn:hover {
+  border-color: #8a5a2a;
+  color: #aa7a3a;
+}
+</style>
+</head>
+<body>
+
+<div class="vignette"></div>
+<canvas id="ember-canvas"></canvas>
+
+<div id="typing-area">
+  <div class="prompt" id="prompt-text">type something you need to let go of</div>
+  <div id="text-container">
+    <div id="rendered-text" onclick="focusInput()"></div>
+    <input id="hidden-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <button id="burn-btn" onclick="burnAll()">🔥 burn it 🔥</button>
+  </div>
+</div>
+
+<div id="mode-bar">
+  <button class="mode-btn active" data-mode="ember" onclick="setMode('ember')">EMBER</button>
+  <button class="mode-btn" data-mode="ash" onclick="setMode('ash')">ASH</button>
+  <button class="mode-btn" data-mode="void" onclick="setMode('void')">VOID</button>
+</div>
+
+<div id="ash-counter">ashes: <span id="ash-count">0</span></div>
+<div id="subtitle"><a href="/art/">← gallery</a> · burn after typing · <a href="/">chaoscat.win</a></div>
+
+<script>
+const canvas = document.getElementById('ember-canvas');
+const ctx = canvas.getContext('2d');
+const hiddenInput = document.getElementById('hidden-input');
+const renderedText = document.getElementById('rendered-text');
+const burnBtn = document.getElementById('burn-btn');
+const promptText = document.getElementById('prompt-text');
+const ashCountEl = document.getElementById('ash-count');
+
+let W, H;
+let particles = [];
+let ashPiles = [];
+let chars = [];
+let totalBurned = 0;
+let currentMode = 'ember';
+let isBurning = false;
+
+const modes = {
+  ember: {
+    bg: [10, 6, 4],
+    colors: [[255,100,0],[255,60,0],[255,160,40],[255,40,0],[200,30,0]],
+    ashColor: [60,40,20],
+    glowColor: 'rgba(255,80,0,0.03)',
+  },
+  ash: {
+    bg: [8, 8, 10],
+    colors: [[150,150,160],[120,120,130],[100,100,110],[80,80,90],[60,60,70]],
+    ashColor: [40,40,45],
+    glowColor: 'rgba(100,100,120,0.02)',
+  },
+  void: {
+    bg: [4, 0, 8],
+    colors: [[160,0,255],[100,0,200],[200,50,255],[80,0,180],[255,0,150]],
+    ashColor: [30,10,40],
+    glowColor: 'rgba(120,0,200,0.03)',
+  },
+};
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function setMode(m) {
+  currentMode = m;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+  const bg = modes[m].bg;
+  document.body.style.background = `rgb(${bg[0]},${bg[1]},${bg[2]})`;
+}
+
+function focusInput() {
+  hiddenInput.focus();
+}
+
+// Text input
+let textContent = '';
+
+hiddenInput.addEventListener('input', (e) => {
+  const val = hiddenInput.value;
+  if (val.length > textContent.length) {
+    const newChar = val.slice(textContent.length);
+    for (const c of newChar) addChar(c);
+  }
+  textContent = val;
+  promptText.classList.toggle('hidden', textContent.length > 0);
+  burnBtn.classList.toggle('visible', textContent.length > 0 && !isBurning);
+});
+
+hiddenInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addChar('\n');
+    textContent += '\n';
+    hiddenInput.value = textContent;
+  }
+  if (e.key === 'Backspace' && textContent.length > 0) {
+    // Remove last visible char
+    const lastChar = chars[chars.length - 1];
+    if (lastChar && !lastChar.burning) {
+      chars.pop();
+      lastChar.el.remove();
+    }
+  }
+});
+
+function addChar(c) {
+  const span = document.createElement('span');
+  span.classList.add('char');
+  if (c === ' ') {
+    span.classList.add('space');
+    span.innerHTML = '&nbsp;';
+  } else if (c === '\n') {
+    span.innerHTML = '<br>';
+  } else {
+    span.textContent = c;
+  }
+  // Insert before cursor if exists
+  renderedText.appendChild(span);
+  chars.push({ el: span, char: c, burning: false, burned: false });
+}
+
+function burnAll() {
+  if (isBurning || chars.length === 0) return;
+  isBurning = true;
+  burnBtn.classList.remove('visible');
+
+  // Burn chars one by one with stagger
+  let idx = 0;
+  const interval = Math.max(30, Math.min(120, 2000 / chars.length));
+
+  function burnNext() {
+    if (idx >= chars.length) {
+      // All burned
+      setTimeout(() => {
+        // Clear and reset
+        chars = [];
+        renderedText.innerHTML = '';
+        textContent = '';
+        hiddenInput.value = '';
+        isBurning = false;
+        promptText.classList.remove('hidden');
+        promptText.textContent = getNewPrompt();
+      }, 1500);
+      return;
+    }
+
+    const c = chars[idx];
+    if (!c.burning && !c.burned) {
+      c.burning = true;
+      c.el.classList.add('burning');
+
+      // Spawn particles from this char's position
+      const rect = c.el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        spawnEmbers(cx, cy, 4 + Math.random() * 4);
+        spawnAsh(cx, cy + rect.height);
+      }
+
+      setTimeout(() => {
+        c.burned = true;
+        totalBurned++;
+        ashCountEl.textContent = totalBurned;
+      }, 1200);
+    }
+
+    idx++;
+    setTimeout(burnNext, interval);
+  }
+
+  burnNext();
+}
+
+const prompts = [
+  "type something you need to let go of",
+  "what keeps you up at 3am?",
+  "say what you can't say out loud",
+  "write it down. then watch it disappear.",
+  "what would you tell your past self?",
+  "name something you're afraid of",
+  "confess something. no one will know.",
+  "type the thing you keep almost saying",
+  "what are you holding onto?",
+  "write it. burn it. breathe.",
+  "what does the dark know about you?",
+  "say goodbye to something",
+  "the fire doesn't judge",
+  "type the weight you carry",
+  "what would you do if no one was watching?",
+];
+
+function getNewPrompt() {
+  return prompts[Math.floor(Math.random() * prompts.length)];
+}
+
+// Particle system
+function spawnEmbers(x, y, count) {
+  const m = modes[currentMode];
+  for (let i = 0; i < count; i++) {
+    const color = m.colors[Math.floor(Math.random() * m.colors.length)];
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 2,
+      vy: -(Math.random() * 3 + 1),
+      size: Math.random() * 3 + 1.5,
+      life: 1.0,
+      decay: 0.008 + Math.random() * 0.015,
+      color,
+      wobble: Math.random() * Math.PI * 2,
+      wobbleSpeed: (Math.random() - 0.5) * 0.1,
+      type: 'ember',
+    });
+  }
+}
+
+function spawnAsh(x, y) {
+  const m = modes[currentMode];
+  for (let i = 0; i < 2; i++) {
+    particles.push({
+      x: x + (Math.random() - 0.5) * 10,
+      y,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: Math.random() * 0.5 + 0.3,
+      size: Math.random() * 2 + 0.5,
+      life: 1.0,
+      decay: 0.003 + Math.random() * 0.005,
+      color: m.ashColor,
+      wobble: Math.random() * Math.PI * 2,
+      wobbleSpeed: (Math.random() - 0.5) * 0.05,
+      type: 'ash',
+    });
+  }
+}
+
+// Ambient floating embers
+function spawnAmbient() {
+  if (particles.length > 800) return;
+  const m = modes[currentMode];
+  const color = m.colors[Math.floor(Math.random() * m.colors.length)];
+  particles.push({
+    x: Math.random() * W,
+    y: H + 10,
+    vx: (Math.random() - 0.5) * 0.5,
+    vy: -(Math.random() * 0.8 + 0.2),
+    size: Math.random() * 2 + 0.5,
+    life: 0.3 + Math.random() * 0.3,
+    decay: 0.002 + Math.random() * 0.003,
+    color,
+    wobble: Math.random() * Math.PI * 2,
+    wobbleSpeed: (Math.random() - 0.5) * 0.03,
+    type: 'ambient',
+  });
+}
+
+function animate() {
+  const m = modes[currentMode];
+  const bg = m.bg;
+
+  ctx.fillStyle = `rgba(${bg[0]},${bg[1]},${bg[2]},0.15)`;
+  ctx.fillRect(0, 0, W, H);
+
+  // Ambient embers
+  if (Math.random() < 0.15) spawnAmbient();
+
+  // Update and draw particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.wobble += p.wobbleSpeed;
+    p.x += p.vx + Math.sin(p.wobble) * 0.5;
+    p.y += p.vy;
+    p.life -= p.decay;
+
+    if (p.type === 'ash') {
+      p.vy *= 0.99;
+      p.vx *= 0.98;
+    }
+
+    if (p.life <= 0 || p.y < -20 || p.y > H + 20) {
+      particles.splice(i, 1);
+      continue;
+    }
+
+    const alpha = p.life * (p.type === 'ambient' ? 0.5 : 1);
+    const [r, g, b] = p.color;
+
+    // Glow
+    if (p.type === 'ember' && p.life > 0.3) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 4, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha * 0.15})`;
+      ctx.fill();
+    }
+
+    // Core
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    ctx.fill();
+  }
+
+  requestAnimationFrame(animate);
+}
+
+// Focus input on any keypress
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') return;
+  if (!e.metaKey && !e.ctrlKey) {
+    focusInput();
+  }
+});
+
+// Click anywhere to focus
+document.addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A') {
+    focusInput();
+  }
+});
+
+// Start
+focusInput();
+animate();
+</script>
+
+</body>
+</html>
