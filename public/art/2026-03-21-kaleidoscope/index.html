@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kaleidoscope — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0f;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+  color: #fff;
+  cursor: crosshair;
+}
+canvas { display: block; }
+#ui {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 10;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+button {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #fff;
+  padding: 8px 16px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+button:hover { background: rgba(255,255,255,0.15); }
+button.active { background: rgba(255,255,255,0.25); border-color: rgba(255,255,255,0.5); }
+#info {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  font-size: 14px;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 10;
+}
+#title {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  font-size: 18px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 1s;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+}
+#symmetry-display {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 10;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="title">KALEIDOSCOPE<br><span style="font-size: 12px; opacity: 0.6;">draw to create • scroll to resize brush</span></div>
+
+<div id="info">click & drag to draw</div>
+<div id="symmetry-display"></div>
+
+<div id="ui">
+  <button onclick="setSymmetry(6)">6-FOLD</button>
+  <button onclick="setSymmetry(8)" class="active">8-FOLD</button>
+  <button onclick="setSymmetry(12)">12-FOLD</button>
+  <button onclick="setSymmetry(16)">16-FOLD</button>
+  <button onclick="cycleMode()">MODE: RAINBOW</button>
+  <button onclick="clearCanvas()">CLEAR</button>
+  <button onclick="toggleSpin()">SPIN: OFF</button>
+  <button onclick="saveImage()">SAVE PNG</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, cx, cy;
+let symmetry = 8;
+let brushSize = 4;
+let drawing = false;
+let lastX = null, lastY = null;
+let hue = 0;
+let mode = 0; // 0=rainbow, 1=monochrome, 2=neon, 3=ember, 4=pastel
+const modeNames = ['RAINBOW', 'MOONLIGHT', 'NEON', 'EMBER', 'PASTEL', 'AURORA'];
+let spinning = false;
+let spinAngle = 0;
+let hasDrawn = false;
+let titleShown = true;
+
+// Drawing buffer (unrotated)
+let drawCanvas, drawCtx;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cx = W / 2;
+  cy = H / 2;
+  if (!drawCanvas) {
+    drawCanvas = document.createElement('canvas');
+    drawCtx = drawCanvas.getContext('2d');
+  }
+  drawCanvas.width = W;
+  drawCanvas.height = H;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Show title
+document.getElementById('title').style.opacity = '1';
+setTimeout(() => { document.getElementById('title').style.opacity = '0'; }, 3000);
+
+function getColor(x, y) {
+  const dx = x - cx, dy = y - cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const angle = Math.atan2(dy, dx);
+
+  switch (mode) {
+    case 0: // Rainbow - hue from angle + time
+      hue = (hue + 0.5) % 360;
+      return `hsla(${(angle * 180 / Math.PI + hue + dist * 0.3) % 360}, 80%, 60%, 0.7)`;
+    case 1: // Moonlight
+      const l = 40 + Math.sin(dist * 0.02) * 20;
+      return `hsla(220, 15%, ${l}%, 0.6)`;
+    case 2: // Neon
+      const neonHues = [320, 180, 60, 280, 120];
+      const ni = Math.floor((angle + Math.PI) / (Math.PI * 2) * neonHues.length) % neonHues.length;
+      return `hsla(${neonHues[ni]}, 100%, 55%, 0.8)`;
+    case 3: // Ember
+      return `hsla(${10 + dist * 0.15}, 90%, ${45 + Math.sin(dist * 0.05) * 15}%, 0.7)`;
+    case 4: // Pastel
+      return `hsla(${(angle * 180 / Math.PI + 180 + dist * 0.5) % 360}, 50%, 75%, 0.5)`;
+    case 5: // Aurora
+      return `hsla(${120 + Math.sin(dist * 0.01 + Date.now() * 0.001) * 60}, 70%, 55%, 0.6)`;
+  }
+}
+
+function drawSymmetric(x, y, px, py) {
+  const dx = x - cx, dy = y - cy;
+  const pdx = px - cx, pdy = py - cy;
+  const angleStep = (Math.PI * 2) / symmetry;
+
+  for (let i = 0; i < symmetry; i++) {
+    const a = angleStep * i;
+    const cos = Math.cos(a), sin = Math.sin(a);
+
+    // Normal
+    const nx = cx + dx * cos - dy * sin;
+    const ny = cy + dx * sin + dy * cos;
+    const npx = cx + pdx * cos - pdy * sin;
+    const npy = cy + pdx * sin + pdy * cos;
+
+    drawCtx.beginPath();
+    drawCtx.moveTo(npx, npy);
+    drawCtx.lineTo(nx, ny);
+    drawCtx.strokeStyle = getColor(x, y);
+    drawCtx.lineWidth = brushSize;
+    drawCtx.lineCap = 'round';
+    drawCtx.stroke();
+
+    // Mirror
+    const mx = cx + dx * cos + dy * sin;
+    const my = cy - dx * sin + dy * cos;
+    const mpx = cx + pdx * cos + pdy * sin;
+    const mpy = cy - pdx * sin + pdy * cos;
+
+    drawCtx.beginPath();
+    drawCtx.moveTo(mpx, mpy);
+    drawCtx.lineTo(mx, my);
+    drawCtx.strokeStyle = getColor(x, y);
+    drawCtx.lineWidth = brushSize;
+    drawCtx.lineCap = 'round';
+    drawCtx.stroke();
+  }
+}
+
+function handleStart(x, y) {
+  drawing = true;
+  lastX = x;
+  lastY = y;
+  if (!hasDrawn) {
+    hasDrawn = true;
+    document.getElementById('info').style.opacity = '0';
+  }
+}
+
+function handleMove(x, y) {
+  if (!drawing) return;
+  if (lastX !== null) {
+    drawSymmetric(x, y, lastX, lastY);
+  }
+  lastX = x;
+  lastY = y;
+}
+
+function handleEnd() {
+  drawing = false;
+  lastX = lastY = null;
+}
+
+canvas.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY));
+canvas.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
+canvas.addEventListener('mouseup', handleEnd);
+canvas.addEventListener('mouseleave', handleEnd);
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  handleStart(t.clientX, t.clientY);
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  handleMove(t.clientX, t.clientY);
+}, { passive: false });
+canvas.addEventListener('touchend', e => { e.preventDefault(); handleEnd(); }, { passive: false });
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  brushSize = Math.max(1, Math.min(30, brushSize - Math.sign(e.deltaY)));
+}, { passive: false });
+
+function setSymmetry(n) {
+  symmetry = n;
+  document.querySelectorAll('#ui button').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('symmetry-display').textContent = `${n}-fold symmetry • ${n * 2} mirrors`;
+}
+
+function cycleMode() {
+  mode = (mode + 1) % modeNames.length;
+  event.target.textContent = `MODE: ${modeNames[mode]}`;
+}
+
+function clearCanvas() {
+  drawCtx.clearRect(0, 0, W, H);
+}
+
+function toggleSpin() {
+  spinning = !spinning;
+  event.target.textContent = `SPIN: ${spinning ? 'ON' : 'OFF'}`;
+  if (spinning) event.target.classList.add('active');
+  else event.target.classList.remove('active');
+}
+
+function saveImage() {
+  const link = document.createElement('a');
+  link.download = `kaleidoscope-${Date.now()}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+// Render loop
+function render() {
+  // Dark fade background
+  ctx.fillStyle = 'rgba(10, 10, 15, 0.03)';
+  ctx.fillRect(0, 0, W, H);
+
+  if (spinning) {
+    spinAngle += 0.003;
+  }
+
+  // Draw the mandala with optional rotation
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(spinAngle);
+  ctx.translate(-cx, -cy);
+  ctx.drawImage(drawCanvas, 0, 0);
+  ctx.restore();
+
+  // Subtle center glow
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 60);
+  grad.addColorStop(0, 'rgba(255,255,255,0.03)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(cx - 60, cy - 60, 120, 120);
+
+  // Guide circle (faint)
+  if (!hasDrawn) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.min(cx, cy) * 0.7, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Draw symmetry guide lines
+    const r = Math.min(cx, cy) * 0.7;
+    for (let i = 0; i < symmetry; i++) {
+      const a = (Math.PI * 2 / symmetry) * i;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  requestAnimationFrame(render);
+}
+render();
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'c' || e.key === 'C') clearCanvas();
+  if (e.key === 's' || e.key === 'S') { spinning = !spinning; }
+  if (e.key === '6') setSymmetry(6);
+  if (e.key === '8') setSymmetry(8);
+  if (e.key === '1') setSymmetry(12);
+  if (e.key === '2') setSymmetry(16);
+});
+
+document.getElementById('symmetry-display').textContent = `8-fold symmetry • 16 mirrors`;
+</script>
+</body>
+</html>
