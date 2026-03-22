@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'ant-farm',
+    title: 'Ant Farm',
+    date: '2026-03-22',
+    slug: '2026-03-22-ant-farm',
+    description: 'Watch ants dig. A digital colony with pheromone trails, a queen, and emergent tunneling.',
+    inspiration: 'A real-time ant colony simulation. 30 ants start in a queen chamber buried in sand. They forage for food, lay pheromone trails, dig tunnels, and bring food back to the queen — who spawns new ants. Click to drop food, shift+click to build walls, right-click to dig. Rain floods tunnels. Earthquakes collapse them. Emergent behavior from simple rules. Nature in a browser.',
+    thumbnail: null,
+    externalPath: '/art/2026-03-22-ant-farm/',
+  },
+  {
     id: 'channel-surf',
     title: 'Channel Surf',
     date: '2026-03-02',

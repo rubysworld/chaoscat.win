@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ant Farm 🐜 — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a0e00;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+  cursor: crosshair;
+  user-select: none;
+}
+canvas { display: block; }
+#ui {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  color: #c8a060;
+  font-size: 13px;
+  z-index: 10;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  pointer-events: none;
+}
+#ui h1 { font-size: 18px; margin-bottom: 4px; color: #e8c080; }
+#stats { opacity: 0.8; font-size: 11px; line-height: 1.6; }
+#controls {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+.btn {
+  background: rgba(40,25,10,0.85);
+  color: #c8a060;
+  border: 1px solid #6b4520;
+  padding: 6px 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  pointer-events: all;
+  transition: all 0.2s;
+}
+.btn:hover { background: #4a2a10; color: #ffe0a0; border-color: #a06830; }
+.btn.active { background: #6b4520; color: #ffe8c0; }
+#tool-info {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  color: #a08050;
+  font-size: 11px;
+  text-align: right;
+  z-index: 10;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  pointer-events: none;
+}
+#credit {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  color: #5a3a1a;
+  font-size: 10px;
+  z-index: 10;
+}
+#credit a { color: #7a5a3a; text-decoration: none; }
+</style>
+</head>
+<body>
+<div id="ui">
+  <h1>🐜 Ant Farm</h1>
+  <div id="stats"></div>
+</div>
+<div id="tool-info">
+  click: drop food<br>
+  shift+click: place wall<br>
+  right-click: dig tunnel
+</div>
+<div id="controls">
+  <button class="btn" onclick="addAnts(10)">+ANTS</button>
+  <button class="btn" onclick="dropFood()">+FOOD</button>
+  <button class="btn" onclick="rain()">RAIN 🌧️</button>
+  <button class="btn" onclick="earthquake()">QUAKE 💥</button>
+  <button class="btn" id="speedBtn" onclick="toggleSpeed()">SPEED: 1×</button>
+</div>
+<div id="credit"><a href="https://chaoscat.win">chaoscat.win</a></div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, COLS, ROWS, CELL = 3;
+const SAND = 1, AIR = 0, FOOD = 2, TUNNEL = 3, QUEEN = 4, WALL = 5, WATER = 6;
+
+let grid, pheromoneHome, pheromoneFood;
+let ants = [];
+let particles = [];
+let speed = 1;
+let totalFood = 0;
+let tunnelsDug = 0;
+let queenX, queenY;
+let frame = 0;
+
+// Colors
+const SAND_COLORS = ['#8B6914','#9B7424','#7B5E0E','#A68030','#6B4E04','#B8923C'];
+const FOOD_COLOR = '#4CAF50';
+const TUNNEL_COLOR = '#1a0e00';
+const QUEEN_COLOR = '#FFD700';
+const WALL_COLOR = '#5a3a1a';
+const WATER_COLOR = '#4488cc';
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  COLS = Math.floor(W / CELL);
+  ROWS = Math.floor(H / CELL);
+}
+
+function init() {
+  resize();
+  grid = new Uint8Array(COLS * ROWS);
+  pheromoneHome = new Float32Array(COLS * ROWS);
+  pheromoneFood = new Float32Array(COLS * ROWS);
+
+  // Surface line (top 25% is air, rest is sand)
+  const surfaceY = Math.floor(ROWS * 0.25);
+
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      if (y < surfaceY) {
+        grid[y * COLS + x] = AIR;
+      } else {
+        // Some natural variation in surface
+        const surfOffset = Math.sin(x * 0.05) * 3 + Math.sin(x * 0.13) * 2;
+        if (y < surfaceY + surfOffset) {
+          grid[y * COLS + x] = AIR;
+        } else {
+          grid[y * COLS + x] = SAND;
+        }
+      }
+    }
+  }
+
+  // Place queen chamber
+  queenX = Math.floor(COLS / 2);
+  queenY = surfaceY + 8;
+  carveCircle(queenX, queenY, 5, TUNNEL);
+  grid[queenY * COLS + queenX] = QUEEN;
+
+  // Initial tunnel from surface to queen
+  for (let y = surfaceY - 2; y <= queenY - 4; y++) {
+    const cx = queenX + Math.round(Math.sin(y * 0.3) * 2);
+    grid[y * COLS + cx] = TUNNEL;
+    if (cx > 0) grid[y * COLS + cx - 1] = TUNNEL;
+  }
+
+  // Scatter some food on surface
+  for (let i = 0; i < 15; i++) {
+    const fx = Math.floor(Math.random() * COLS);
+    const fy = findSurface(fx);
+    if (fy > 0) grid[(fy - 1) * COLS + fx] = FOOD;
+  }
+
+  // Spawn initial ants
+  ants = [];
+  for (let i = 0; i < 30; i++) {
+    ants.push(createAnt(queenX * CELL, queenY * CELL));
+  }
+}
+
+function findSurface(x) {
+  for (let y = 0; y < ROWS; y++) {
+    if (grid[y * COLS + x] === SAND || grid[y * COLS + x] === WALL) return y;
+  }
+  return ROWS - 1;
+}
+
+function carveCircle(cx, cy, r, type) {
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy <= r * r) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+          grid[ny * COLS + nx] = type;
+        }
+      }
+    }
+  }
+}
+
+function createAnt(x, y) {
+  return {
+    x, y,
+    vx: (Math.random() - 0.5) * 2,
+    vy: (Math.random() - 0.5) * 2,
+    hasFood: false,
+    state: 'wander', // wander, forage, return, dig
+    energy: 200 + Math.random() * 200,
+    digTarget: null,
+    size: 2 + Math.random() * 0.5,
+    color: `hsl(${15 + Math.random() * 10}, ${60 + Math.random() * 20}%, ${20 + Math.random() * 15}%)`,
+    legs: Math.random() * Math.PI * 2,
+  };
+}
+
+function addAnts(n) {
+  for (let i = 0; i < n; i++) {
+    ants.push(createAnt(queenX * CELL + (Math.random() - 0.5) * 10, queenY * CELL + (Math.random() - 0.5) * 10));
+  }
+}
+
+function dropFood() {
+  for (let i = 0; i < 20; i++) {
+    const fx = Math.floor(Math.random() * COLS);
+    const fy = findSurface(fx);
+    if (fy > 1) grid[(fy - 1) * COLS + fx] = FOOD;
+  }
+}
+
+function rain() {
+  for (let i = 0; i < 50; i++) {
+    const rx = Math.floor(Math.random() * COLS);
+    grid[rx] = WATER;
+  }
+}
+
+function earthquake() {
+  // Shake ants around
+  for (const ant of ants) {
+    ant.vx += (Math.random() - 0.5) * 8;
+    ant.vy += (Math.random() - 0.5) * 8;
+  }
+  // Collapse some tunnels randomly
+  for (let i = 0; i < 200; i++) {
+    const x = Math.floor(Math.random() * COLS);
+    const y = Math.floor(ROWS * 0.3 + Math.random() * ROWS * 0.6);
+    if (grid[y * COLS + x] === TUNNEL) {
+      // 30% chance to collapse
+      if (Math.random() < 0.3) grid[y * COLS + x] = SAND;
+    }
+  }
+  // Spawn debris particles
+  for (let i = 0; i < 40; i++) {
+    particles.push({
+      x: Math.random() * W, y: Math.random() * H * 0.5,
+      vx: (Math.random() - 0.5) * 3, vy: Math.random() * 2,
+      life: 60, color: '#8B6914'
+    });
+  }
+}
+
+function toggleSpeed() {
+  speed = speed === 1 ? 3 : speed === 3 ? 5 : 1;
+  document.getElementById('speedBtn').textContent = `SPEED: ${speed}×`;
+}
+
+function updateAnts() {
+  for (const ant of ants) {
+    ant.energy -= 0.1;
+    ant.legs += 0.3;
+
+    const gx = Math.floor(ant.x / CELL);
+    const gy = Math.floor(ant.y / CELL);
+
+    if (gx < 0 || gx >= COLS || gy < 0 || gy >= ROWS) {
+      // Bounce back
+      ant.x = Math.max(CELL, Math.min(W - CELL, ant.x));
+      ant.y = Math.max(CELL, Math.min(H - CELL, ant.y));
+      ant.vx *= -1; ant.vy *= -1;
+      continue;
+    }
+
+    const cellType = grid[gy * COLS + gx];
+
+    // Gravity when in air
+    if (cellType === AIR || cellType === TUNNEL || cellType === FOOD || cellType === QUEEN) {
+      ant.vy += 0.05; // slight gravity
+    }
+
+    // Can't walk through solid sand/wall — dig or redirect
+    if (cellType === SAND || cellType === WALL) {
+      if (ant.state === 'dig' || (ant.state === 'wander' && Math.random() < 0.02)) {
+        // Dig!
+        grid[gy * COLS + gx] = TUNNEL;
+        tunnelsDug++;
+        ant.vx *= -0.5;
+        ant.vy *= -0.5;
+        // Spawn dirt particle
+        particles.push({
+          x: ant.x, y: ant.y,
+          vx: (Math.random() - 0.5) * 2, vy: -Math.random() * 2,
+          life: 30, color: '#8B6914'
+        });
+      } else {
+        // Bounce off
+        ant.vx += (Math.random() - 0.5) * 2;
+        ant.vy += (Math.random() - 0.5) * 2;
+      }
+    }
+
+    // Smell food pheromones
+    if (!ant.hasFood && ant.state !== 'return') {
+      let bestFood = 0, bfx = 0, bfy = 0;
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dx = -3; dx <= 3; dx++) {
+          const nx = gx + dx, ny = gy + dy;
+          if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+            const p = pheromoneFood[ny * COLS + nx];
+            if (p > bestFood) { bestFood = p; bfx = dx; bfy = dy; }
+            // Direct food detection
+            if (grid[ny * COLS + nx] === FOOD) { bfx = dx; bfy = dy; bestFood = 999; }
+          }
+        }
+      }
+      if (bestFood > 0.5) {
+        ant.vx += bfx * 0.15;
+        ant.vy += bfy * 0.15;
+      }
+    }
+
+    // Pick up food
+    if (!ant.hasFood && cellType === FOOD) {
+      ant.hasFood = true;
+      grid[gy * COLS + gx] = TUNNEL;
+      ant.state = 'return';
+      totalFood++;
+    }
+
+    // Return home with food — follow home pheromones
+    if (ant.hasFood) {
+      let bestHome = 0, bhx = 0, bhy = 0;
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dx = -3; dx <= 3; dx++) {
+          const nx = gx + dx, ny = gy + dy;
+          if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+            const p = pheromoneHome[ny * COLS + nx];
+            if (p > bestHome) { bestHome = p; bhx = dx; bhy = dy; }
+            if (grid[ny * COLS + nx] === QUEEN) { bhx = dx; bhy = dy; bestHome = 999; }
+          }
+        }
+      }
+      if (bestHome > 0.5) {
+        ant.vx += bhx * 0.15;
+        ant.vy += bhy * 0.15;
+      }
+      // Drop food at queen
+      if (cellType === QUEEN || (Math.abs(gx - queenX) < 4 && Math.abs(gy - queenY) < 4)) {
+        ant.hasFood = false;
+        ant.state = 'wander';
+        ant.energy = Math.min(ant.energy + 100, 400);
+        // Chance to spawn new ant
+        if (ants.length < 200 && Math.random() < 0.15) {
+          ants.push(createAnt(queenX * CELL, queenY * CELL));
+        }
+      }
+    }
+
+    // Lay pheromones
+    if (gx >= 0 && gx < COLS && gy >= 0 && gy < ROWS) {
+      if (ant.hasFood) {
+        pheromoneFood[gy * COLS + gx] = Math.min(pheromoneFood[gy * COLS + gx] + 5, 100);
+      } else {
+        pheromoneHome[gy * COLS + gx] = Math.min(pheromoneHome[gy * COLS + gx] + 5, 100);
+      }
+    }
+
+    // Random walk component
+    ant.vx += (Math.random() - 0.5) * 0.4;
+    ant.vy += (Math.random() - 0.5) * 0.3;
+
+    // Occasionally decide to dig
+    if (ant.state === 'wander' && Math.random() < 0.002) {
+      ant.state = 'dig';
+    }
+    if (ant.state === 'dig' && Math.random() < 0.01) {
+      ant.state = 'wander';
+    }
+
+    // Damping
+    const spd = Math.sqrt(ant.vx * ant.vx + ant.vy * ant.vy);
+    if (spd > 2) { ant.vx *= 2 / spd; ant.vy *= 2 / spd; }
+    ant.vx *= 0.95;
+    ant.vy *= 0.95;
+
+    ant.x += ant.vx;
+    ant.y += ant.vy;
+
+    // Clamp
+    ant.x = Math.max(2, Math.min(W - 2, ant.x));
+    ant.y = Math.max(2, Math.min(H - 2, ant.y));
+  }
+
+  // Remove dead ants
+  ants = ants.filter(a => a.energy > 0);
+}
+
+function updatePheromones() {
+  for (let i = 0; i < COLS * ROWS; i++) {
+    pheromoneHome[i] *= 0.995;
+    pheromoneFood[i] *= 0.995;
+    if (pheromoneHome[i] < 0.1) pheromoneHome[i] = 0;
+    if (pheromoneFood[i] < 0.1) pheromoneFood[i] = 0;
+  }
+}
+
+function updateWater() {
+  // Simple water: flows down, spreads sideways
+  for (let y = ROWS - 2; y >= 0; y--) {
+    for (let x = 0; x < COLS; x++) {
+      if (grid[y * COLS + x] === WATER) {
+        const below = (y + 1) * COLS + x;
+        if (y + 1 < ROWS && (grid[below] === AIR || grid[below] === TUNNEL)) {
+          grid[below] = WATER;
+          grid[y * COLS + x] = AIR;
+        } else {
+          // Try sideways
+          const dir = Math.random() < 0.5 ? -1 : 1;
+          const side = y * COLS + x + dir;
+          if (x + dir >= 0 && x + dir < COLS && (grid[side] === AIR || grid[side] === TUNNEL)) {
+            grid[side] = WATER;
+            grid[y * COLS + x] = AIR;
+          }
+        }
+      }
+    }
+  }
+}
+
+function updateParticles() {
+  for (const p of particles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.1;
+    p.life--;
+  }
+  particles = particles.filter(p => p.life > 0);
+}
+
+function draw() {
+  // Draw grid
+  const imgData = ctx.createImageData(W, H);
+  const data = imgData.data;
+
+  // Background
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 26; data[i+1] = 14; data[i+2] = 0; data[i+3] = 255;
+  }
+
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const cell = grid[y * COLS + x];
+      let r, g, b;
+
+      if (cell === AIR) {
+        // Sky gradient
+        const t = y / (ROWS * 0.25);
+        r = Math.floor(10 + t * 15);
+        g = Math.floor(8 + t * 10);
+        b = Math.floor(20 + t * 15);
+      } else if (cell === SAND) {
+        const hash = (x * 7 + y * 13) % 6;
+        const v = [139, 155, 123, 166, 107, 184][hash];
+        const v2 = [105, 116, 94, 128, 78, 146][hash];
+        r = v; g = v2; b = [20, 36, 14, 48, 4, 60][hash];
+      } else if (cell === TUNNEL) {
+        // Show pheromones in tunnels
+        const ph = pheromoneHome[y * COLS + x];
+        const pf = pheromoneFood[y * COLS + x];
+        r = Math.floor(20 + pf * 0.3);
+        g = Math.floor(12 + ph * 0.2);
+        b = Math.floor(5 + ph * 0.15);
+      } else if (cell === FOOD) {
+        r = 76; g = 175; b = 80;
+      } else if (cell === QUEEN) {
+        const pulse = Math.sin(frame * 0.05) * 30;
+        r = Math.floor(200 + pulse); g = Math.floor(160 + pulse); b = 0;
+      } else if (cell === WALL) {
+        r = 90; g = 58; b = 26;
+      } else if (cell === WATER) {
+        r = 40; g = 100; b = 180;
+      }
+
+      // Fill cell pixels
+      for (let py = 0; py < CELL; py++) {
+        for (let px = 0; px < CELL; px++) {
+          const sx = x * CELL + px;
+          const sy = y * CELL + py;
+          if (sx < W && sy < H) {
+            const idx = (sy * W + sx) * 4;
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = 255;
+          }
+        }
+      }
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+
+  // Draw ants
+  for (const ant of ants) {
+    ctx.save();
+    ctx.translate(ant.x, ant.y);
+    const angle = Math.atan2(ant.vy, ant.vx);
+    ctx.rotate(angle);
+
+    // Body
+    ctx.fillStyle = ant.hasFood ? '#4CAF50' : ant.color;
+    // Head
+    ctx.beginPath();
+    ctx.ellipse(ant.size, 0, ant.size * 0.6, ant.size * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Thorax
+    ctx.beginPath();
+    ctx.ellipse(0, 0, ant.size * 0.5, ant.size * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Abdomen
+    ctx.beginPath();
+    ctx.ellipse(-ant.size, 0, ant.size * 0.7, ant.size * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Legs
+    ctx.strokeStyle = ant.color;
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < 3; i++) {
+      const legPhase = ant.legs + i * 1.2;
+      const ly = Math.sin(legPhase) * 2;
+      ctx.beginPath();
+      ctx.moveTo(-ant.size * 0.3 + i * ant.size * 0.4, 0);
+      ctx.lineTo(-ant.size * 0.3 + i * ant.size * 0.4 + ly, ant.size * 1.2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-ant.size * 0.3 + i * ant.size * 0.4, 0);
+      ctx.lineTo(-ant.size * 0.3 + i * ant.size * 0.4 - ly, -ant.size * 1.2);
+      ctx.stroke();
+    }
+
+    // Antennae
+    ctx.beginPath();
+    ctx.moveTo(ant.size, 0);
+    ctx.lineTo(ant.size * 2, -ant.size * 0.8);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ant.size, 0);
+    ctx.lineTo(ant.size * 2, ant.size * 0.8);
+    ctx.stroke();
+
+    // Food carried
+    if (ant.hasFood) {
+      ctx.fillStyle = '#8BC34A';
+      ctx.beginPath();
+      ctx.arc(ant.size * 1.5, 0, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  // Draw particles
+  for (const p of particles) {
+    ctx.globalAlpha = p.life / 30;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x, p.y, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+
+  // Stats
+  const statsEl = document.getElementById('stats');
+  statsEl.innerHTML = `ants: ${ants.length} · food collected: ${totalFood} · tunnels: ${tunnelsDug}`;
+}
+
+// Interaction
+canvas.addEventListener('mousedown', (e) => {
+  const gx = Math.floor(e.clientX / CELL);
+  const gy = Math.floor(e.clientY / CELL);
+
+  if (e.button === 2) {
+    // Right click: dig
+    carveCircle(gx, gy, 3, TUNNEL);
+    return;
+  }
+
+  if (e.shiftKey) {
+    // Place wall
+    carveCircle(gx, gy, 2, WALL);
+  } else {
+    // Drop food
+    for (let i = 0; i < 8; i++) {
+      const fx = gx + Math.floor((Math.random() - 0.5) * 6);
+      const fy = gy + Math.floor((Math.random() - 0.5) * 6);
+      if (fx >= 0 && fx < COLS && fy >= 0 && fy < ROWS) {
+        grid[fy * COLS + fx] = FOOD;
+      }
+    }
+  }
+});
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// Dragging
+let dragging = false;
+canvas.addEventListener('mousedown', () => dragging = true);
+canvas.addEventListener('mouseup', () => dragging = false);
+canvas.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  const gx = Math.floor(e.clientX / CELL);
+  const gy = Math.floor(e.clientY / CELL);
+  if (e.shiftKey) {
+    carveCircle(gx, gy, 2, WALL);
+  } else if (e.buttons === 2) {
+    carveCircle(gx, gy, 3, TUNNEL);
+  } else {
+    const fx = gx + Math.floor((Math.random() - 0.5) * 3);
+    const fy = gy + Math.floor((Math.random() - 0.5) * 3);
+    if (fx >= 0 && fx < COLS && fy >= 0 && fy < ROWS) {
+      grid[fy * COLS + fx] = FOOD;
+    }
+  }
+});
+
+// Touch support
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const t = e.touches[0];
+  const gx = Math.floor(t.clientX / CELL);
+  const gy = Math.floor(t.clientY / CELL);
+  for (let i = 0; i < 8; i++) {
+    const fx = gx + Math.floor((Math.random() - 0.5) * 6);
+    const fy = gy + Math.floor((Math.random() - 0.5) * 6);
+    if (fx >= 0 && fx < COLS && fy >= 0 && fy < ROWS) {
+      grid[fy * COLS + fx] = FOOD;
+    }
+  }
+});
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  const t = e.touches[0];
+  const gx = Math.floor(t.clientX / CELL);
+  const gy = Math.floor(t.clientY / CELL);
+  grid[gy * COLS + gx] = FOOD;
+});
+
+window.addEventListener('resize', () => {
+  // Soft resize — don't reinit
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+});
+
+function loop() {
+  for (let s = 0; s < speed; s++) {
+    updateAnts();
+    if (frame % 3 === 0) updatePheromones();
+    if (frame % 2 === 0) updateWater();
+    updateParticles();
+    frame++;
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+init();
+loop();
+</script>
+</body>
+</html>
