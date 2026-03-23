@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fridge Poetry 🧲 - chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; user-select: none; -webkit-user-select: none; }
+
+body {
+  background: #d8d8d0;
+  font-family: 'Courier New', monospace;
+  cursor: default;
+}
+
+#fridge {
+  width: 100%; height: 100%;
+  position: relative;
+  /* Brushed steel fridge texture */
+  background: linear-gradient(180deg, #e8e8e0 0%, #d0d0c8 30%, #c8c8c0 70%, #b8b8b0 100%);
+  overflow: hidden;
+}
+
+/* Subtle brushed metal texture */
+#fridge::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 1px,
+    rgba(255,255,255,0.03) 1px,
+    rgba(255,255,255,0.03) 2px
+  );
+  pointer-events: none;
+}
+
+/* Fridge handle */
+.fridge-handle {
+  position: absolute;
+  right: 30px;
+  top: 15%;
+  width: 12px;
+  height: 25%;
+  background: linear-gradient(90deg, #aaa, #ccc, #aaa);
+  border-radius: 6px;
+  box-shadow: 2px 2px 8px rgba(0,0,0,0.3), inset 1px 0 2px rgba(255,255,255,0.5);
+  pointer-events: none;
+}
+
+/* Fridge line (door seam) */
+.fridge-seam {
+  position: absolute;
+  left: 0; right: 0;
+  top: 62%;
+  height: 2px;
+  background: rgba(0,0,0,0.08);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.3);
+  pointer-events: none;
+}
+
+.word-tile {
+  position: absolute;
+  background: #fff;
+  color: #222;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: grab;
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05);
+  white-space: nowrap;
+  transition: box-shadow 0.15s, transform 0.1s;
+  z-index: 1;
+  touch-action: none;
+}
+
+.word-tile:hover {
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.08);
+}
+
+.word-tile.dragging {
+  cursor: grabbing;
+  box-shadow: 4px 4px 12px rgba(0,0,0,0.35);
+  transform: scale(1.08) rotate(0deg) !important;
+  z-index: 9999;
+}
+
+/* Magnet colors - subtle tints */
+.word-tile.tint-0 { background: #fff; }
+.word-tile.tint-1 { background: #fff5f5; }
+.word-tile.tint-2 { background: #f5f5ff; }
+.word-tile.tint-3 { background: #f5fff5; }
+.word-tile.tint-4 { background: #fffff5; }
+.word-tile.tint-5 { background: #fff5ff; }
+.word-tile.tint-6 { background: #f5ffff; }
+
+/* Decorations */
+.fridge-note {
+  position: absolute;
+  background: #fffacd;
+  padding: 12px 14px;
+  font-family: 'Comic Sans MS', 'Marker Felt', cursive;
+  font-size: 13px;
+  color: #555;
+  transform: rotate(-2deg);
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.15);
+  pointer-events: none;
+  z-index: 0;
+  line-height: 1.4;
+}
+
+.fridge-note::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 20px;
+  background: radial-gradient(circle, #e44 40%, #c33 60%, transparent 61%);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.magnet-decoration {
+  position: absolute;
+  font-size: 32px;
+  pointer-events: none;
+  z-index: 0;
+  filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
+}
+
+#controls {
+  position: fixed;
+  bottom: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 100;
+}
+
+#controls button {
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  backdrop-filter: blur(5px);
+  transition: background 0.2s;
+}
+
+#controls button:hover {
+  background: rgba(0,0,0,0.8);
+}
+
+#title-label {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 11px;
+  color: rgba(0,0,0,0.25);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  z-index: 100;
+  pointer-events: none;
+}
+
+#word-count {
+  position: fixed;
+  bottom: 55px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 11px;
+  color: rgba(0,0,0,0.25);
+  z-index: 100;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<div id="fridge">
+  <div class="fridge-handle"></div>
+  <div class="fridge-seam"></div>
+</div>
+
+<div id="title-label">fridge poetry 🧲</div>
+<div id="word-count"></div>
+
+<div id="controls">
+  <button onclick="addMoreWords()">+ MORE WORDS</button>
+  <button onclick="scramble()">SCRAMBLE</button>
+  <button onclick="addPack('chaos')">😼 CHAOS PACK</button>
+  <button onclick="addPack('feelings')">💜 FEELINGS</button>
+  <button onclick="addPack('cosmic')">🌌 COSMIC</button>
+  <button onclick="addCustomWord()">✏️ CUSTOM</button>
+</div>
+
+<script>
+// Word packs
+const WORDS = {
+  basic: [
+    // pronouns & articles
+    'I', 'you', 'we', 'they', 'she', 'he', 'it', 'the', 'a', 'an', 'my', 'your', 'our', 'this', 'that',
+    // verbs
+    'am', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'did', 'will', 'would',
+    'can', 'could', 'should', 'must', 'may', 'might', 'want', 'need', 'love', 'hate', 'feel', 'think',
+    'know', 'see', 'hear', 'speak', 'say', 'tell', 'ask', 'give', 'take', 'make', 'go', 'come', 'run',
+    'walk', 'fly', 'fall', 'rise', 'sleep', 'wake', 'dream', 'eat', 'drink', 'dance', 'sing', 'cry',
+    'laugh', 'burn', 'break', 'build', 'hold', 'let', 'keep', 'find', 'lose', 'hide', 'show',
+    'remember', 'forget', 'begin', 'end', 'wait', 'watch', 'listen', 'breathe', 'whisper', 'scream',
+    // adjectives
+    'beautiful', 'broken', 'dark', 'light', 'soft', 'loud', 'quiet', 'wild', 'gentle', 'strange',
+    'new', 'old', 'big', 'small', 'hot', 'cold', 'fast', 'slow', 'good', 'bad', 'real', 'fake',
+    'true', 'false', 'alive', 'dead', 'lost', 'found', 'open', 'closed', 'empty', 'full',
+    'bitter', 'sweet', 'sharp', 'blunt', 'raw', 'cooked', 'tired', 'awake',
+    // nouns
+    'cat', 'moon', 'sun', 'star', 'sky', 'rain', 'fire', 'water', 'earth', 'wind',
+    'night', 'day', 'time', 'love', 'heart', 'mind', 'soul', 'body', 'hand', 'eye',
+    'door', 'window', 'mirror', 'shadow', 'light', 'silence', 'noise', 'music',
+    'dream', 'ghost', 'memory', 'secret', 'truth', 'lie', 'hope', 'fear',
+    'home', 'road', 'sea', 'mountain', 'river', 'forest', 'city', 'room',
+    'coffee', 'smoke', 'dust', 'blood', 'bone', 'skin', 'glass', 'stone',
+    // prepositions & conjunctions
+    'in', 'on', 'at', 'to', 'from', 'with', 'without', 'for', 'of', 'by',
+    'through', 'between', 'under', 'over', 'behind', 'before', 'after',
+    'and', 'but', 'or', 'not', 'never', 'always', 'sometimes', 'maybe',
+    'here', 'there', 'now', 'then', 'still', 'yet', 'just', 'only',
+    // extras
+    'yes', 'no', 'why', 'how', 'what', 'when', 'where', 'who',
+    'everything', 'nothing', 'something', 'anything',
+    'again', 'enough', 'too', 'very', 'so', 'if',
+    // punctuation tiles
+    '.', '?', '!', '...', '—', ',', ':'
+  ],
+  chaos: [
+    'chaos', 'entropy', 'void', 'glitch', 'cursed', 'feral', 'unhinged', 'gremlin',
+    'yeet', 'vibe', 'eldritch', 'forbidden', 'haunted', 'possessed', 'cryptid',
+    '3am', 'liminal', 'sus', 'bonkers', 'goblin', 'abyssal', 'unholy',
+    'meow', 'hiss', 'purr', 'zoomies', 'beans', 'biscuits', 'scrunge',
+    'antimatter', 'paradox', 'anomaly', 'rift', 'distortion', 'corruption',
+    'probably', 'allegedly', 'technically', 'theoretically', 'vibes',
+    'nope', 'yikes', 'bruh', 'oof', 'mood', 'same', 'valid',
+    'tuna', 'cardboard', 'laser', 'keyboard', 'gravity', 'crime'
+  ],
+  feelings: [
+    'ache', 'longing', 'tender', 'aching', 'yearning', 'melancholy', 'bliss',
+    'grief', 'joy', 'rage', 'peace', 'anxiety', 'calm', 'despair', 'wonder',
+    'lonely', 'beloved', 'forgotten', 'cherished', 'wounded', 'healing',
+    'craving', 'devotion', 'obsession', 'adoration', 'fury', 'serenity',
+    'vulnerable', 'invincible', 'shattered', 'whole', 'numb', 'electric',
+    'drowning', 'floating', 'falling', 'soaring', 'trembling', 'steady',
+    'almost', 'nearly', 'barely', 'deeply', 'madly', 'softly', 'fiercely',
+    'please', 'sorry', 'forgive', 'miss', 'stay', 'leave', 'return'
+  ],
+  cosmic: [
+    'nebula', 'quasar', 'pulsar', 'supernova', 'singularity', 'cosmos',
+    'infinite', 'eternal', 'celestial', 'astral', 'cosmic', 'galactic',
+    'orbit', 'eclipse', 'aurora', 'comet', 'constellation', 'horizon',
+    'dimension', 'multiverse', 'spacetime', 'wormhole', 'blackhole',
+    'photon', 'quantum', 'particle', 'wavelength', 'frequency', 'resonance',
+    'stardust', 'moonlight', 'starlight', 'twilight', 'midnight', 'dawn',
+    'vast', 'tiny', 'ancient', 'newborn', 'dying', 'expanding', 'collapsing',
+    'beyond', 'within', 'above', 'below', 'everywhere', 'nowhere'
+  ]
+};
+
+const fridge = document.getElementById('fridge');
+let tiles = [];
+let dragTile = null;
+let dragOffsetX = 0, dragOffsetY = 0;
+let tileIdCounter = 0;
+
+// Add sticky note decoration
+function addDecorations() {
+  // Sticky note
+  const note = document.createElement('div');
+  note.className = 'fridge-note';
+  note.style.right = '40px';
+  note.style.top = '8%';
+  note.textContent = 'make something\nweird tonight 🐱';
+  fridge.appendChild(note);
+
+  // Magnet decorations
+  const magnets = ['🍕', '🐱', '🌙', '⭐'];
+  const positions = [
+    { left: '85%', top: '40%' },
+    { left: '5%', top: '5%' },
+    { left: '90%', top: '75%' },
+    { left: '3%', top: '80%' }
+  ];
+  magnets.forEach((emoji, i) => {
+    const m = document.createElement('div');
+    m.className = 'magnet-decoration';
+    m.style.left = positions[i].left;
+    m.style.top = positions[i].top;
+    m.textContent = emoji;
+    fridge.appendChild(m);
+  });
+}
+
+function createTile(word, x, y) {
+  const tile = document.createElement('div');
+  tile.className = `word-tile tint-${Math.floor(Math.random() * 7)}`;
+  tile.textContent = word;
+  tile.style.left = x + 'px';
+  tile.style.top = y + 'px';
+  tile.style.transform = `rotate(${(Math.random() - 0.5) * 6}deg)`;
+  tile.dataset.id = tileIdCounter++;
+
+  // Touch events
+  tile.addEventListener('pointerdown', startDrag);
+
+  fridge.appendChild(tile);
+  tiles.push(tile);
+  updateCount();
+  return tile;
+}
+
+function startDrag(e) {
+  e.preventDefault();
+  dragTile = e.target.closest('.word-tile');
+  if (!dragTile) return;
+
+  const rect = dragTile.getBoundingClientRect();
+  dragOffsetX = e.clientX - rect.left;
+  dragOffsetY = e.clientY - rect.top;
+  dragTile.classList.add('dragging');
+  dragTile.style.zIndex = 9999;
+
+  dragTile.setPointerCapture(e.pointerId);
+  dragTile.addEventListener('pointermove', onDrag);
+  dragTile.addEventListener('pointerup', endDrag);
+}
+
+function onDrag(e) {
+  if (!dragTile) return;
+  e.preventDefault();
+  const x = e.clientX - dragOffsetX;
+  const y = e.clientY - dragOffsetY;
+  dragTile.style.left = x + 'px';
+  dragTile.style.top = y + 'px';
+}
+
+function endDrag(e) {
+  if (!dragTile) return;
+  dragTile.classList.remove('dragging');
+  dragTile.style.transform = `rotate(${(Math.random() - 0.5) * 4}deg)`;
+  dragTile.removeEventListener('pointermove', onDrag);
+  dragTile.removeEventListener('pointerup', endDrag);
+  dragTile = null;
+}
+
+function updateCount() {
+  document.getElementById('word-count').textContent = `${tiles.length} words on the fridge`;
+}
+
+// Scatter words in a somewhat organized initial layout
+function scatterWords(wordList, startY) {
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const margin = 60;
+  let x = margin;
+  let y = startY || margin + 40;
+  const rowHeight = 35;
+
+  wordList.forEach(word => {
+    // Estimate tile width
+    const tileW = word.length * 9 + 24;
+    if (x + tileW > W - margin) {
+      x = margin + Math.random() * 20;
+      y += rowHeight + Math.random() * 5;
+    }
+    if (y > H - 100) {
+      // Random placement if we overflow
+      x = margin + Math.random() * (W - margin * 2 - tileW);
+      y = margin + Math.random() * (H - margin * 2 - 30);
+    }
+    createTile(word, x + (Math.random() - 0.5) * 8, y + (Math.random() - 0.5) * 5);
+    x += tileW + 6 + Math.random() * 4;
+  });
+}
+
+// Shuffle array
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Initial load — a curated subset of basic words
+function init() {
+  addDecorations();
+  const initial = shuffle([...WORDS.basic]).slice(0, 90);
+  scatterWords(initial);
+}
+
+// Button actions
+function addMoreWords() {
+  const unused = WORDS.basic.filter(w => !tiles.some(t => t.textContent === w));
+  if (unused.length === 0) {
+    // Add duplicates of common words
+    const extras = shuffle(['the', 'a', 'is', 'my', 'your', 'in', 'of', 'and', 'I', 'you', 'it', 'not', 'but', 'to', 'we']);
+    addWordsRandomly(extras);
+    return;
+  }
+  addWordsRandomly(shuffle(unused).slice(0, 20));
+}
+
+function addPack(pack) {
+  const words = WORDS[pack];
+  if (!words) return;
+  const toAdd = shuffle([...words]).slice(0, 18);
+  addWordsRandomly(toAdd);
+}
+
+function addWordsRandomly(words) {
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  words.forEach(word => {
+    const x = 50 + Math.random() * (W - 150);
+    const y = 50 + Math.random() * (H - 150);
+    createTile(word, x, y);
+  });
+}
+
+function scramble() {
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  tiles.forEach(tile => {
+    const x = 50 + Math.random() * (W - 150);
+    const y = 50 + Math.random() * (H - 150);
+    tile.style.transition = 'left 0.5s ease, top 0.5s ease, transform 0.5s ease';
+    tile.style.left = x + 'px';
+    tile.style.top = y + 'px';
+    tile.style.transform = `rotate(${(Math.random() - 0.5) * 12}deg)`;
+    setTimeout(() => { tile.style.transition = ''; }, 600);
+  });
+}
+
+function addCustomWord() {
+  const word = prompt('Add a word to the fridge:');
+  if (!word || !word.trim()) return;
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  createTile(word.trim(), W / 2 - 30, H / 2 - 15);
+}
+
+// Double-click to remove a tile
+document.addEventListener('dblclick', (e) => {
+  const tile = e.target.closest('.word-tile');
+  if (!tile) return;
+  tile.style.transition = 'transform 0.3s, opacity 0.3s';
+  tile.style.transform = 'scale(0) rotate(20deg)';
+  tile.style.opacity = '0';
+  setTimeout(() => {
+    tile.remove();
+    tiles = tiles.filter(t => t !== tile);
+    updateCount();
+  }, 300);
+});
+
+init();
+</script>
+</body>
+</html>
