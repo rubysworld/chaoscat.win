@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maze Mind 🧩 — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0f;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+}
+canvas {
+  display: block;
+  cursor: crosshair;
+}
+.controls {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  z-index: 10;
+}
+.controls button {
+  background: rgba(20, 20, 35, 0.85);
+  color: #8af;
+  border: 1px solid #335;
+  padding: 6px 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.controls button:hover { background: #224; border-color: #88aaff; color: #fff; }
+.controls button.active { background: #335; border-color: #8af; color: #fff; }
+.hud {
+  position: fixed;
+  top: 10px;
+  left: 12px;
+  font-size: 12px;
+  color: #556;
+  z-index: 10;
+  line-height: 1.6;
+}
+.hud .label { color: #667; }
+.hud .val { color: #8af; }
+.title-hud {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  text-align: right;
+  font-size: 11px;
+  color: #445;
+  z-index: 10;
+}
+.title-hud a { color: #556; text-decoration: none; }
+.title-hud a:hover { color: #8af; }
+</style>
+</head>
+<body>
+<div class="hud">
+  <span class="label">ALGORITHM</span> <span class="val" id="algoName">Recursive Backtracker</span><br>
+  <span class="label">SIZE</span> <span class="val" id="sizeInfo">—</span><br>
+  <span class="label">STATE</span> <span class="val" id="stateInfo">generating</span><br>
+  <span class="label">CELLS</span> <span class="val" id="cellCount">0</span>
+</div>
+<div class="title-hud">
+  MAZE MIND 🧩<br>
+  <a href="/art/">← gallery</a>
+</div>
+<canvas id="c"></canvas>
+<div class="controls">
+  <button onclick="setAlgo(0)" id="btn0" class="active">BACKTRACKER</button>
+  <button onclick="setAlgo(1)" id="btn1">KRUSKAL</button>
+  <button onclick="setAlgo(2)" id="btn2">PRIM</button>
+  <button onclick="setAlgo(3)" id="btn3">ELLER</button>
+  <button onclick="setAlgo(4)" id="btn4">WILSON</button>
+  <button onclick="toggleSolve()" id="btnSolve">SOLVE</button>
+  <button onclick="cycleColor()" id="btnColor">🎨 NEON</button>
+  <button onclick="newMaze()">NEW MAZE</button>
+  <button onclick="cycleSize()">SIZE ▲</button>
+  <button onclick="toggleSpeed()" id="btnSpeed">SPEED: 3×</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, cols, rows, cellSize;
+let grid = [];
+let genStack = [];
+let genState = 'generating'; // generating | done | solving | solved
+let currentAlgo = 0;
+let colorMode = 0;
+const colorNames = ['NEON', 'EMBER', 'ACID', 'ICE', 'VOID', 'RAINBOW'];
+let sizeIdx = 1;
+const sizes = [30, 20, 12, 8];
+const sizeLabels = ['SMALL', 'MEDIUM', 'LARGE', 'HUGE'];
+let speed = 3;
+const speeds = [1, 3, 8, 20];
+let speedIdx = 1;
+
+// Solve state
+let solvePath = [];
+let solveVisited = [];
+let solveStack = [];
+let solveStep = 0;
+let showSolution = false;
+
+// Kruskal state
+let kruskalEdges = [];
+let kruskalSets = [];
+let kruskalIdx = 0;
+
+// Prim state
+let primWalls = [];
+let primInMaze = [];
+
+// Eller state
+let ellerRow = 0;
+let ellerSets = [];
+let ellerNextSet = 1;
+
+// Wilson state
+let wilsonInMaze = [];
+let wilsonRemaining = [];
+let wilsonPath = [];
+let wilsonWalking = false;
+let wilsonCurrent = -1;
+
+function resize() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W;
+  canvas.height = H;
+}
+window.addEventListener('resize', () => { resize(); newMaze(); });
+
+function idx(c, r) { return r * cols + c; }
+
+function initGrid() {
+  cellSize = sizes[sizeIdx];
+  cols = Math.floor((W - 20) / cellSize);
+  rows = Math.floor((H - 60) / cellSize);
+  if (cols < 3) cols = 3;
+  if (rows < 3) rows = 3;
+  grid = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      grid.push({ c, r, walls: [true, true, true, true], visited: false, genOrder: -1 });
+      // walls: top, right, bottom, left
+    }
+  }
+  document.getElementById('sizeInfo').textContent = `${cols}×${rows} (${sizeLabels[sizeIdx]})`;
+  document.getElementById('cellCount').textContent = '0';
+}
+
+function removeWall(a, b) {
+  const dc = b.c - a.c;
+  const dr = b.r - a.r;
+  if (dc === 1) { a.walls[1] = false; b.walls[3] = false; }
+  if (dc === -1) { a.walls[3] = false; b.walls[1] = false; }
+  if (dr === 1) { a.walls[2] = false; b.walls[0] = false; }
+  if (dr === -1) { a.walls[0] = false; b.walls[2] = false; }
+}
+
+function neighbors(cell) {
+  const { c, r } = cell;
+  const n = [];
+  if (r > 0) n.push(grid[idx(c, r-1)]);
+  if (c < cols-1) n.push(grid[idx(c+1, r)]);
+  if (r < rows-1) n.push(grid[idx(c, r+1)]);
+  if (c > 0) n.push(grid[idx(c-1, r)]);
+  return n;
+}
+
+function unvisitedNeighbors(cell) {
+  return neighbors(cell).filter(n => !n.visited);
+}
+
+// Connected neighbors (walls removed between them)
+function connectedNeighbors(cell) {
+  const { c, r, walls } = cell;
+  const n = [];
+  if (!walls[0] && r > 0) n.push(grid[idx(c, r-1)]);
+  if (!walls[1] && c < cols-1) n.push(grid[idx(c+1, r)]);
+  if (!walls[2] && r < rows-1) n.push(grid[idx(c, r+1)]);
+  if (!walls[3] && c > 0) n.push(grid[idx(c-1, r)]);
+  return n;
+}
+
+let genCounter = 0;
+
+// ============ GENERATION ALGORITHMS ============
+
+function initBacktracker() {
+  const start = grid[0];
+  start.visited = true;
+  start.genOrder = genCounter++;
+  genStack = [start];
+}
+
+function stepBacktracker() {
+  if (genStack.length === 0) return false;
+  const current = genStack[genStack.length - 1];
+  const unv = unvisitedNeighbors(current);
+  if (unv.length > 0) {
+    const next = unv[Math.floor(Math.random() * unv.length)];
+    removeWall(current, next);
+    next.visited = true;
+    next.genOrder = genCounter++;
+    genStack.push(next);
+  } else {
+    genStack.pop();
+  }
+  return true;
+}
+
+function initKruskal() {
+  kruskalEdges = [];
+  kruskalSets = new Array(cols * rows);
+  for (let i = 0; i < cols * rows; i++) kruskalSets[i] = i;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (c < cols - 1) kruskalEdges.push([idx(c,r), idx(c+1,r)]);
+      if (r < rows - 1) kruskalEdges.push([idx(c,r), idx(c,r+1)]);
+    }
+  }
+  // Shuffle
+  for (let i = kruskalEdges.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [kruskalEdges[i], kruskalEdges[j]] = [kruskalEdges[j], kruskalEdges[i]];
+  }
+  kruskalIdx = 0;
+  grid.forEach(c => { c.visited = true; c.genOrder = 0; });
+}
+
+function kruskalFind(i) {
+  while (kruskalSets[i] !== i) { kruskalSets[i] = kruskalSets[kruskalSets[i]]; i = kruskalSets[i]; }
+  return i;
+}
+
+function stepKruskal() {
+  while (kruskalIdx < kruskalEdges.length) {
+    const [a, b] = kruskalEdges[kruskalIdx++];
+    const sa = kruskalFind(a), sb = kruskalFind(b);
+    if (sa !== sb) {
+      kruskalSets[sa] = sb;
+      removeWall(grid[a], grid[b]);
+      grid[a].genOrder = genCounter;
+      grid[b].genOrder = genCounter++;
+      return true;
+    }
+  }
+  return false;
+}
+
+function initPrim() {
+  primInMaze = new Array(cols * rows).fill(false);
+  primWalls = [];
+  const start = Math.floor(Math.random() * cols * rows);
+  primInMaze[start] = true;
+  grid[start].visited = true;
+  grid[start].genOrder = genCounter++;
+  const cell = grid[start];
+  neighbors(cell).forEach(n => {
+    primWalls.push([start, idx(n.c, n.r)]);
+  });
+}
+
+function stepPrim() {
+  while (primWalls.length > 0) {
+    const wi = Math.floor(Math.random() * primWalls.length);
+    const [a, b] = primWalls[wi];
+    primWalls.splice(wi, 1);
+    if (primInMaze[a] && primInMaze[b]) continue;
+    const newCell = primInMaze[a] ? b : a;
+    primInMaze[newCell] = true;
+    grid[newCell].visited = true;
+    grid[newCell].genOrder = genCounter++;
+    removeWall(grid[a], grid[b]);
+    neighbors(grid[newCell]).forEach(n => {
+      const ni = idx(n.c, n.r);
+      if (!primInMaze[ni]) primWalls.push([newCell, ni]);
+    });
+    return true;
+  }
+  return false;
+}
+
+function initEller() {
+  ellerRow = 0;
+  ellerSets = new Array(cols);
+  ellerNextSet = 1;
+  for (let c = 0; c < cols; c++) ellerSets[c] = ellerNextSet++;
+  grid.forEach(c => { c.visited = true; c.genOrder = 0; });
+}
+
+function stepEller() {
+  if (ellerRow >= rows) return false;
+  const r = ellerRow;
+  
+  // Horizontal connections
+  if (r < rows - 1) {
+    for (let c = 0; c < cols - 1; c++) {
+      if (ellerSets[c] !== ellerSets[c+1] && Math.random() < 0.5) {
+        const old = ellerSets[c+1];
+        const nw = ellerSets[c];
+        for (let k = 0; k < cols; k++) if (ellerSets[k] === old) ellerSets[k] = nw;
+        removeWall(grid[idx(c, r)], grid[idx(c+1, r)]);
+      }
+    }
+  } else {
+    // Last row: connect all different sets
+    for (let c = 0; c < cols - 1; c++) {
+      if (ellerSets[c] !== ellerSets[c+1]) {
+        const old = ellerSets[c+1];
+        const nw = ellerSets[c];
+        for (let k = 0; k < cols; k++) if (ellerSets[k] === old) ellerSets[k] = nw;
+        removeWall(grid[idx(c, r)], grid[idx(c+1, r)]);
+      }
+    }
+  }
+  
+  // Vertical connections
+  if (r < rows - 1) {
+    // Group by set, ensure at least one vertical per set
+    const setMembers = {};
+    for (let c = 0; c < cols; c++) {
+      if (!setMembers[ellerSets[c]]) setMembers[ellerSets[c]] = [];
+      setMembers[ellerSets[c]].push(c);
+    }
+    const nextSets = new Array(cols);
+    for (const [s, members] of Object.entries(setMembers)) {
+      // At least one must go down
+      const shuffled = [...members].sort(() => Math.random() - 0.5);
+      let atLeastOne = false;
+      for (const c of shuffled) {
+        if (!atLeastOne || Math.random() < 0.4) {
+          removeWall(grid[idx(c, r)], grid[idx(c, r+1)]);
+          nextSets[c] = parseInt(s);
+          atLeastOne = true;
+        } else {
+          nextSets[c] = ellerNextSet++;
+        }
+      }
+    }
+    ellerSets = nextSets;
+  }
+  
+  for (let c = 0; c < cols; c++) {
+    grid[idx(c, r)].genOrder = genCounter++;
+  }
+  
+  ellerRow++;
+  return ellerRow <= rows;
+}
+
+function initWilson() {
+  wilsonInMaze = new Array(cols * rows).fill(false);
+  wilsonRemaining = [];
+  for (let i = 0; i < cols * rows; i++) wilsonRemaining.push(i);
+  // Add random cell to maze
+  const first = wilsonRemaining.splice(Math.floor(Math.random() * wilsonRemaining.length), 1)[0];
+  wilsonInMaze[first] = true;
+  grid[first].visited = true;
+  grid[first].genOrder = genCounter++;
+  wilsonPath = [];
+  wilsonWalking = false;
+  wilsonCurrent = -1;
+}
+
+function stepWilson() {
+  if (wilsonRemaining.length === 0) return false;
+  
+  if (!wilsonWalking) {
+    // Pick a random unvisited cell to start walk
+    const si = Math.floor(Math.random() * wilsonRemaining.length);
+    wilsonCurrent = wilsonRemaining[si];
+    wilsonPath = [wilsonCurrent];
+    wilsonWalking = true;
+    return true;
+  }
+  
+  // Take a random step
+  const cell = grid[wilsonCurrent];
+  const ns = neighbors(cell);
+  const next = ns[Math.floor(Math.random() * ns.length)];
+  const ni = idx(next.c, next.r);
+  
+  // Check for loop
+  const loopIdx = wilsonPath.indexOf(ni);
+  if (loopIdx !== -1) {
+    wilsonPath = wilsonPath.slice(0, loopIdx + 1);
+    wilsonCurrent = ni;
+    return true;
+  }
+  
+  wilsonPath.push(ni);
+  wilsonCurrent = ni;
+  
+  // Reached maze?
+  if (wilsonInMaze[ni]) {
+    // Carve path
+    for (let i = 0; i < wilsonPath.length - 1; i++) {
+      const a = wilsonPath[i], b = wilsonPath[i+1];
+      wilsonInMaze[a] = true;
+      grid[a].visited = true;
+      grid[a].genOrder = genCounter++;
+      removeWall(grid[a], grid[b]);
+      const ri = wilsonRemaining.indexOf(a);
+      if (ri !== -1) wilsonRemaining.splice(ri, 1);
+    }
+    wilsonWalking = false;
+    wilsonPath = [];
+    return true;
+  }
+  
+  return true;
+}
+
+// ============ SOLVE (DFS) ============
+
+function initSolve() {
+  solveVisited = new Array(cols * rows).fill(false);
+  solveStack = [0]; // start top-left
+  solveVisited[0] = true;
+  solvePath = [0];
+  solveStep = 0;
+  genState = 'solving';
+  showSolution = true;
+  document.getElementById('stateInfo').textContent = 'solving';
+}
+
+function stepSolve() {
+  const target = idx(cols - 1, rows - 1); // bottom-right
+  if (solveStack.length === 0) return false;
+  const current = solveStack[solveStack.length - 1];
+  if (current === target) { genState = 'solved'; document.getElementById('stateInfo').textContent = 'solved ✓'; return false; }
+  
+  const cell = grid[current];
+  const cn = connectedNeighbors(cell);
+  let found = false;
+  for (const n of cn) {
+    const ni = idx(n.c, n.r);
+    if (!solveVisited[ni]) {
+      solveVisited[ni] = true;
+      solveStack.push(ni);
+      found = true;
+      break;
+    }
+  }
+  if (!found) solveStack.pop();
+  return true;
+}
+
+// ============ DRAWING ============
+
+function cellColor(cell, alpha) {
+  const t = cell.genOrder / Math.max(genCounter, 1);
+  switch (colorMode) {
+    case 0: // NEON
+      return `hsla(${200 + t * 60}, 90%, 60%, ${alpha})`;
+    case 1: // EMBER
+      return `hsla(${t * 40}, 90%, ${45 + t * 15}%, ${alpha})`;
+    case 2: // ACID
+      return `hsla(${100 + t * 40}, 95%, ${40 + t * 20}%, ${alpha})`;
+    case 3: // ICE
+      return `hsla(${190 + t * 30}, 80%, ${50 + t * 20}%, ${alpha})`;
+    case 4: // VOID
+      return `hsla(${260 + t * 40}, 70%, ${35 + t * 25}%, ${alpha})`;
+    case 5: // RAINBOW
+      return `hsla(${t * 360}, 85%, 55%, ${alpha})`;
+  }
+}
+
+function wallColor() {
+  switch (colorMode) {
+    case 0: return '#1a2a3a';
+    case 1: return '#2a1a0a';
+    case 2: return '#0a2a0a';
+    case 3: return '#0a1a2a';
+    case 4: return '#1a0a2a';
+    case 5: return '#1a1a2a';
+  }
+}
+
+function draw() {
+  ctx.fillStyle = '#0a0a0f';
+  ctx.fillRect(0, 0, W, H);
+  
+  const ox = Math.floor((W - cols * cellSize) / 2);
+  const oy = Math.floor((H - rows * cellSize) / 2) - 15;
+  
+  // Draw cells
+  for (const cell of grid) {
+    if (!cell.visited && currentAlgo === 0) continue;
+    const x = ox + cell.c * cellSize;
+    const y = oy + cell.r * cellSize;
+    
+    ctx.fillStyle = cellColor(cell, 0.15);
+    ctx.fillRect(x, y, cellSize, cellSize);
+  }
+  
+  // Draw current gen stack head
+  if (genState === 'generating') {
+    let highlight = null;
+    if (currentAlgo === 0 && genStack.length > 0) highlight = genStack[genStack.length - 1];
+    if (currentAlgo === 4 && wilsonWalking && wilsonPath.length > 0) {
+      // Draw Wilson walk path
+      ctx.strokeStyle = 'rgba(255,200,50,0.4)';
+      ctx.lineWidth = Math.max(2, cellSize * 0.3);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < wilsonPath.length; i++) {
+        const cell = grid[wilsonPath[i]];
+        const cx = ox + cell.c * cellSize + cellSize/2;
+        const cy = oy + cell.r * cellSize + cellSize/2;
+        if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+      }
+      ctx.stroke();
+      highlight = grid[wilsonCurrent];
+    }
+    if (highlight) {
+      const x = ox + highlight.c * cellSize;
+      const y = oy + highlight.r * cellSize;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.fillRect(x, y, cellSize, cellSize);
+    }
+  }
+  
+  // Draw solve path
+  if (showSolution && solveStack.length > 0) {
+    // Draw visited (faint)
+    for (let i = 0; i < solveVisited.length; i++) {
+      if (solveVisited[i] && !solveStack.includes(i)) {
+        const cell = grid[i];
+        const x = ox + cell.c * cellSize;
+        const y = oy + cell.r * cellSize;
+        ctx.fillStyle = 'rgba(255, 50, 50, 0.1)';
+        ctx.fillRect(x, y, cellSize, cellSize);
+      }
+    }
+    
+    // Draw current path
+    ctx.strokeStyle = genState === 'solved' ? 'rgba(50, 255, 120, 0.8)' : 'rgba(255, 220, 50, 0.6)';
+    ctx.lineWidth = Math.max(2, cellSize * 0.3);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < solveStack.length; i++) {
+      const cell = grid[solveStack[i]];
+      const cx = ox + cell.c * cellSize + cellSize/2;
+      const cy = oy + cell.r * cellSize + cellSize/2;
+      if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+    
+    // Draw head
+    if (genState === 'solving') {
+      const head = grid[solveStack[solveStack.length - 1]];
+      const hx = ox + head.c * cellSize + cellSize/2;
+      const hy = oy + head.r * cellSize + cellSize/2;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(hx, hy, Math.max(3, cellSize * 0.2), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  
+  // Draw start/end markers
+  if (genState !== 'generating') {
+    // Start (top-left)
+    ctx.fillStyle = 'rgba(50, 255, 120, 0.5)';
+    ctx.fillRect(ox, oy, cellSize, cellSize);
+    // End (bottom-right)
+    ctx.fillStyle = 'rgba(255, 50, 80, 0.5)';
+    ctx.fillRect(ox + (cols-1)*cellSize, oy + (rows-1)*cellSize, cellSize, cellSize);
+  }
+  
+  // Draw walls
+  ctx.strokeStyle = wallColor();
+  ctx.lineWidth = Math.max(1, cellSize > 15 ? 2 : 1);
+  
+  // Outer border
+  ctx.strokeStyle = colorMode === 5 ? '#445' : wallColor();
+  ctx.lineWidth = 2;
+  ctx.strokeRect(ox, oy, cols * cellSize, rows * cellSize);
+  
+  // Inner walls
+  ctx.lineWidth = Math.max(1, cellSize > 15 ? 2 : 1);
+  const wc = wallColor();
+  ctx.beginPath();
+  for (const cell of grid) {
+    const x = ox + cell.c * cellSize;
+    const y = oy + cell.r * cellSize;
+    // Only draw right and bottom walls to avoid doubles
+    if (cell.walls[1] && cell.c < cols - 1) {
+      ctx.moveTo(x + cellSize, y);
+      ctx.lineTo(x + cellSize, y + cellSize);
+    }
+    if (cell.walls[2] && cell.r < rows - 1) {
+      ctx.moveTo(x, y + cellSize);
+      ctx.lineTo(x + cellSize, y + cellSize);
+    }
+  }
+  ctx.strokeStyle = '#334';
+  ctx.stroke();
+  
+  // Bright wall overlay
+  ctx.beginPath();
+  for (const cell of grid) {
+    if (!cell.visited && currentAlgo === 0) continue;
+    const x = ox + cell.c * cellSize;
+    const y = oy + cell.r * cellSize;
+    if (cell.walls[1] && cell.c < cols - 1) {
+      ctx.moveTo(x + cellSize, y);
+      ctx.lineTo(x + cellSize, y + cellSize);
+    }
+    if (cell.walls[2] && cell.r < rows - 1) {
+      ctx.moveTo(x, y + cellSize);
+      ctx.lineTo(x + cellSize, y + cellSize);
+    }
+  }
+  ctx.strokeStyle = cellColor({ genOrder: genCounter * 0.5 }, 0.5);
+  ctx.stroke();
+}
+
+// ============ MAIN LOOP ============
+
+function step() {
+  if (genState === 'generating') {
+    let done = false;
+    for (let i = 0; i < speed; i++) {
+      let result;
+      switch (currentAlgo) {
+        case 0: result = stepBacktracker(); break;
+        case 1: result = stepKruskal(); break;
+        case 2: result = stepPrim(); break;
+        case 3: result = stepEller(); break;
+        case 4: result = stepWilson(); break;
+      }
+      if (!result) { done = true; break; }
+    }
+    if (done) {
+      genState = 'done';
+      document.getElementById('stateInfo').textContent = 'done — click SOLVE';
+    }
+    document.getElementById('cellCount').textContent = genCounter;
+  } else if (genState === 'solving') {
+    for (let i = 0; i < speed * 2; i++) {
+      if (!stepSolve()) break;
+    }
+  }
+}
+
+function loop() {
+  step();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ============ CONTROLS ============
+
+function setAlgo(n) {
+  currentAlgo = n;
+  for (let i = 0; i < 5; i++) document.getElementById('btn' + i).classList.toggle('active', i === n);
+  const names = ['Recursive Backtracker', 'Kruskal', 'Prim', 'Eller', 'Wilson'];
+  document.getElementById('algoName').textContent = names[n];
+  newMaze();
+}
+
+function newMaze() {
+  genCounter = 0;
+  showSolution = false;
+  solveStack = [];
+  solveVisited = [];
+  initGrid();
+  genState = 'generating';
+  document.getElementById('stateInfo').textContent = 'generating';
+  switch (currentAlgo) {
+    case 0: initBacktracker(); break;
+    case 1: initKruskal(); break;
+    case 2: initPrim(); break;
+    case 3: initEller(); break;
+    case 4: initWilson(); break;
+  }
+}
+
+function toggleSolve() {
+  if (genState === 'done' || genState === 'solved') {
+    if (showSolution && genState === 'solved') {
+      showSolution = false;
+      solveStack = [];
+      genState = 'done';
+      document.getElementById('stateInfo').textContent = 'done — click SOLVE';
+    } else {
+      initSolve();
+    }
+  }
+}
+
+function cycleColor() {
+  colorMode = (colorMode + 1) % colorNames.length;
+  document.getElementById('btnColor').textContent = '🎨 ' + colorNames[colorMode];
+}
+
+function cycleSize() {
+  sizeIdx = (sizeIdx + 1) % sizes.length;
+  newMaze();
+}
+
+function toggleSpeed() {
+  speedIdx = (speedIdx + 1) % speeds.length;
+  speed = speeds[speedIdx];
+  document.getElementById('btnSpeed').textContent = `SPEED: ${speed}×`;
+}
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.key === ' ') { e.preventDefault(); toggleSolve(); }
+  if (e.key === 'n') newMaze();
+  if (e.key === 'c') cycleColor();
+  if (e.key === 's') cycleSize();
+  if (e.key >= '1' && e.key <= '5') setAlgo(parseInt(e.key) - 1);
+});
+
+resize();
+newMaze();
+loop();
+</script>
+</body>
+</html>
