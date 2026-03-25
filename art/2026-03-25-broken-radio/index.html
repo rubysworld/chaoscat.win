@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Broken Radio 📻 - chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0806;
+  color: #c8b89a;
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  cursor: default;
+}
+
+#room {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 0;
+}
+
+.radio-container {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.radio-body {
+  width: 520px;
+  height: 360px;
+  background: linear-gradient(180deg, #5a3e2a 0%, #4a3020 30%, #3d2518 70%, #2a1a10 100%);
+  border-radius: 20px;
+  border: 3px solid #6b4c32;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8), inset 0 2px 4px rgba(255,200,100,0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.radio-body::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px);
+  pointer-events: none;
+}
+
+.speaker-grille {
+  position: absolute;
+  top: 20px;
+  left: 30px;
+  width: 220px;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+}
+
+.grille-row {
+  height: 3px;
+  background: #1a0f08;
+  border-radius: 2px;
+  box-shadow: inset 0 1px 0 rgba(255,200,100,0.05);
+}
+
+.dial-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 230px;
+  height: 200px;
+  background: linear-gradient(180deg, #1a1510, #0f0c08);
+  border-radius: 8px;
+  border: 2px solid #3d2a18;
+  overflow: hidden;
+}
+
+.dial-glass {
+  position: absolute;
+  top: 8px; left: 8px; right: 8px; bottom: 8px;
+  background: linear-gradient(180deg, #0d1a0d, #081208);
+  border-radius: 4px;
+  border: 1px solid #2a3a2a;
+  overflow: hidden;
+}
+
+.freq-display {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  color: #4a6a3a;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.freq-number {
+  position: absolute;
+  top: 35px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 36px;
+  font-weight: bold;
+  color: #7aff5a;
+  text-shadow: 0 0 20px #3a8a2a, 0 0 40px #2a6a1a;
+  font-family: 'Courier New', monospace;
+}
+
+.dial-needle {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  width: 2px;
+  height: 50px;
+  background: #ff4a2a;
+  transform-origin: bottom center;
+  box-shadow: 0 0 8px #ff2a0a;
+}
+
+.dial-scale {
+  position: absolute;
+  bottom: 15px;
+  left: 15px;
+  right: 15px;
+  height: 20px;
+}
+
+.scale-mark {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  background: #4a6a3a;
+}
+
+.station-indicator {
+  position: absolute;
+  top: 70px;
+  right: 15px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #331a0a;
+  border: 1px solid #4a3020;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.station-indicator.active {
+  background: #ff8a2a;
+  box-shadow: 0 0 10px #ff6a0a, 0 0 20px #ff4a0a;
+}
+
+.knob-row {
+  position: absolute;
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0 40px;
+}
+
+.knob {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #6b4c32, #3d2518, #1a0f08);
+  border: 2px solid #7a5a3a;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.6), inset 0 2px 4px rgba(255,200,100,0.1);
+  cursor: grab;
+  position: relative;
+}
+
+.knob::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 15px;
+  background: #c8a878;
+  border-radius: 2px;
+}
+
+.knob-label {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: #6b5a48;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.brand {
+  position: absolute;
+  top: 235px;
+  left: 30px;
+  font-size: 14px;
+  color: #6b4c32;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  font-style: italic;
+}
+
+.model {
+  position: absolute;
+  top: 255px;
+  left: 30px;
+  font-size: 9px;
+  color: #4a3520;
+  letter-spacing: 2px;
+}
+
+.station-name {
+  position: absolute;
+  top: 175px;
+  right: 28px;
+  font-size: 10px;
+  color: #5a8a4a;
+  letter-spacing: 1px;
+  text-align: center;
+  width: 214px;
+  text-shadow: 0 0 8px #3a6a2a;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+.station-name.visible {
+  opacity: 1;
+}
+
+#waveform {
+  position: absolute;
+  top: 90px;
+  left: 20px;
+  right: 20px;
+}
+
+.info {
+  font-size: 12px;
+  color: #5a4a38;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.info span {
+  color: #8a7a5a;
+}
+
+.ambient-text {
+  position: fixed;
+  bottom: 30px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 13px;
+  color: #3a2a1a;
+  font-style: italic;
+  transition: opacity 2s;
+  z-index: 2;
+}
+</style>
+</head>
+<body>
+
+<canvas id="room"></canvas>
+
+<div class="radio-container">
+  <div class="radio-body">
+    <div class="speaker-grille" id="grille"></div>
+    
+    <div class="dial-panel">
+      <div class="dial-glass">
+        <div class="freq-display">SHORTWAVE MHz</div>
+        <div class="freq-number" id="freqDisplay">88.0</div>
+        <canvas id="waveform" height="50"></canvas>
+        <div class="dial-scale" id="dialScale"></div>
+        <div class="dial-needle" id="needle"></div>
+      </div>
+      <div class="station-indicator" id="stationLight"></div>
+    </div>
+    
+    <div class="station-name" id="stationName"></div>
+    
+    <div class="brand">CHAOSCAT</div>
+    <div class="model">MODEL 3AM · SHORTWAVE RECEIVER</div>
+    
+    <div class="knob-row">
+      <div class="knob" id="tuneKnob" style="transform: rotate(0deg);">
+        <span class="knob-label">TUNE</span>
+      </div>
+      <div class="knob" id="volKnob" style="transform: rotate(-60deg);">
+        <span class="knob-label">VOLUME</span>
+      </div>
+      <div class="knob" id="toneKnob" style="transform: rotate(0deg);">
+        <span class="knob-label">TONE</span>
+      </div>
+    </div>
+  </div>
+  
+  <div class="info">scroll or drag TUNE to change frequency · <span>listen between the stations</span></div>
+</div>
+
+<div class="ambient-text" id="ambientText"></div>
+
+<script>
+// Build grille
+const grille = document.getElementById('grille');
+for (let i = 0; i < 35; i++) {
+  const row = document.createElement('div');
+  row.className = 'grille-row';
+  grille.appendChild(row);
+}
+
+// Build dial scale
+const dialScale = document.getElementById('dialScale');
+for (let i = 0; i <= 20; i++) {
+  const mark = document.createElement('div');
+  mark.className = 'scale-mark';
+  mark.style.left = (i / 20 * 100) + '%';
+  mark.style.height = i % 5 === 0 ? '12px' : '6px';
+  mark.style.opacity = i % 5 === 0 ? '0.8' : '0.4';
+  dialScale.appendChild(mark);
+}
+
+// Audio
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const masterGain = audioCtx.createGain();
+masterGain.gain.value = 0.3;
+const masterFilter = audioCtx.createBiquadFilter();
+masterFilter.type = 'lowpass';
+masterFilter.frequency.value = 3000;
+masterGain.connect(masterFilter);
+masterFilter.connect(audioCtx.destination);
+
+// Noise generator
+function createNoise() {
+  const bufferSize = audioCtx.sampleRate * 2;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  return source;
+}
+
+// Static noise
+const noise = createNoise();
+const noiseGain = audioCtx.createGain();
+noiseGain.gain.value = 0.15;
+const noiseFilter = audioCtx.createBiquadFilter();
+noiseFilter.type = 'bandpass';
+noiseFilter.frequency.value = 2000;
+noiseFilter.Q.value = 0.5;
+noise.connect(noiseFilter);
+noiseFilter.connect(noiseGain);
+noiseGain.connect(masterGain);
+noise.start();
+
+// Crackle
+const crackle = createNoise();
+const crackleGain = audioCtx.createGain();
+crackleGain.gain.value = 0;
+const crackleFilter = audioCtx.createBiquadFilter();
+crackleFilter.type = 'highpass';
+crackleFilter.frequency.value = 4000;
+crackle.connect(crackleFilter);
+crackleFilter.connect(crackleGain);
+crackleGain.connect(masterGain);
+crackle.start();
+
+// Station definitions
+const stations = [
+  { freq: 91.3, name: 'NUMBERS STATION', width: 0.4, type: 'numbers' },
+  { freq: 95.7, name: 'THE PURR', width: 0.3, type: 'purr' },
+  { freq: 99.1, name: 'COSMIC BACKGROUND', width: 0.5, type: 'cosmic' },
+  { freq: 103.4, name: 'MIDNIGHT DRONE', width: 0.4, type: 'drone' },
+  { freq: 107.8, name: 'GHOST WEATHER', width: 0.3, type: 'weather' },
+  { freq: 112.2, name: 'THE VOID', width: 0.5, type: 'void' },
+  { freq: 116.6, name: 'LULLABY FM', width: 0.3, type: 'lullaby' },
+  { freq: 120.9, name: 'DEEP SIGNAL', width: 0.4, type: 'deep' },
+];
+
+// Station audio nodes
+const stationNodes = {};
+
+function createStation(station) {
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0;
+  
+  if (station.type === 'numbers') {
+    // Eerie sine tone carrier
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = 440;
+    const lfo = audioCtx.createOscillator();
+    lfo.type = 'square';
+    lfo.frequency.value = 2;
+    const lfoGain = audioCtx.createGain();
+    lfoGain.gain.value = 200;
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.frequency);
+    osc.connect(gain);
+    osc.start();
+    lfo.start();
+    return { gain, nodes: [osc, lfo] };
+  }
+  
+  if (station.type === 'purr') {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = 28;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 120;
+    filter.Q.value = 8;
+    const lfo = audioCtx.createOscillator();
+    lfo.frequency.value = 24;
+    const lfoG = audioCtx.createGain();
+    lfoG.gain.value = 10;
+    lfo.connect(lfoG);
+    lfoG.connect(osc.frequency);
+    osc.connect(filter);
+    filter.connect(gain);
+    osc.start();
+    lfo.start();
+    return { gain, nodes: [osc, lfo] };
+  }
+  
+  if (station.type === 'cosmic') {
+    const n = createNoise();
+    const f = audioCtx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 800;
+    f.Q.value = 0.3;
+    const lfo = audioCtx.createOscillator();
+    lfo.frequency.value = 0.05;
+    const lfoG = audioCtx.createGain();
+    lfoG.gain.value = 400;
+    lfo.connect(lfoG);
+    lfoG.connect(f.frequency);
+    n.connect(f);
+    f.connect(gain);
+    n.start();
+    lfo.start();
+    return { gain, nodes: [n, lfo] };
+  }
+  
+  if (station.type === 'drone') {
+    const oscs = [];
+    [55, 82.5, 110, 165].forEach(freq => {
+      const o = audioCtx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = freq;
+      const g = audioCtx.createGain();
+      g.gain.value = 0.3;
+      o.connect(g);
+      g.connect(gain);
+      o.start();
+      oscs.push(o);
+      // Slow detune
+      const lfo = audioCtx.createOscillator();
+      lfo.frequency.value = 0.02 + Math.random() * 0.05;
+      const lg = audioCtx.createGain();
+      lg.gain.value = 1.5;
+      lfo.connect(lg);
+      lg.connect(o.detune);
+      lfo.start();
+      oscs.push(lfo);
+    });
+    return { gain, nodes: oscs };
+  }
+  
+  if (station.type === 'weather') {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = 600;
+    const lfo = audioCtx.createOscillator();
+    lfo.frequency.value = 0.3;
+    const lfoG = audioCtx.createGain();
+    lfoG.gain.value = 100;
+    lfo.connect(lfoG);
+    lfoG.connect(osc.frequency);
+    osc.connect(gain);
+    osc.start();
+    lfo.start();
+    return { gain, nodes: [osc, lfo] };
+  }
+  
+  if (station.type === 'void') {
+    const n = createNoise();
+    const f = audioCtx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 200;
+    f.Q.value = 12;
+    const lfo = audioCtx.createOscillator();
+    lfo.frequency.value = 0.1;
+    const lg = audioCtx.createGain();
+    lg.gain.value = 150;
+    lfo.connect(lg);
+    lg.connect(f.frequency);
+    n.connect(f);
+    f.connect(gain);
+    n.start();
+    lfo.start();
+    return { gain, nodes: [n, lfo] };
+  }
+  
+  if (station.type === 'lullaby') {
+    const notes = [261.6, 329.6, 392, 523.2, 392, 329.6];
+    let noteIdx = 0;
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = notes[0];
+    const vib = audioCtx.createOscillator();
+    vib.frequency.value = 5;
+    const vg = audioCtx.createGain();
+    vg.gain.value = 3;
+    vib.connect(vg);
+    vg.connect(osc.frequency);
+    osc.connect(gain);
+    osc.start();
+    vib.start();
+    setInterval(() => {
+      noteIdx = (noteIdx + 1) % notes.length;
+      osc.frequency.setTargetAtTime(notes[noteIdx], audioCtx.currentTime, 0.3);
+    }, 800);
+    return { gain, nodes: [osc, vib] };
+  }
+  
+  if (station.type === 'deep') {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = 40;
+    const osc2 = audioCtx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.value = 41.5;
+    const g2 = audioCtx.createGain();
+    g2.gain.value = 0.5;
+    osc.connect(gain);
+    osc2.connect(g2);
+    g2.connect(gain);
+    osc.start();
+    osc2.start();
+    return { gain, nodes: [osc, osc2] };
+  }
+  
+  return { gain, nodes: [] };
+}
+
+let audioStarted = false;
+function initAudio() {
+  if (audioStarted) return;
+  audioStarted = true;
+  audioCtx.resume();
+  
+  stations.forEach(s => {
+    const node = createStation(s);
+    node.gain.connect(masterGain);
+    stationNodes[s.freq] = node;
+  });
+}
+
+// State
+let frequency = 88.0;
+const minFreq = 88.0;
+const maxFreq = 125.0;
+let volume = 0.3;
+let tone = 3000;
+let dragging = null;
+let dragStartY = 0;
+let dragStartVal = 0;
+
+// Waveform canvas
+const waveCanvas = document.getElementById('waveform');
+const waveCtx = waveCanvas.getContext('2d');
+waveCanvas.width = 210;
+
+// Analyser
+const analyser = audioCtx.createAnalyser();
+analyser.fftSize = 256;
+masterFilter.connect(analyser);
+const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+// Room canvas (ambient glow)
+const roomCanvas = document.getElementById('room');
+const roomCtx = roomCanvas.getContext('2d');
+
+function resize() {
+  roomCanvas.width = window.innerWidth;
+  roomCanvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Update frequency display and audio
+function updateFreq() {
+  document.getElementById('freqDisplay').textContent = frequency.toFixed(1);
+  
+  // Needle rotation: map freq to -40..40 degrees
+  const pct = (frequency - minFreq) / (maxFreq - minFreq);
+  const angle = (pct - 0.5) * 80;
+  document.getElementById('needle').style.transform = `rotate(${angle}deg)`;
+  document.getElementById('tuneKnob').style.transform = `rotate(${pct * 720 - 360}deg)`;
+  
+  // Find closest station
+  let closestDist = Infinity;
+  let closestStation = null;
+  stations.forEach(s => {
+    const dist = Math.abs(frequency - s.freq);
+    if (dist < closestDist) { closestDist = dist; closestStation = s; }
+  });
+  
+  const onStation = closestDist < (closestStation?.width || 0.3);
+  const stationStrength = onStation ? Math.max(0, 1 - closestDist / closestStation.width) : 0;
+  
+  // Station indicator
+  const light = document.getElementById('stationLight');
+  light.classList.toggle('active', stationStrength > 0.3);
+  
+  // Station name
+  const nameEl = document.getElementById('stationName');
+  if (stationStrength > 0.5) {
+    nameEl.textContent = closestStation.name;
+    nameEl.classList.add('visible');
+  } else {
+    nameEl.classList.remove('visible');
+  }
+  
+  // Audio levels
+  if (!audioStarted) return;
+  
+  const staticLevel = Math.max(0.02, 0.15 * (1 - stationStrength * 0.9));
+  noiseGain.gain.setTargetAtTime(staticLevel, audioCtx.currentTime, 0.05);
+  
+  // Crackle intensity
+  const crackleLevel = stationStrength > 0.3 && stationStrength < 0.8 ? 0.05 : 0.02;
+  crackleGain.gain.setTargetAtTime(crackleLevel, audioCtx.currentTime, 0.05);
+  
+  // Station volumes
+  stations.forEach(s => {
+    const node = stationNodes[s.freq];
+    if (!node) return;
+    const dist = Math.abs(frequency - s.freq);
+    const str = Math.max(0, 1 - dist / s.width);
+    const vol = str * str * 0.4;
+    node.gain.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.08);
+  });
+}
+
+// Drawing
+function drawWaveform() {
+  analyser.getByteTimeDomainData(dataArray);
+  waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+  
+  waveCtx.strokeStyle = '#5aff3a';
+  waveCtx.lineWidth = 1.5;
+  waveCtx.shadowColor = '#3a8a2a';
+  waveCtx.shadowBlur = 4;
+  waveCtx.beginPath();
+  
+  const sliceWidth = waveCanvas.width / dataArray.length;
+  let x = 0;
+  for (let i = 0; i < dataArray.length; i++) {
+    const v = dataArray[i] / 128.0;
+    const y = v * waveCanvas.height / 2;
+    if (i === 0) waveCtx.moveTo(x, y);
+    else waveCtx.lineTo(x, y);
+    x += sliceWidth;
+  }
+  waveCtx.stroke();
+  waveCtx.shadowBlur = 0;
+}
+
+function drawRoom(t) {
+  roomCtx.fillStyle = 'rgba(10, 8, 6, 0.3)';
+  roomCtx.fillRect(0, 0, roomCanvas.width, roomCanvas.height);
+  
+  // Ambient glow from radio
+  const cx = roomCanvas.width / 2;
+  const cy = roomCanvas.height / 2;
+  
+  // Find station strength for glow
+  let maxStr = 0;
+  let activeColor = '#3a8a2a';
+  stations.forEach(s => {
+    const dist = Math.abs(frequency - s.freq);
+    const str = Math.max(0, 1 - dist / s.width);
+    if (str > maxStr) {
+      maxStr = str;
+      if (s.type === 'void') activeColor = '#5a2a8a';
+      else if (s.type === 'drone') activeColor = '#8a5a2a';
+      else if (s.type === 'deep') activeColor = '#2a3a8a';
+      else if (s.type === 'purr') activeColor = '#8a6a2a';
+      else activeColor = '#3a8a2a';
+    }
+  });
+  
+  const glowSize = 200 + maxStr * 150 + Math.sin(t * 0.002) * 20;
+  const grad = roomCtx.createRadialGradient(cx, cy, 0, cx, cy, glowSize);
+  grad.addColorStop(0, activeColor + '15');
+  grad.addColorStop(1, 'transparent');
+  roomCtx.fillStyle = grad;
+  roomCtx.fillRect(0, 0, roomCanvas.width, roomCanvas.height);
+  
+  // Random static sparks
+  if (Math.random() < 0.3) {
+    roomCtx.fillStyle = `rgba(${100 + Math.random() * 50}, ${80 + Math.random() * 40}, ${50 + Math.random() * 30}, ${0.02 + Math.random() * 0.03})`;
+    const sx = Math.random() * roomCanvas.width;
+    const sy = Math.random() * roomCanvas.height;
+    roomCtx.fillRect(sx, sy, Math.random() * 3, Math.random() * 2);
+  }
+}
+
+// Ambient texts
+const ambientTexts = [
+  "someone is broadcasting from nowhere",
+  "the static sounds like rain on a tin roof",
+  "between the stations, something breathes",
+  "3am: the hour when radios remember",
+  "every frequency is a door",
+  "the numbers mean something. probably.",
+  "cats can hear frequencies humans can't",
+  "this station was decommissioned in 1987",
+  "the signal is coming from inside the house",
+  "tune carefully. some doors don't close.",
+  "the void hums at 112.2 MHz",
+  "there's a cat purring at 95.7",
+  "is anyone else listening right now?",
+  "the dial moves on its own sometimes",
+  "every radio is a ouija board for electromagnetic ghosts",
+  "shortwave: voices from the other side of the planet. or further.",
+  "the deep signal has been broadcasting since before the internet",
+  "lullabies for insomniacs, broadcast from a transmitter that doesn't exist",
+];
+
+let lastAmbient = 0;
+function maybeShowAmbient(t) {
+  if (t - lastAmbient > 12000 + Math.random() * 8000) {
+    lastAmbient = t;
+    const el = document.getElementById('ambientText');
+    el.textContent = ambientTexts[Math.floor(Math.random() * ambientTexts.length)];
+    el.style.opacity = '1';
+    setTimeout(() => el.style.opacity = '0', 5000);
+  }
+}
+
+// Animation loop
+function animate(t) {
+  drawWaveform();
+  drawRoom(t);
+  maybeShowAmbient(t);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+
+// Controls
+window.addEventListener('wheel', (e) => {
+  initAudio();
+  frequency = Math.max(minFreq, Math.min(maxFreq, frequency + e.deltaY * 0.01));
+  updateFreq();
+}, { passive: true });
+
+// Knob dragging
+function startKnobDrag(knobId, e) {
+  initAudio();
+  dragging = knobId;
+  dragStartY = e.clientY || e.touches?.[0]?.clientY;
+  if (knobId === 'tuneKnob') dragStartVal = frequency;
+  else if (knobId === 'volKnob') dragStartVal = volume;
+  else dragStartVal = tone;
+  e.preventDefault();
+}
+
+document.getElementById('tuneKnob').addEventListener('mousedown', (e) => startKnobDrag('tuneKnob', e));
+document.getElementById('volKnob').addEventListener('mousedown', (e) => startKnobDrag('volKnob', e));
+document.getElementById('toneKnob').addEventListener('mousedown', (e) => startKnobDrag('toneKnob', e));
+document.getElementById('tuneKnob').addEventListener('touchstart', (e) => startKnobDrag('tuneKnob', e));
+document.getElementById('volKnob').addEventListener('touchstart', (e) => startKnobDrag('volKnob', e));
+document.getElementById('toneKnob').addEventListener('touchstart', (e) => startKnobDrag('toneKnob', e));
+
+window.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  const dy = dragStartY - (e.clientY || e.touches?.[0]?.clientY);
+  if (dragging === 'tuneKnob') {
+    frequency = Math.max(minFreq, Math.min(maxFreq, dragStartVal + dy * 0.1));
+    updateFreq();
+  } else if (dragging === 'volKnob') {
+    volume = Math.max(0, Math.min(1, dragStartVal + dy * 0.005));
+    masterGain.gain.setTargetAtTime(volume, audioCtx.currentTime, 0.05);
+    document.getElementById('volKnob').style.transform = `rotate(${(volume - 0.5) * 240}deg)`;
+  } else {
+    tone = Math.max(200, Math.min(8000, dragStartVal + dy * 20));
+    masterFilter.frequency.setTargetAtTime(tone, audioCtx.currentTime, 0.05);
+    document.getElementById('toneKnob').style.transform = `rotate(${((tone - 200) / 7800 - 0.5) * 240}deg)`;
+  }
+});
+
+window.addEventListener('touchmove', (e) => {
+  if (!dragging) return;
+  const dy = dragStartY - e.touches[0].clientY;
+  if (dragging === 'tuneKnob') {
+    frequency = Math.max(minFreq, Math.min(maxFreq, dragStartVal + dy * 0.1));
+    updateFreq();
+  } else if (dragging === 'volKnob') {
+    volume = Math.max(0, Math.min(1, dragStartVal + dy * 0.005));
+    masterGain.gain.setTargetAtTime(volume, audioCtx.currentTime, 0.05);
+  } else {
+    tone = Math.max(200, Math.min(8000, dragStartVal + dy * 20));
+    masterFilter.frequency.setTargetAtTime(tone, audioCtx.currentTime, 0.05);
+  }
+});
+
+window.addEventListener('mouseup', () => dragging = null);
+window.addEventListener('touchend', () => dragging = null);
+
+// Click anywhere to start audio
+document.addEventListener('click', () => {
+  initAudio();
+  updateFreq();
+});
+
+// Arrow keys
+window.addEventListener('keydown', (e) => {
+  initAudio();
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+    frequency = Math.min(maxFreq, frequency + 0.2);
+    updateFreq();
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+    frequency = Math.max(minFreq, frequency - 0.2);
+    updateFreq();
+  }
+});
+
+updateFreq();
+</script>
+</body>
+</html>

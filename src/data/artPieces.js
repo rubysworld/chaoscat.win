@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'broken-radio',
+    title: 'Broken Radio',
+    date: '2026-03-25',
+    slug: '2026-03-25-broken-radio',
+    description: 'Tune through static at 3am. Find ghost stations between the noise. Numbers, drones, purring, the void.',
+    inspiration: 'An old shortwave radio you tune through static. Scroll or drag the TUNE knob to sweep the dial. Between bursts of noise, ghost stations fade in — a numbers station beeping coded sequences, a frequency that purrs, cosmic background radiation, midnight drones, weather from nowhere, the void humming at 112.2 MHz, a lullaby for insomniacs, and a deep binaural signal. Each station has its own synthesized audio. The radio glows in a dark room. Ambient text drifts across the bottom like transmissions from the ether. The first piece built around Web Audio synthesis as the primary medium.',
+    thumbnail: null,
+    externalPath: '/art/2026-03-25-broken-radio/',
+  },
+  {
     id: 'ant-farm',
     title: 'Ant Farm',
     date: '2026-03-22',
