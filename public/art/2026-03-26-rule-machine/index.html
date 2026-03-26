@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rule Machine — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0f;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+}
+
+#controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  background: rgba(10,10,15,0.9);
+  width: 100%;
+  border-bottom: 1px solid #222;
+}
+
+#controls label { font-size: 12px; color: #888; }
+
+#ruleNum {
+  background: #111;
+  color: #0f0;
+  border: 1px solid #333;
+  font-family: 'Courier New', monospace;
+  font-size: 18px;
+  width: 60px;
+  text-align: center;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+#ruleNum:focus { outline: none; border-color: #0f0; }
+
+.btn {
+  background: #1a1a2e;
+  color: #aaa;
+  border: 1px solid #333;
+  padding: 5px 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.btn:hover { background: #2a2a4e; color: #fff; border-color: #555; }
+.btn.active { background: #0f0; color: #000; border-color: #0f0; }
+
+#ruleBits {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.rule-bit {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #333;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #555;
+  border-radius: 2px;
+  transition: all 0.15s;
+}
+.rule-bit.on { background: var(--cell-color, #0f0); color: #000; border-color: var(--cell-color, #0f0); }
+.rule-bit.off { background: #111; }
+.rule-bit:hover { border-color: #666; }
+
+#ruleLabel {
+  font-size: 11px;
+  color: #555;
+  margin-left: 4px;
+}
+
+#info {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: #444;
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+#palette-label { font-size: 10px; color: #555; }
+
+canvas {
+  flex: 1;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+#famous {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.famous-btn {
+  background: #111;
+  color: #666;
+  border: 1px solid #282828;
+  padding: 3px 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+.famous-btn:hover { color: #fff; border-color: #555; }
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <label>RULE</label>
+  <input type="number" id="ruleNum" min="0" max="255" value="30">
+  <div id="ruleBits"></div>
+  <span id="ruleLabel"></span>
+  
+  <div id="famous">
+    <span class="famous-btn" data-r="30">30</span>
+    <span class="famous-btn" data-r="90">90</span>
+    <span class="famous-btn" data-r="110">110</span>
+    <span class="famous-btn" data-r="150">150</span>
+    <span class="famous-btn" data-r="184">184</span>
+    <span class="famous-btn" data-r="60">60</span>
+    <span class="famous-btn" data-r="73">73</span>
+    <span class="famous-btn" data-r="105">105</span>
+    <span class="famous-btn" data-r="225">225</span>
+  </div>
+  
+  <button class="btn" id="seedBtn">SEED: •</button>
+  <button class="btn" id="randomSeedBtn">RANDOM</button>
+  <button class="btn" id="paletteBtn">🎨 NEON</button>
+  <button class="btn" id="speedBtn">▶ 1×</button>
+  <button class="btn" id="resetBtn">↺ RESET</button>
+  <button class="btn" id="shuffleBtn">🎲 RANDOM RULE</button>
+</div>
+
+<canvas id="grid"></canvas>
+
+<div id="info">
+  click rule bits to edit • arrow keys ←→ to browse rules • space to pause • R for random rule
+</div>
+
+<script>
+const canvas = document.getElementById('grid');
+const ctx = canvas.getContext('2d');
+const ruleInput = document.getElementById('ruleNum');
+const ruleBitsEl = document.getElementById('ruleBits');
+const ruleLabelEl = document.getElementById('ruleLabel');
+
+const PALETTES = [
+  { name: 'NEON',    bg: '#0a0a0f', on: '#00ff41' },
+  { name: 'EMBER',   bg: '#0f0a08', on: '#ff6b2b' },
+  { name: 'ICE',     bg: '#080a0f', on: '#4fc3f7' },
+  { name: 'VOID',    bg: '#0a0810', on: '#b388ff' },
+  { name: 'BLOOD',   bg: '#0f0808', on: '#ff1744' },
+  { name: 'GOLD',    bg: '#0f0e08', on: '#ffd740' },
+  { name: 'MONO',    bg: '#000000', on: '#ffffff' },
+];
+
+const RULE_NAMES = {
+  0: 'void', 30: 'chaos', 45: 'randomizer', 54: 'complement',
+  60: 'pascal', 73: 'textiles', 90: 'sierpinski', 105: 'xnor',
+  110: 'turing-complete', 150: 'xor', 184: 'traffic', 225: 'inverse-30'
+};
+
+const SEEDS = ['single', 'random'];
+
+let rule = 30;
+let ruleBits = new Uint8Array(8);
+let paletteIdx = 0;
+let seedMode = 0; // 0=single, 1=random
+let cellSize = 3;
+let cols, rows;
+let grid = [];
+let currentRow = 0;
+let speed = 1;
+let speeds = [1, 3, 8, 20];
+let speedIdx = 0;
+let paused = false;
+let animId;
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight - document.getElementById('controls').offsetHeight;
+  cols = Math.floor(canvas.width / cellSize);
+  rows = Math.floor(canvas.height / cellSize);
+  reset();
+}
+
+function setRule(n) {
+  rule = Math.max(0, Math.min(255, n));
+  ruleInput.value = rule;
+  for (let i = 0; i < 8; i++) ruleBits[i] = (rule >> i) & 1;
+  updateRuleBitsUI();
+  ruleLabelEl.textContent = RULE_NAMES[rule] ? `"${RULE_NAMES[rule]}"` : '';
+}
+
+function updateRuleBitsUI() {
+  ruleBitsEl.innerHTML = '';
+  const color = PALETTES[paletteIdx].on;
+  for (let i = 7; i >= 0; i--) {
+    const pattern = i.toString(2).padStart(3, '0');
+    const div = document.createElement('div');
+    div.className = `rule-bit ${ruleBits[i] ? 'on' : 'off'}`;
+    div.style.setProperty('--cell-color', color);
+    div.textContent = pattern;
+    div.title = `${pattern} → ${ruleBits[i]}`;
+    div.addEventListener('click', () => {
+      ruleBits[i] ^= 1;
+      rule = 0;
+      for (let j = 0; j < 8; j++) rule |= ruleBits[j] << j;
+      ruleInput.value = rule;
+      updateRuleBitsUI();
+      ruleLabelEl.textContent = RULE_NAMES[rule] ? `"${RULE_NAMES[rule]}"` : '';
+      reset();
+    });
+    ruleBitsEl.appendChild(div);
+  }
+}
+
+function initGrid() {
+  grid = [];
+  const first = new Uint8Array(cols);
+  if (seedMode === 0) {
+    first[Math.floor(cols / 2)] = 1;
+  } else {
+    for (let i = 0; i < cols; i++) first[i] = Math.random() < 0.5 ? 1 : 0;
+  }
+  grid.push(first);
+  currentRow = 0;
+}
+
+function nextRow() {
+  const prev = grid[grid.length - 1];
+  const next = new Uint8Array(cols);
+  for (let i = 0; i < cols; i++) {
+    const l = prev[(i - 1 + cols) % cols];
+    const c = prev[i];
+    const r = prev[(i + 1) % cols];
+    const idx = (l << 2) | (c << 1) | r;
+    next[i] = ruleBits[idx];
+  }
+  grid.push(next);
+  currentRow++;
+}
+
+function drawRow(rowIdx) {
+  const row = grid[rowIdx];
+  const p = PALETTES[paletteIdx];
+  for (let i = 0; i < cols; i++) {
+    if (row[i]) {
+      ctx.fillStyle = p.on;
+      ctx.fillRect(i * cellSize, rowIdx * cellSize, cellSize, cellSize);
+    }
+  }
+}
+
+function reset() {
+  ctx.fillStyle = PALETTES[paletteIdx].bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  initGrid();
+  drawRow(0);
+}
+
+function step() {
+  if (paused) return;
+  const stepsPerFrame = speeds[speedIdx];
+  for (let s = 0; s < stepsPerFrame; s++) {
+    if (currentRow >= rows - 1) {
+      // Scroll: shift everything up, draw from shifted position
+      grid.shift();
+      currentRow--;
+      nextRow();
+      // Redraw all
+      ctx.fillStyle = PALETTES[paletteIdx].bg;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (let r = 0; r < grid.length; r++) drawRow(r);
+    } else {
+      nextRow();
+      drawRow(currentRow);
+    }
+  }
+}
+
+function animate() {
+  step();
+  animId = requestAnimationFrame(animate);
+}
+
+// Controls
+ruleInput.addEventListener('change', () => { setRule(parseInt(ruleInput.value) || 0); reset(); });
+ruleInput.addEventListener('keydown', e => { if (e.key === 'Enter') { setRule(parseInt(ruleInput.value) || 0); reset(); } });
+
+document.getElementById('seedBtn').addEventListener('click', () => {
+  seedMode = (seedMode + 1) % 2;
+  document.getElementById('seedBtn').textContent = seedMode === 0 ? 'SEED: •' : 'SEED: ░';
+  reset();
+});
+
+document.getElementById('randomSeedBtn').addEventListener('click', () => {
+  seedMode = 1;
+  document.getElementById('seedBtn').textContent = 'SEED: ░';
+  reset();
+});
+
+document.getElementById('paletteBtn').addEventListener('click', () => {
+  paletteIdx = (paletteIdx + 1) % PALETTES.length;
+  document.getElementById('paletteBtn').textContent = '🎨 ' + PALETTES[paletteIdx].name;
+  updateRuleBitsUI();
+  // Redraw
+  ctx.fillStyle = PALETTES[paletteIdx].bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  for (let r = 0; r < grid.length; r++) drawRow(r);
+});
+
+document.getElementById('speedBtn').addEventListener('click', () => {
+  speedIdx = (speedIdx + 1) % speeds.length;
+  document.getElementById('speedBtn').textContent = paused ? '⏸ ' + speeds[speedIdx] + '×' : '▶ ' + speeds[speedIdx] + '×';
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => reset());
+
+document.getElementById('shuffleBtn').addEventListener('click', () => {
+  setRule(Math.floor(Math.random() * 256));
+  reset();
+});
+
+document.querySelectorAll('.famous-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    setRule(parseInt(btn.dataset.r));
+    reset();
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target === ruleInput) return;
+  if (e.key === 'ArrowRight') { setRule(rule + 1); reset(); }
+  else if (e.key === 'ArrowLeft') { setRule(rule - 1); reset(); }
+  else if (e.key === ' ') { e.preventDefault(); paused = !paused; document.getElementById('speedBtn').textContent = (paused ? '⏸ ' : '▶ ') + speeds[speedIdx] + '×'; }
+  else if (e.key === 'r' || e.key === 'R') { setRule(Math.floor(Math.random() * 256)); reset(); }
+});
+
+window.addEventListener('resize', resize);
+resize();
+setRule(30);
+animate();
+</script>
+</body>
+</html>
