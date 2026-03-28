@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terrain Dream — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+canvas { display: block; }
+#ui {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 10px; z-index: 10;
+}
+#ui button {
+  background: rgba(0,0,0,0.6); color: #aaa; border: 1px solid #333;
+  padding: 6px 14px; font-family: inherit; font-size: 12px; cursor: pointer;
+  border-radius: 3px; text-transform: uppercase; letter-spacing: 1px;
+}
+#ui button:hover { color: #fff; border-color: #666; }
+#ui button.active { color: #6ff; border-color: #6ff; }
+#info {
+  position: fixed; top: 15px; left: 20px; color: rgba(255,255,255,0.3);
+  font-size: 11px; letter-spacing: 1px; z-index: 10;
+}
+#altitude {
+  position: fixed; top: 15px; right: 20px; color: rgba(255,255,255,0.25);
+  font-size: 11px; letter-spacing: 1px; z-index: 10; text-align: right;
+}
+#title {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  color: rgba(255,255,255,0.7); font-size: 24px; letter-spacing: 6px;
+  text-transform: uppercase; z-index: 10; pointer-events: none;
+  transition: opacity 3s;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title">TERRAIN DREAM</div>
+<div id="info">TERRAIN DREAM — chaoscat.win</div>
+<div id="altitude">ALT: <span id="alt-val">0</span>m</div>
+<div id="ui">
+  <button id="btn-biome" class="active">BIOME</button>
+  <button id="btn-fog">FOG</button>
+  <button id="btn-wire">WIRE</button>
+  <button id="btn-speed">SPEED: 1×</button>
+</div>
+<script>
+const C = document.getElementById('c');
+const ctx = C.getContext('2d');
+let W, H;
+function resize() { W = C.width = innerWidth; H = C.height = innerHeight; }
+resize();
+addEventListener('resize', resize);
+
+// Simplex-ish noise (value noise with smoothing)
+const SEED = Math.random() * 9999;
+const perm = new Uint8Array(512);
+{ const p = new Uint8Array(256); for(let i=0;i<256;i++) p[i]=i;
+  for(let i=255;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [p[i],p[j]]=[p[j],p[i]]; }
+  for(let i=0;i<512;i++) perm[i]=p[i&255];
+}
+
+function fade(t){ return t*t*t*(t*(t*6-15)+10); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function grad(hash,x,y){ const h=hash&3; return ((h&1)?-x:x)+((h&2)?-y:y); }
+
+function noise2d(x,y){
+  const X=Math.floor(x)&255, Y=Math.floor(y)&255;
+  x-=Math.floor(x); y-=Math.floor(y);
+  const u=fade(x), v=fade(y);
+  const a=perm[X]+Y, b=perm[X+1]+Y;
+  return lerp(
+    lerp(grad(perm[a],x,y), grad(perm[b],x-1,y), u),
+    lerp(grad(perm[a+1],x,y-1), grad(perm[b+1],x-1,y-1), u),
+    v
+  );
+}
+
+function fbm(x,y,octaves=6){
+  let val=0, amp=0.5, freq=1;
+  for(let i=0;i<octaves;i++){
+    val+=amp*noise2d(x*freq+SEED,y*freq+SEED);
+    amp*=0.5; freq*=2;
+  }
+  return val;
+}
+
+// Color biomes by height
+function biomeColor(h){
+  if(h<-0.15) return [20,40,80]; // deep water
+  if(h<-0.05) return [30,60,120]; // shallow water
+  if(h<0.0) return [60,50,35]; // wet sand
+  if(h<0.05) return [120,100,60]; // sand/beach
+  if(h<0.2) return [40,90,30]; // grass
+  if(h<0.35) return [30,70,25]; // dark grass
+  if(h<0.5) return [60,55,40]; // rock
+  if(h<0.65) return [80,75,65]; // high rock
+  return [200,210,220]; // snow
+}
+
+function wireColor(h){
+  if(h<-0.05) return [0,180,255];
+  if(h<0.05) return [0,255,100];
+  if(h<0.35) return [255,200,0];
+  if(h<0.5) return [255,100,0];
+  return [255,255,255];
+}
+
+// State
+let showBiome = true;
+let showFog = true;
+let showWire = false;
+let speedMult = 1;
+const speeds = [1,2,4];
+let speedIdx = 0;
+
+let camZ = 0; // camera position along Z (forward)
+let camY = 80; // camera height
+
+// Buttons
+document.getElementById('btn-biome').onclick = function(){ showBiome=!showBiome; this.classList.toggle('active'); };
+document.getElementById('btn-fog').onclick = function(){ showFog=!showFog; this.classList.toggle('active'); };
+document.getElementById('btn-wire').onclick = function(){ showWire=!showWire; this.classList.toggle('active'); };
+document.getElementById('btn-speed').onclick = function(){ speedIdx=(speedIdx+1)%speeds.length; speedMult=speeds[speedIdx]; this.textContent='SPEED: '+speedMult+'×'; };
+
+// Mouse look
+let mouseX = 0;
+addEventListener('mousemove', e => { mouseX = (e.clientX / W - 0.5) * 2; });
+
+// Scroll to change altitude
+addEventListener('wheel', e => {
+  camY = Math.max(20, Math.min(200, camY + e.deltaY * 0.1));
+});
+
+// Hide title
+setTimeout(()=>{ document.getElementById('title').style.opacity = '0'; }, 3000);
+
+// Terrain params
+const GRID = 80; // grid cells visible forward
+const SPACING = 8; // world units per cell
+const SCALE = 0.012; // noise scale
+
+function getHeight(wx, wz){
+  return fbm(wx * SCALE, wz * SCALE, 6) * 1.2;
+}
+
+function project(wx, wy, wz, cx, cy, cz, yaw){
+  // Translate
+  let dx = wx - cx, dy = wy - cy, dz = wz - cz;
+  // Rotate around Y axis (yaw)
+  const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
+  const rx = dx * cosY - dz * sinY;
+  const rz = dx * sinY + dz * cosY;
+  const ry = dy;
+  if(rz < 1) return null;
+  const fov = 500;
+  const sx = W/2 + (rx / rz) * fov;
+  const sy = H/2 - (ry / rz) * fov;
+  return { x: sx, y: sy, z: rz };
+}
+
+let time = 0;
+
+function draw(){
+  requestAnimationFrame(draw);
+  time += 0.016;
+  
+  camZ += speedMult * 0.8;
+  const yaw = mouseX * 0.3;
+  const cx = 0, cy = camY, cz = camZ;
+  
+  // Sky gradient
+  const skyTop = showFog ? [10,10,30] : [0,0,5];
+  const skyBot = showFog ? [30,20,50] : [5,5,15];
+  const grd = ctx.createLinearGradient(0,0,0,H);
+  grd.addColorStop(0, `rgb(${skyTop})`);
+  grd.addColorStop(1, `rgb(${skyBot})`);
+  ctx.fillStyle = grd;
+  ctx.fillRect(0,0,W,H);
+  
+  // Stars
+  if(!showFog){
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    for(let i=0;i<60;i++){
+      const sx = ((i*137.5+43)%W);
+      const sy = ((i*97.3+17)%H)*0.5;
+      ctx.fillRect(sx,sy,1,1);
+    }
+  }
+  
+  // Grid of terrain quads, drawn back to front
+  const startZ = Math.floor(cz / SPACING) * SPACING;
+  const startX = -GRID/2 * SPACING;
+  
+  // Collect and sort quads
+  const quads = [];
+  
+  for(let gz = GRID; gz >= 0; gz--){
+    for(let gx = -GRID/2; gx <= GRID/2; gx++){
+      const wx = gx * SPACING;
+      const wz = startZ + gz * SPACING;
+      
+      const h00 = getHeight(wx, wz);
+      const h10 = getHeight(wx+SPACING, wz);
+      const h01 = getHeight(wx, wz+SPACING);
+      const h11 = getHeight(wx+SPACING, wz+SPACING);
+      
+      const heightScale = 120;
+      
+      const p0 = project(wx, h00*heightScale, wz, cx, cy, cz, yaw);
+      const p1 = project(wx+SPACING, h10*heightScale, wz, cx, cy, cz, yaw);
+      const p2 = project(wx+SPACING, h11*heightScale, wz+SPACING, cx, cy, cz, yaw);
+      const p3 = project(wx, h01*heightScale, wz+SPACING, cx, cy, cz, yaw);
+      
+      if(!p0 || !p1 || !p2 || !p3) continue;
+      if(p0.x < -100 && p1.x < -100 && p2.x < -100 && p3.x < -100) continue;
+      if(p0.x > W+100 && p1.x > W+100 && p2.x > W+100 && p3.x > W+100) continue;
+      
+      const avgH = (h00+h10+h01+h11)/4;
+      const avgZ = (p0.z+p1.z+p2.z+p3.z)/4;
+      
+      // Simple lighting — normal approximation
+      const nx = (h00-h10+h01-h11)*0.5;
+      const nz = (h00+h10-h01-h11)*0.5;
+      const light = Math.max(0.3, Math.min(1.0, 0.6 + nx*2 + nz*0.5));
+      
+      quads.push({ p0,p1,p2,p3, avgH, avgZ, light });
+    }
+  }
+  
+  // Sort back to front
+  quads.sort((a,b) => b.avgZ - a.avgZ);
+  
+  for(const q of quads){
+    const { p0,p1,p2,p3, avgH, avgZ, light } = q;
+    
+    // Fog factor
+    const fogDist = showFog ? Math.min(1, avgZ / (GRID * SPACING * 0.6)) : 0;
+    
+    let r,g,b;
+    if(showBiome){
+      const bc = biomeColor(avgH);
+      r = bc[0]*light; g = bc[1]*light; b = bc[2]*light;
+    } else {
+      const wc = wireColor(avgH);
+      r = wc[0]*0.15; g = wc[1]*0.15; b = wc[2]*0.15;
+    }
+    
+    // Fog blend
+    const fogR = showFog ? 20 : 0, fogG = showFog ? 15 : 0, fogB = showFog ? 35 : 0;
+    r = lerp(r, fogR, fogDist);
+    g = lerp(g, fogG, fogDist);
+    b = lerp(b, fogB, fogDist);
+    
+    if(showBiome || !showWire){
+      ctx.fillStyle = `rgb(${r|0},${g|0},${b|0})`;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    
+    if(showWire){
+      const wc = wireColor(avgH);
+      const wa = Math.max(0, 1 - fogDist) * 0.6;
+      ctx.strokeStyle = `rgba(${wc[0]},${wc[1]},${wc[2]},${wa})`;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
+      ctx.stroke();
+    }
+  }
+  
+  // Water plane
+  const waterY = -0.05 * 120;
+  for(let gz = GRID; gz >= 0; gz--){
+    for(let gx = -GRID/2; gx <= GRID/2; gx++){
+      const wx = gx * SPACING;
+      const wz = startZ + gz * SPACING;
+      
+      const h00 = getHeight(wx, wz);
+      const h10 = getHeight(wx+SPACING, wz);
+      const h01 = getHeight(wx, wz+SPACING);
+      const h11 = getHeight(wx+SPACING, wz+SPACING);
+      
+      if(h00 > -0.05 && h10 > -0.05 && h01 > -0.05 && h11 > -0.05) continue;
+      
+      const waveOff = Math.sin(time*2 + wx*0.05 + wz*0.05) * 1.5;
+      
+      const p0 = project(wx, waterY+waveOff, wz, cx, cy, cz, yaw);
+      const p1 = project(wx+SPACING, waterY+waveOff, wz, cx, cy, cz, yaw);
+      const p2 = project(wx+SPACING, waterY+waveOff, wz+SPACING, cx, cy, cz, yaw);
+      const p3 = project(wx, waterY+waveOff, wz+SPACING, cx, cy, cz, yaw);
+      
+      if(!p0 || !p1 || !p2 || !p3) continue;
+      
+      const avgZ = (p0.z+p1.z+p2.z+p3.z)/4;
+      const fogDist = showFog ? Math.min(1, avgZ / (GRID * SPACING * 0.6)) : 0;
+      const alpha = Math.max(0, 0.5 * (1 - fogDist));
+      
+      ctx.fillStyle = `rgba(15,40,100,${alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  
+  // Update altitude display
+  const groundH = getHeight(0, cz) * 120;
+  const alt = Math.max(0, (cy - groundH) | 0);
+  document.getElementById('alt-val').textContent = alt;
+}
+
+draw();
+</script>
+</body>
+</html>
