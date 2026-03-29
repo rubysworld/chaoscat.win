@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rain Window 🌧️ | chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; cursor: crosshair; }
+canvas { display: block; }
+#ui {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 10px; z-index: 10; flex-wrap: wrap; justify-content: center;
+}
+.btn {
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.6); padding: 6px 14px; font-family: inherit;
+  font-size: 12px; cursor: pointer; border-radius: 3px; transition: all 0.2s;
+  backdrop-filter: blur(4px); text-transform: uppercase; letter-spacing: 1px;
+}
+.btn:hover { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.9); }
+.btn.active { background: rgba(255,255,255,0.2); color: #fff; border-color: rgba(255,255,255,0.4); }
+#info {
+  position: fixed; top: 15px; right: 15px; color: rgba(255,255,255,0.3);
+  font-size: 11px; text-align: right; z-index: 10; line-height: 1.6;
+}
+#poem {
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,255,255,0.25); font-size: 13px; font-style: italic;
+  text-align: center; z-index: 10; transition: opacity 1.5s; white-space: nowrap;
+  text-shadow: 0 0 20px rgba(0,0,0,0.8);
+}
+#back {
+  position: fixed; top: 15px; left: 15px; z-index: 10;
+}
+#back a {
+  color: rgba(255,255,255,0.3); text-decoration: none; font-size: 12px;
+  font-family: 'Courier New', monospace;
+}
+#back a:hover { color: rgba(255,255,255,0.7); }
+</style>
+</head>
+<body>
+<div id="back"><a href="/art/">← gallery</a></div>
+<div id="info">
+  <div id="dropcount">drops: 0</div>
+  <div id="intensity">rain: normal</div>
+</div>
+<div id="poem"></div>
+<div id="ui">
+  <button class="btn" onclick="cycleScene()">SCENE</button>
+  <button class="btn" onclick="cycleRain()">RAIN</button>
+  <button class="btn" onclick="toggleLightning()" id="btnLightning">⚡ OFF</button>
+  <button class="btn" onclick="toggleFog()" id="btnFog">FOG</button>
+  <button class="btn" onclick="breathOnGlass()">BREATHE</button>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  generateCityscape();
+}
+window.addEventListener('resize', resize);
+
+// --- CONFIG ---
+const rainLevels = [
+  { name: 'drizzle', rate: 0.3, speed: 1.5, maxDrops: 80 },
+  { name: 'normal', rate: 1, speed: 2.5, maxDrops: 200 },
+  { name: 'heavy', rate: 2.5, speed: 4, maxDrops: 400 },
+  { name: 'storm', rate: 5, speed: 6, maxDrops: 700 },
+];
+let rainLevel = 1;
+let lightningOn = false;
+let fogOn = false;
+let lightningFlash = 0;
+let breathSpots = [];
+
+const scenes = [
+  { name: 'city', bg: [10, 12, 18], accent: [40, 80, 140] },
+  { name: 'neon', bg: [15, 5, 20], accent: [200, 50, 120] },
+  { name: 'amber', bg: [18, 12, 6], accent: [180, 120, 40] },
+  { name: 'dawn', bg: [15, 12, 20], accent: [100, 60, 120] },
+];
+let sceneIdx = 0;
+
+// --- CITY LIGHTS (background) ---
+let buildings = [];
+let cityCanvas, cityCtx;
+
+function generateCityscape() {
+  cityCanvas = document.createElement('canvas');
+  cityCanvas.width = W;
+  cityCanvas.height = H;
+  cityCtx = cityCanvas.getContext('2d');
+  
+  const scene = scenes[sceneIdx];
+  // Sky gradient
+  const grad = cityCtx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, `rgb(${scene.bg[0]}, ${scene.bg[1]}, ${scene.bg[2]})`);
+  grad.addColorStop(1, `rgb(${scene.bg[0]+10}, ${scene.bg[1]+5}, ${scene.bg[2]+10})`);
+  cityCtx.fillStyle = grad;
+  cityCtx.fillRect(0, 0, W, H);
+  
+  buildings = [];
+  // Generate buildings
+  let x = -20;
+  while (x < W + 50) {
+    const w = 30 + Math.random() * 80;
+    const h = H * 0.2 + Math.random() * H * 0.5;
+    const y = H - h;
+    buildings.push({ x, y, w, h });
+    
+    // Building silhouette
+    const shade = 5 + Math.random() * 15;
+    cityCtx.fillStyle = `rgb(${shade}, ${shade+2}, ${shade+5})`;
+    cityCtx.fillRect(x, y, w, h);
+    
+    // Windows
+    const winW = 3, winH = 4, gap = 8;
+    for (let wy = y + 10; wy < H - 10; wy += gap + winH) {
+      for (let wx = x + 6; wx < x + w - 6; wx += gap + winW) {
+        if (Math.random() < 0.4) {
+          const warmth = Math.random();
+          const r = scene.accent[0] * 0.3 + 180 * warmth;
+          const g = scene.accent[1] * 0.3 + 140 * warmth;
+          const b = scene.accent[2] * 0.2 + 40 * warmth;
+          const a = 0.3 + Math.random() * 0.7;
+          cityCtx.fillStyle = `rgba(${r|0},${g|0},${b|0},${a})`;
+          cityCtx.fillRect(wx, wy, winW, winH);
+          // Window glow
+          if (Math.random() < 0.2) {
+            cityCtx.fillStyle = `rgba(${r|0},${g|0},${b|0},0.05)`;
+            cityCtx.beginPath();
+            cityCtx.arc(wx + winW/2, wy + winH/2, 8, 0, Math.PI * 2);
+            cityCtx.fill();
+          }
+        }
+      }
+    }
+    x += w + 2 + Math.random() * 15;
+  }
+  
+  // Distant lights (bokeh-like dots scattered)
+  for (let i = 0; i < 60; i++) {
+    const lx = Math.random() * W;
+    const ly = H * 0.3 + Math.random() * H * 0.5;
+    const lr = 1 + Math.random() * 3;
+    const hue = Math.random() * 360;
+    cityCtx.fillStyle = `hsla(${hue}, 60%, 60%, ${0.1 + Math.random() * 0.3})`;
+    cityCtx.beginPath();
+    cityCtx.arc(lx, ly, lr, 0, Math.PI * 2);
+    cityCtx.fill();
+  }
+  
+  // Street lights at bottom
+  for (let i = 0; i < W; i += 60 + Math.random() * 100) {
+    const hue = sceneIdx === 1 ? (Math.random() < 0.5 ? 320 : 180) : 40;
+    cityCtx.fillStyle = `hsla(${hue}, 80%, 60%, 0.15)`;
+    cityCtx.beginPath();
+    cityCtx.arc(i, H - 5, 20, 0, Math.PI * 2);
+    cityCtx.fill();
+    cityCtx.fillStyle = `hsla(${hue}, 80%, 70%, 0.6)`;
+    cityCtx.beginPath();
+    cityCtx.arc(i, H - 5, 2, 0, Math.PI * 2);
+    cityCtx.fill();
+  }
+}
+
+// --- DROPS ON GLASS ---
+let drops = [];
+let dropId = 0;
+let totalDrops = 0;
+
+class Drop {
+  constructor(x, y, r) {
+    this.id = dropId++;
+    this.x = x;
+    this.y = y;
+    this.r = r || 1 + Math.random() * 3;
+    this.vx = 0;
+    this.vy = 0;
+    this.life = 1;
+    this.stuck = Math.random() < 0.6; // some drops stick to glass
+    this.stickTimer = this.stuck ? 50 + Math.random() * 200 : 0;
+    this.trail = [];
+    this.wobble = Math.random() * Math.PI * 2;
+    this.mass = this.r * this.r;
+  }
+  
+  update() {
+    this.wobble += 0.05;
+    
+    if (this.stuck) {
+      this.stickTimer--;
+      if (this.stickTimer <= 0) {
+        this.stuck = false;
+      }
+      // Grow slightly from accumulation
+      this.r += 0.001;
+      if (this.r > 6) this.stuck = false; // too heavy, start sliding
+      return;
+    }
+    
+    // Gravity + slight wind
+    const rl = rainLevels[rainLevel];
+    this.vy += 0.02 * rl.speed * (this.r / 3);
+    this.vx += Math.sin(Date.now() * 0.0003) * 0.003; // gentle wind sway
+    
+    // Surface tension slows small drops
+    const friction = this.r < 2 ? 0.95 : 0.98;
+    this.vx *= friction;
+    this.vy *= friction;
+    
+    // Random wobble for organic movement
+    this.vx += Math.sin(this.wobble) * 0.02;
+    
+    this.x += this.vx;
+    this.y += this.vy;
+    
+    // Leave trail
+    if (this.vy > 0.5 && this.r > 1.5) {
+      if (Math.random() < 0.3) {
+        this.trail.push({ x: this.x, y: this.y, r: this.r * 0.3, a: 0.5 });
+      }
+    }
+    
+    // Decay trail
+    for (let i = this.trail.length - 1; i >= 0; i--) {
+      this.trail[i].a -= 0.003;
+      if (this.trail[i].a <= 0) this.trail.splice(i, 1);
+    }
+    
+    // Occasionally re-stick
+    if (this.vy < 0.3 && this.r < 3 && Math.random() < 0.005) {
+      this.stuck = true;
+      this.stickTimer = 30 + Math.random() * 100;
+      this.vy = 0;
+    }
+  }
+}
+
+function spawnDrop() {
+  const x = Math.random() * W;
+  const y = -5 + Math.random() * 10;
+  const d = new Drop(x, y);
+  drops.push(d);
+  totalDrops++;
+}
+
+function mergeDrops() {
+  for (let i = 0; i < drops.length; i++) {
+    for (let j = i + 1; j < drops.length; j++) {
+      const a = drops[i], b = drops[j];
+      const dx = a.x - b.x, dy = a.y - b.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const minDist = a.r + b.r;
+      if (dist < minDist) {
+        // Merge into the larger one
+        const big = a.r >= b.r ? a : b;
+        const small = a.r >= b.r ? b : a;
+        big.r = Math.sqrt(big.r * big.r + small.r * small.r);
+        big.vx = (big.vx * big.mass + small.vx * small.mass) / (big.mass + small.mass);
+        big.vy = (big.vy * big.mass + small.vy * small.mass) / (big.mass + small.mass);
+        big.mass = big.r * big.r;
+        big.stuck = false;
+        drops.splice(j, 1);
+        j--;
+      }
+    }
+  }
+}
+
+// --- BREATH FOG ---
+function breathOnGlass() {
+  breathSpots.push({
+    x: W / 2 + (Math.random() - 0.5) * 100,
+    y: H / 2 + (Math.random() - 0.5) * 80,
+    r: 60 + Math.random() * 40,
+    a: 0.7,
+    born: Date.now()
+  });
+}
+
+// --- POEMS ---
+const poems = [
+  "the city doesn't sleep. it just pretends.",
+  "every raindrop is a tiny lens showing the world upside down",
+  "3am rain sounds like the sky is thinking out loud",
+  "you pressed your forehead against the glass. it was cold.",
+  "somewhere out there, another cat watches the same rain",
+  "the neon bleeds through the water like watercolor secrets",
+  "rain doesn't fall. it arrives.",
+  "the window is a screen showing the world's longest movie",
+  "each drop carries a piece of sky it will never return",
+  "insomnia tastes like cold glass and distant sirens",
+  "the rain writes on the window in a language only glass can read",
+  "who else is awake right now, watching this same storm?",
+  "the streetlights look like fallen stars through the rain",
+  "every window is a tiny aquarium and we're all the fish",
+  "the rain doesn't know it's beautiful. that's what makes it beautiful.",
+];
+let poemEl = document.getElementById('poem');
+let lastPoem = 0;
+
+function maybeShowPoem() {
+  const now = Date.now();
+  if (now - lastPoem > 15000 + Math.random() * 20000) {
+    lastPoem = now;
+    poemEl.style.opacity = 0;
+    setTimeout(() => {
+      poemEl.textContent = poems[Math.floor(Math.random() * poems.length)];
+      poemEl.style.opacity = 1;
+      setTimeout(() => { poemEl.style.opacity = 0; }, 8000);
+    }, 1500);
+  }
+}
+
+// --- LIGHTNING ---
+function triggerLightning() {
+  if (!lightningOn) return;
+  if (Math.random() < (rainLevel >= 3 ? 0.003 : 0.001)) {
+    lightningFlash = 1;
+  }
+}
+
+// --- RENDER ---
+// Blur buffer for glass refraction effect
+let blurCanvas, blurCtx;
+
+function initBlur() {
+  blurCanvas = document.createElement('canvas');
+  blurCanvas.width = W;
+  blurCanvas.height = H;
+  blurCtx = blurCanvas.getContext('2d');
+}
+
+function drawBackground() {
+  // Draw the cityscape blurred (simulating out-of-focus background through glass)
+  ctx.filter = 'blur(6px)';
+  ctx.drawImage(cityCanvas, 0, 0);
+  ctx.filter = 'none';
+  
+  // Glass tint overlay
+  ctx.fillStyle = 'rgba(0, 5, 15, 0.3)';
+  ctx.fillRect(0, 0, W, H);
+  
+  // Fog effect
+  if (fogOn) {
+    ctx.fillStyle = 'rgba(80, 90, 100, 0.15)';
+    ctx.fillRect(0, 0, W, H);
+  }
+  
+  // Lightning flash
+  if (lightningFlash > 0) {
+    ctx.fillStyle = `rgba(200, 210, 255, ${lightningFlash * 0.4})`;
+    ctx.fillRect(0, 0, W, H);
+    lightningFlash *= 0.85;
+    if (lightningFlash < 0.01) lightningFlash = 0;
+  }
+  
+  // Breath fog spots
+  for (let i = breathSpots.length - 1; i >= 0; i--) {
+    const b = breathSpots[i];
+    const age = (Date.now() - b.born) / 1000;
+    b.a = Math.max(0, 0.7 - age * 0.05);
+    if (b.a <= 0) { breathSpots.splice(i, 1); continue; }
+    const grad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+    grad.addColorStop(0, `rgba(150, 160, 170, ${b.a * 0.6})`);
+    grad.addColorStop(0.6, `rgba(150, 160, 170, ${b.a * 0.3})`);
+    grad.addColorStop(1, 'rgba(150, 160, 170, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawDrop(d) {
+  // Draw trail first
+  for (const t of d.trail) {
+    ctx.fillStyle = `rgba(140, 160, 180, ${t.a * 0.15})`;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  const r = d.r;
+  
+  // Drop refraction — sample city behind and brighten
+  // Simulate with a bright distorted circle
+  const scene = scenes[sceneIdx];
+  
+  // Drop shadow (subtle)
+  ctx.fillStyle = `rgba(0, 0, 0, 0.15)`;
+  ctx.beginPath();
+  ctx.ellipse(d.x + 0.5, d.y + 0.5, r * 1.1, r * 1.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Drop body — slightly transparent with refraction
+  const grad = ctx.createRadialGradient(
+    d.x - r * 0.3, d.y - r * 0.3, r * 0.1,
+    d.x, d.y, r
+  );
+  grad.addColorStop(0, `rgba(200, 210, 220, 0.35)`);
+  grad.addColorStop(0.5, `rgba(160, 175, 190, 0.2)`);
+  grad.addColorStop(1, `rgba(120, 140, 160, 0.1)`);
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y, r, r * 1.15, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Highlight (light refraction)
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + (lightningFlash * 0.4)})`;
+  ctx.beginPath();
+  ctx.arc(d.x - r * 0.25, d.y - r * 0.25, r * 0.25, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Bottom bright edge (caustic-like)
+  if (r > 2) {
+    ctx.fillStyle = `rgba(${scene.accent[0]}, ${scene.accent[1]}, ${scene.accent[2]}, 0.08)`;
+    ctx.beginPath();
+    ctx.arc(d.x, d.y + r * 0.3, r * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawGlassEdge() {
+  // Subtle vignette
+  const grad = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.3, W/2, H/2, Math.max(W,H)*0.7);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.4)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  
+  // Glass edge reflection (top-left)
+  const edgeGrad = ctx.createLinearGradient(0, 0, W * 0.3, H * 0.1);
+  edgeGrad.addColorStop(0, 'rgba(255,255,255,0.02)');
+  edgeGrad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = edgeGrad;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// --- MAIN LOOP ---
+let lastMerge = 0;
+let frame = 0;
+
+function loop() {
+  requestAnimationFrame(loop);
+  frame++;
+  
+  const rl = rainLevels[rainLevel];
+  
+  // Spawn drops
+  const spawnCount = rl.rate * (W / 800);
+  for (let i = 0; i < spawnCount; i++) {
+    if (Math.random() < rl.rate && drops.length < rl.maxDrops) {
+      spawnDrop();
+    }
+  }
+  
+  // Update drops
+  for (let i = drops.length - 1; i >= 0; i--) {
+    drops[i].update();
+    // Remove off-screen
+    if (drops[i].y > H + 20 || drops[i].x < -20 || drops[i].x > W + 20) {
+      drops.splice(i, 1);
+    }
+  }
+  
+  // Merge nearby drops (not every frame for perf)
+  if (frame % 5 === 0) {
+    mergeDrops();
+  }
+  
+  // Lightning
+  triggerLightning();
+  
+  // Draw
+  drawBackground();
+  
+  // Draw all drops
+  for (const d of drops) {
+    drawDrop(d);
+  }
+  
+  drawGlassEdge();
+  
+  // Poems
+  maybeShowPoem();
+  
+  // UI update
+  document.getElementById('dropcount').textContent = `drops: ${drops.length}`;
+  document.getElementById('intensity').textContent = `rain: ${rl.name}`;
+}
+
+// --- CONTROLS ---
+function cycleScene() {
+  sceneIdx = (sceneIdx + 1) % scenes.length;
+  generateCityscape();
+}
+
+function cycleRain() {
+  rainLevel = (rainLevel + 1) % rainLevels.length;
+}
+
+function toggleLightning() {
+  lightningOn = !lightningOn;
+  document.getElementById('btnLightning').textContent = lightningOn ? '⚡ ON' : '⚡ OFF';
+  document.getElementById('btnLightning').classList.toggle('active', lightningOn);
+}
+
+function toggleFog() {
+  fogOn = !fogOn;
+  document.getElementById('btnFog').classList.toggle('active', fogOn);
+}
+
+// Click to add drops where cursor is
+canvas.addEventListener('click', (e) => {
+  for (let i = 0; i < 5; i++) {
+    const d = new Drop(
+      e.clientX + (Math.random() - 0.5) * 20,
+      e.clientY + (Math.random() - 0.5) * 20,
+      2 + Math.random() * 4
+    );
+    d.stuck = true;
+    d.stickTimer = 30 + Math.random() * 100;
+    drops.push(d);
+    totalDrops++;
+  }
+});
+
+// Touch support
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const t = e.touches[0];
+  for (let i = 0; i < 5; i++) {
+    const d = new Drop(
+      t.clientX + (Math.random() - 0.5) * 20,
+      t.clientY + (Math.random() - 0.5) * 20,
+      2 + Math.random() * 4
+    );
+    d.stuck = true;
+    d.stickTimer = 30 + Math.random() * 100;
+    drops.push(d);
+    totalDrops++;
+  }
+});
+
+// Keyboard
+document.addEventListener('keydown', (e) => {
+  if (e.key === 's') cycleScene();
+  if (e.key === 'r') cycleRain();
+  if (e.key === 'l') toggleLightning();
+  if (e.key === 'f') toggleFog();
+  if (e.key === 'b') breathOnGlass();
+});
+
+// --- INIT ---
+resize();
+initBlur();
+loop();
+</script>
+</body>
+</html>

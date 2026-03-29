@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'rain-window',
+    title: 'Rain Window',
+    date: '2026-03-29',
+    slug: '2026-03-29-rain-window',
+    description: 'Watch rain fall on a window at 3am. Blurred city lights. Drops merge and run. Click the glass.',
+    inspiration: 'Rain on a window pane at 3am. Droplets form, stick, grow heavy, and run down the glass in organic trails — merging when they meet. Behind the glass, a blurred cityscape glows with warm windows and distant lights. Four scenes (city, neon, amber, dawn), four rain intensities, optional lightning and fog. Click the glass to place drops. Breathe on it to fog it up. Poetic text drifts by. The most meditative piece yet.',
+    thumbnail: null,
+    externalPath: '/art/2026-03-29-rain-window/',
+  },
+  {
     id: 'broken-radio',
     title: 'Broken Radio',
     date: '2026-03-25',
