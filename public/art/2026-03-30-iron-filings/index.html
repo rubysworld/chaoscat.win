@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iron Filings 🧲 - chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0f; overflow: hidden; font-family: 'Courier New', monospace; cursor: crosshair; }
+canvas { display: block; }
+#ui {
+  position: fixed; top: 16px; left: 16px; z-index: 10;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.btn {
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  color: #ccc; padding: 6px 14px; font-family: inherit; font-size: 13px;
+  cursor: pointer; border-radius: 4px; transition: all 0.2s;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.btn.active { background: rgba(100,180,255,0.2); border-color: rgba(100,180,255,0.5); color: #8cf; }
+#info {
+  position: fixed; bottom: 16px; left: 16px; z-index: 10;
+  color: rgba(255,255,255,0.3); font-size: 12px; line-height: 1.6;
+}
+#title {
+  position: fixed; top: 16px; right: 16px; z-index: 10;
+  color: rgba(255,255,255,0.15); font-size: 14px; text-align: right; line-height: 1.6;
+}
+#poetry {
+  position: fixed; bottom: 16px; right: 16px; z-index: 10;
+  color: rgba(255,255,255,0.12); font-size: 12px; font-style: italic;
+  text-align: right; max-width: 300px; transition: opacity 1s;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <button class="btn active" id="btnN">+ NORTH (red)</button>
+  <button class="btn" id="btnS">+ SOUTH (blue)</button>
+  <button class="btn" id="btnDipole">+ DIPOLE</button>
+  <button class="btn" id="btnClear">CLEAR ALL</button>
+  <button class="btn" id="btnShake">SHAKE 🫨</button>
+  <button class="btn" id="btnStyle">STYLE: FILINGS</button>
+  <button class="btn" id="btnColor">COLOR: IRON</button>
+</div>
+<div id="title">IRON FILINGS 🧲<br><span style="font-size:11px">click to place magnets<br>drag to move them<br>scroll to adjust strength</span></div>
+<div id="info">magnets: <span id="magnetCount">0</span> · filings: <span id="filingCount">0</span></div>
+<div id="poetry"></div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  if (filings.length === 0) initFilings();
+}
+window.addEventListener('resize', resize);
+
+// State
+let magnets = []; // {x, y, pole: 1(N)/-1(S), strength, isDipole, angle}
+let filings = [];
+let placementMode = 'N'; // N, S, dipole
+let drawStyle = 0; // 0=filings, 1=field lines, 2=glow
+const styleNames = ['FILINGS', 'FIELD LINES', 'GLOW'];
+let colorMode = 0;
+const colorNames = ['IRON', 'NEON', 'THERMAL', 'MONO'];
+let dragging = null;
+let dragOffset = {x:0, y:0};
+
+const poems = [
+  "every magnet is a tiny argument between north and south",
+  "the filings don't know why they align. they just do.",
+  "invisible forces, visible patterns",
+  "the field was always there. the filings just reveal it.",
+  "attraction and repulsion — the only two stories",
+  "even chaos bows to electromagnetism",
+  "Maxwell's equations, rendered in iron dust",
+  "the universe is held together by things you can't see",
+  "north seeks south. south seeks north. nobody asked them to.",
+  "drop a magnet and the whole world rearranges",
+];
+
+let currentPoem = 0;
+function cyclePoem() {
+  const el = document.getElementById('poetry');
+  el.style.opacity = 0;
+  setTimeout(() => {
+    currentPoem = (currentPoem + 1) % poems.length;
+    el.textContent = poems[currentPoem];
+    el.style.opacity = 1;
+  }, 1000);
+}
+setInterval(cyclePoem, 12000);
+setTimeout(() => {
+  document.getElementById('poetry').textContent = poems[0];
+  document.getElementById('poetry').style.opacity = 1;
+}, 2000);
+
+function initFilings() {
+  filings = [];
+  const spacing = 12;
+  for (let x = spacing; x < W; x += spacing) {
+    for (let y = spacing; y < H; y += spacing) {
+      filings.push({
+        x: x + (Math.random() - 0.5) * 4,
+        y: y + (Math.random() - 0.5) * 4,
+        angle: Math.random() * Math.PI,
+        len: 4 + Math.random() * 3,
+        settled: 0,
+      });
+    }
+  }
+  document.getElementById('filingCount').textContent = filings.length;
+}
+
+function getField(px, py) {
+  let bx = 0, by = 0;
+  for (const m of magnets) {
+    if (m.isDipole) {
+      // Dipole: two poles separated
+      const sep = 20;
+      const cos = Math.cos(m.angle), sin = Math.sin(m.angle);
+      for (let p = -1; p <= 1; p += 2) {
+        const mx = m.x + p * sep * cos;
+        const my = m.y + p * sep * sin;
+        const dx = px - mx, dy = py - my;
+        const r2 = dx * dx + dy * dy + 200;
+        const r = Math.sqrt(r2);
+        const f = m.strength * p * 800 / (r2 * r);
+        bx += dx * f;
+        by += dy * f;
+      }
+    } else {
+      const dx = px - m.x, dy = py - m.y;
+      const r2 = dx * dx + dy * dy + 200;
+      const r = Math.sqrt(r2);
+      const f = m.pole * m.strength * 800 / (r2 * r);
+      bx += dx * f;
+      by += dy * f;
+    }
+  }
+  return { x: bx, y: by, mag: Math.sqrt(bx * bx + by * by) };
+}
+
+function updateFilings() {
+  if (magnets.length === 0) return;
+  for (const f of filings) {
+    const field = getField(f.x, f.y);
+    if (field.mag > 0.0001) {
+      const targetAngle = Math.atan2(field.y, field.x);
+      // Filings align to field but can point either way
+      let diff = targetAngle - f.angle;
+      while (diff > Math.PI / 2) diff -= Math.PI;
+      while (diff < -Math.PI / 2) diff += Math.PI;
+      f.angle += diff * 0.15;
+      f.settled = Math.min(1, f.settled + 0.02);
+    }
+  }
+}
+
+function getFilingColor(f, field) {
+  const intensity = Math.min(1, field.mag * 3);
+  if (colorMode === 0) { // IRON
+    const v = Math.floor(80 + intensity * 120);
+    return `rgba(${v}, ${v - 10}, ${v - 30}, ${0.3 + intensity * 0.6})`;
+  } else if (colorMode === 1) { // NEON
+    const hue = (f.angle / Math.PI * 180 + 180) % 360;
+    return `hsla(${hue}, 90%, ${40 + intensity * 30}%, ${0.4 + intensity * 0.5})`;
+  } else if (colorMode === 2) { // THERMAL
+    const r = Math.floor(intensity * 255);
+    const g = Math.floor(intensity * intensity * 200);
+    const b = Math.floor((1 - intensity) * 100);
+    return `rgba(${r}, ${g}, ${b}, ${0.4 + intensity * 0.5})`;
+  } else { // MONO
+    const v = Math.floor(150 + intensity * 105);
+    return `rgba(${v}, ${v}, ${v}, ${0.3 + intensity * 0.6})`;
+  }
+}
+
+function drawFilingsStyle() {
+  for (const f of filings) {
+    const field = getField(f.x, f.y);
+    const color = getFilingColor(f, field);
+    const cos = Math.cos(f.angle), sin = Math.sin(f.angle);
+    const len = f.len * (0.8 + Math.min(1, field.mag * 2) * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(f.x - cos * len, f.y - sin * len);
+    ctx.lineTo(f.x + cos * len, f.y + sin * len);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2 + Math.min(1, field.mag * 3) * 0.8;
+    ctx.stroke();
+  }
+}
+
+function drawFieldLines() {
+  for (const m of magnets) {
+    const numLines = 16;
+    for (let i = 0; i < numLines; i++) {
+      const angle = (i / numLines) * Math.PI * 2;
+      let px = m.x + Math.cos(angle) * 15;
+      let py = m.y + Math.sin(angle) * 15;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      for (let step = 0; step < 200; step++) {
+        const field = getField(px, py);
+        if (field.mag < 0.00005) break;
+        const dir = m.pole > 0 ? 1 : -1;
+        const nx = field.x / field.mag * dir;
+        const ny = field.y / field.mag * dir;
+        px += nx * 4;
+        py += ny * 4;
+        if (px < -50 || px > W + 50 || py < -50 || py > H + 50) break;
+        ctx.lineTo(px, py);
+      }
+      const hue = m.pole > 0 ? 0 : 220;
+      ctx.strokeStyle = `hsla(${hue}, 60%, 50%, 0.15)`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+}
+
+function drawGlowStyle() {
+  for (const f of filings) {
+    const field = getField(f.x, f.y);
+    const intensity = Math.min(1, field.mag * 4);
+    if (intensity < 0.05) continue;
+    const r = 2 + intensity * 4;
+    const hue = (f.angle / Math.PI * 180 + 180) % 360;
+    const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+    if (colorMode === 1) {
+      grad.addColorStop(0, `hsla(${hue}, 100%, 70%, ${intensity * 0.8})`);
+    } else if (colorMode === 2) {
+      grad.addColorStop(0, `rgba(${Math.floor(intensity*255)}, ${Math.floor(intensity*intensity*200)}, 30, ${intensity * 0.8})`);
+    } else {
+      grad.addColorStop(0, `rgba(200, 220, 255, ${intensity * 0.7})`);
+    }
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.fillRect(f.x - r, f.y - r, r * 2, r * 2);
+  }
+}
+
+function drawMagnets() {
+  for (const m of magnets) {
+    if (m.isDipole) {
+      const sep = 20;
+      const cos = Math.cos(m.angle), sin = Math.sin(m.angle);
+      // North end
+      ctx.beginPath();
+      ctx.arc(m.x + sep * cos, m.y + sep * sin, 8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 60, 60, 0.7)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // South end
+      ctx.beginPath();
+      ctx.arc(m.x - sep * cos, m.y - sep * sin, 8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(60, 100, 255, 0.7)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(100, 140, 255, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Bar
+      ctx.beginPath();
+      ctx.moveTo(m.x - sep * cos, m.y - sep * sin);
+      ctx.lineTo(m.x + sep * cos, m.y + sep * sin);
+      ctx.strokeStyle = 'rgba(180, 180, 180, 0.4)';
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      // Labels
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText('N', m.x + sep * cos, m.y + sep * sin + 3);
+      ctx.fillText('S', m.x - sep * cos, m.y - sep * sin + 3);
+    } else {
+      // Glow
+      const grad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, 30);
+      const hue = m.pole > 0 ? 0 : 220;
+      grad.addColorStop(0, `hsla(${hue}, 80%, 50%, 0.3)`);
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.fillRect(m.x - 30, m.y - 30, 60, 60);
+      // Circle
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, 10, 0, Math.PI * 2);
+      ctx.fillStyle = m.pole > 0 ? 'rgba(255, 60, 60, 0.8)' : 'rgba(60, 100, 255, 0.8)';
+      ctx.fill();
+      ctx.strokeStyle = m.pole > 0 ? 'rgba(255, 100, 100, 0.5)' : 'rgba(100, 140, 255, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Label
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 12px Courier New';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(m.pole > 0 ? 'N' : 'S', m.x, m.y);
+    }
+  }
+}
+
+function shake() {
+  for (const f of filings) {
+    f.x += (Math.random() - 0.5) * 20;
+    f.y += (Math.random() - 0.5) * 20;
+    f.angle += (Math.random() - 0.5) * 1.5;
+    f.settled = 0;
+  }
+}
+
+function draw() {
+  ctx.fillStyle = 'rgba(10, 10, 15, 0.3)';
+  ctx.fillRect(0, 0, W, H);
+
+  updateFilings();
+
+  if (drawStyle === 0) drawFilingsStyle();
+  else if (drawStyle === 1) { drawFilingsStyle(); drawFieldLines(); }
+  else drawGlowStyle();
+
+  drawMagnets();
+
+  requestAnimationFrame(draw);
+}
+
+// Input handling
+function getMagnetAt(x, y) {
+  for (let i = magnets.length - 1; i >= 0; i--) {
+    const m = magnets[i];
+    const dx = x - m.x, dy = y - m.y;
+    if (dx * dx + dy * dy < 400) return i;
+  }
+  return -1;
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  const x = e.clientX, y = e.clientY;
+  const idx = getMagnetAt(x, y);
+  if (idx >= 0) {
+    dragging = idx;
+    dragOffset.x = magnets[idx].x - x;
+    dragOffset.y = magnets[idx].y - y;
+    return;
+  }
+  // Place new magnet
+  if (placementMode === 'dipole') {
+    magnets.push({ x, y, pole: 1, strength: 1, isDipole: true, angle: Math.random() * Math.PI });
+  } else {
+    magnets.push({ x, y, pole: placementMode === 'N' ? 1 : -1, strength: 1, isDipole: false, angle: 0 });
+  }
+  document.getElementById('magnetCount').textContent = magnets.length;
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (dragging !== null) {
+    magnets[dragging].x = e.clientX + dragOffset.x;
+    magnets[dragging].y = e.clientY + dragOffset.y;
+  }
+});
+
+canvas.addEventListener('mouseup', () => { dragging = null; });
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const x = e.clientX, y = e.clientY;
+  const idx = getMagnetAt(x, y);
+  if (idx >= 0) {
+    magnets[idx].strength = Math.max(0.1, Math.min(5, magnets[idx].strength - e.deltaY * 0.002));
+    if (magnets[idx].isDipole) {
+      magnets[idx].angle += e.deltaX * 0.005;
+    }
+  }
+}, { passive: false });
+
+// Touch support
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const t = e.touches[0];
+  const x = t.clientX, y = t.clientY;
+  const idx = getMagnetAt(x, y);
+  if (idx >= 0) {
+    dragging = idx;
+    dragOffset.x = magnets[idx].x - x;
+    dragOffset.y = magnets[idx].y - y;
+  } else {
+    if (placementMode === 'dipole') {
+      magnets.push({ x, y, pole: 1, strength: 1, isDipole: true, angle: Math.random() * Math.PI });
+    } else {
+      magnets.push({ x, y, pole: placementMode === 'N' ? 1 : -1, strength: 1, isDipole: false, angle: 0 });
+    }
+    document.getElementById('magnetCount').textContent = magnets.length;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (dragging !== null) {
+    const t = e.touches[0];
+    magnets[dragging].x = t.clientX + dragOffset.x;
+    magnets[dragging].y = t.clientY + dragOffset.y;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => { dragging = null; });
+
+// Right-click to remove
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const idx = getMagnetAt(e.clientX, e.clientY);
+  if (idx >= 0) {
+    magnets.splice(idx, 1);
+    document.getElementById('magnetCount').textContent = magnets.length;
+  }
+});
+
+// Buttons
+document.getElementById('btnN').addEventListener('click', () => {
+  placementMode = 'N';
+  document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btnN').classList.add('active');
+});
+document.getElementById('btnS').addEventListener('click', () => {
+  placementMode = 'S';
+  document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btnS').classList.add('active');
+});
+document.getElementById('btnDipole').addEventListener('click', () => {
+  placementMode = 'dipole';
+  document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btnDipole').classList.add('active');
+});
+document.getElementById('btnClear').addEventListener('click', () => {
+  magnets = [];
+  document.getElementById('magnetCount').textContent = 0;
+  for (const f of filings) { f.settled = 0; f.angle = Math.random() * Math.PI; }
+});
+document.getElementById('btnShake').addEventListener('click', shake);
+document.getElementById('btnStyle').addEventListener('click', () => {
+  drawStyle = (drawStyle + 1) % 3;
+  document.getElementById('btnStyle').textContent = 'STYLE: ' + styleNames[drawStyle];
+});
+document.getElementById('btnColor').addEventListener('click', () => {
+  colorMode = (colorMode + 1) % 4;
+  document.getElementById('btnColor').textContent = 'COLOR: ' + colorNames[colorMode];
+});
+
+resize();
+draw();
+</script>
+</body>
+</html>
