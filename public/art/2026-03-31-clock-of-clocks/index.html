@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clock of Clocks — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0f;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+  color: #888;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  user-select: none;
+}
+canvas { display: block; }
+#controls {
+  position: fixed;
+  bottom: 18px;
+  display: flex;
+  gap: 12px;
+  z-index: 10;
+}
+#controls button {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #aaa;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+#controls button:hover { background: rgba(255,255,255,0.12); color: #fff; }
+#controls button.active { border-color: rgba(255,255,255,0.5); color: #fff; }
+#title {
+  position: fixed;
+  top: 16px;
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #444;
+}
+#subtitle {
+  position: fixed;
+  top: 34px;
+  font-size: 10px;
+  color: #333;
+  font-style: italic;
+}
+a { color: #555; }
+</style>
+</head>
+<body>
+<div id="title">CLOCK OF CLOCKS</div>
+<div id="subtitle">every hand points somewhere. together they point to now.</div>
+<canvas id="c"></canvas>
+<div id="controls">
+  <button id="btnPalette" class="active">IVORY</button>
+  <button id="btnMode">TIME</button>
+  <button id="btnSeconds">SEC OFF</button>
+  <button id="btn12">12H</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// --- Config ---
+const PALETTES = {
+  IVORY:  { bg: '#0a0a0f', face: '#111118', rim: '#222230', hand: '#e8e0d0', handAlt: '#c8b890', tick: '#333', glow: 'rgba(232,224,208,0.08)' },
+  NEON:   { bg: '#050510', face: '#0a0a18', rim: '#1a1a3a', hand: '#0ff',    handAlt: '#f0f',    tick: '#223', glow: 'rgba(0,255,255,0.06)' },
+  EMBER:  { bg: '#0f0805', face: '#151008', rim: '#2a1a0a', hand: '#ff8830', handAlt: '#ff4400', tick: '#321', glow: 'rgba(255,136,48,0.06)' },
+  GHOST:  { bg: '#080a08', face: '#0a100a', rim: '#1a2a1a', hand: '#4a8',    handAlt: '#284',    tick: '#232', glow: 'rgba(68,170,136,0.05)' },
+  VOID:   { bg: '#08060f', face: '#0e0a18', rim: '#1e1630', hand: '#a070ff', handAlt: '#6030cc', tick: '#212', glow: 'rgba(160,112,255,0.06)' },
+};
+const PALETTE_NAMES = Object.keys(PALETTES);
+let paletteIdx = 0;
+let palette = PALETTES.IVORY;
+
+let showSeconds = false;
+let use12h = true;
+let mode = 'time'; // 'time', 'wave', 'chaos'
+const MODES = ['time', 'wave', 'chaos'];
+let modeIdx = 0;
+
+// Digit patterns: each digit is 6 rows x 4 cols of clock hand angles [hour, minute] in degrees
+// Angles: 0=up, 90=right, 180=down, 270=left
+// Each mini-clock has 2 hands that form line segments connecting to neighbors
+const D = 0, R = 90, B = 180, L = 270, DR = 135, DL = 225, UR = 45, UL = 315;
+
+// Each cell: [hand1Angle, hand2Angle]
+// We define digits as which directions the hands point to form the digit shape
+const DIGITS = {
+  0: [
+    [[B,R],[L,R],[L,R],[B,L]],
+    [[D,D],[B,R],[L,B],[D,D]],
+    [[D,D],[D,D],[D,D],[D,D]],
+    [[D,D],[D,D],[D,D],[D,D]],
+    [[D,D],[R,D],[L,D],[D,D]],
+    [[D,R],[R,L],[R,L],[D,L]],
+  ],
+  1: [
+    [[DR,DR],[B,L],[DR,DR],[DR,DR]],
+    [[DR,DR],[D,D],[DR,DR],[DR,DR]],
+    [[DR,DR],[D,D],[DR,DR],[DR,DR]],
+    [[DR,DR],[D,D],[DR,DR],[DR,DR]],
+    [[DR,DR],[D,D],[DR,DR],[DR,DR]],
+    [[DR,DR],[D,R],[DR,DR],[DR,DR]],
+  ],
+  2: [
+    [[B,R],[L,R],[L,R],[B,L]],
+    [[DR,DR],[B,R],[L,B],[D,D]],
+    [[B,R],[L,R],[R,D],[D,L]],
+    [[D,R],[L,B],[DR,DR],[D,D]],
+    [[D,D],[R,D],[L,R],[D,L]],
+    [[D,R],[R,L],[R,L],[D,L]],
+  ],
+  3: [
+    [[B,R],[L,R],[L,R],[B,L]],
+    [[DR,DR],[B,R],[L,B],[D,D]],
+    [[B,R],[L,R],[R,D],[D,L]],
+    [[DR,DR],[B,R],[L,B],[D,D]],
+    [[DR,DR],[R,D],[L,B],[D,D]],
+    [[B,R],[R,L],[R,L],[D,L]],
+  ],
+  4: [
+    [[B,DR],[DR,DR],[DR,DR],[B,DR]],
+    [[D,D],[DR,DR],[DR,DR],[D,D]],
+    [[D,R],[L,R],[R,D],[D,L]],
+    [[DR,DR],[B,R],[L,B],[D,D]],
+    [[DR,DR],[DR,DR],[DR,DR],[D,D]],
+    [[DR,DR],[DR,DR],[DR,DR],[D,R]],
+  ],
+  5: [
+    [[B,R],[L,R],[L,R],[B,L]],
+    [[D,D],[R,B],[L,B],[DR,DR]],
+    [[D,R],[R,L],[L,R],[B,L]],
+    [[DR,DR],[B,R],[L,B],[D,D]],
+    [[DR,DR],[R,D],[L,B],[D,D]],
+    [[B,R],[R,L],[R,L],[D,L]],
+  ],
+  6: [
+    [[B,R],[L,R],[L,R],[B,L]],
+    [[D,D],[R,B],[L,B],[DR,DR]],
+    [[D,R],[R,L],[L,R],[B,L]],
+    [[D,D],[B,R],[L,B],[D,D]],
+    [[D,D],[R,D],[L,B],[D,D]],
+    [[D,R],[R,L],[R,L],[D,L]],
+  ],
+  7: [
+    [[B,R],[L,R],[L,R],[B,L]],
+    [[DR,DR],[B,R],[L,B],[D,D]],
+    [[DR,DR],[DR,DR],[DR,DR],[D,D]],
+    [[DR,DR],[DR,DR],[DR,DR],[D,D]],
+    [[DR,DR],[DR,DR],[DR,DR],[D,D]],
+    [[DR,DR],[DR,DR],[DR,DR],[D,R]],
+  ],
+  8: [
+    [[B,R],[L,R],[L,R],[B,L]],
+    [[D,D],[R,B],[L,B],[D,D]],
+    [[D,R],[R,L],[L,R],[D,L]],
+    [[D,D],[B,R],[L,B],[D,D]],
+    [[D,D],[R,D],[L,B],[D,D]],
+    [[D,R],[R,L],[R,L],[D,L]],
+  ],
+  9: [
+    [[B,R],[L,R],[L,R],[B,L]],
+    [[D,D],[R,B],[L,B],[D,D]],
+    [[D,R],[R,L],[R,D],[D,L]],
+    [[DR,DR],[B,R],[L,B],[D,D]],
+    [[DR,DR],[R,D],[L,B],[D,D]],
+    [[B,R],[R,L],[R,L],[D,L]],
+  ],
+  ':': [
+    [[DR,DR],[DR,DR]],
+    [[DR,DR],[DR,DR]],
+    [[B,R],[L,B]],
+    [[D,R],[L,D]],
+    [[DR,DR],[DR,DR]],
+    [[DR,DR],[DR,DR]],
+  ],
+};
+
+// Better digit definitions - simpler approach:
+// Each clock has 2 hands. We position them to create visual segments.
+// Inspired by "Humans Since 1982" clock installations.
+// Let's use a cleaner encoding.
+
+// Redefine: UP=0, RIGHT=90, DOWN=180, LEFT=270
+// "blank" clock = both hands at 225 (tucked away diagonally)
+const BL = 225; // blank position
+
+const SEGS = {
+  // 4 cols x 6 rows. Each cell = [hand1, hand2]
+  0: [
+    [[180,90],[270,90],[270,90],[180,270]],
+    [[0,0],[180,90],[270,180],[0,0]],
+    [[0,0],[0,0],[0,0],[0,0]],
+    [[0,0],[0,0],[0,0],[0,0]],
+    [[0,0],[180,90],[270,180],[0,0]],
+    [[0,90],[270,90],[270,90],[0,270]],
+  ],
+  1: [
+    [[BL,BL],[180,BL],[BL,BL],[BL,BL]],
+    [[BL,BL],[0,0],[BL,BL],[BL,BL]],
+    [[BL,BL],[0,0],[BL,BL],[BL,BL]],
+    [[BL,BL],[0,0],[BL,BL],[BL,BL]],
+    [[BL,BL],[0,0],[BL,BL],[BL,BL]],
+    [[BL,BL],[0,90],[BL,BL],[BL,BL]],
+  ],
+  2: [
+    [[180,90],[270,90],[270,90],[180,270]],
+    [[BL,BL],[180,90],[270,180],[0,0]],
+    [[180,90],[270,90],[0,90],[0,270]],
+    [[0,0],[180,270],[BL,BL],[BL,BL]],
+    [[0,0],[180,90],[270,90],[180,270]],
+    [[0,90],[270,90],[270,90],[0,270]],
+  ],
+  3: [
+    [[180,90],[270,90],[270,90],[180,270]],
+    [[BL,BL],[180,90],[270,180],[0,0]],
+    [[180,90],[270,90],[0,90],[0,270]],
+    [[BL,BL],[180,90],[270,180],[0,0]],
+    [[BL,BL],[180,90],[270,180],[0,0]],
+    [[180,90],[270,90],[270,90],[0,270]],
+  ],
+  4: [
+    [[180,BL],[BL,BL],[BL,BL],[180,BL]],
+    [[0,0],[BL,BL],[BL,BL],[0,0]],
+    [[0,90],[270,90],[0,90],[0,270]],
+    [[BL,BL],[180,90],[270,180],[0,0]],
+    [[BL,BL],[BL,BL],[BL,BL],[0,0]],
+    [[BL,BL],[BL,BL],[BL,BL],[0,90]],
+  ],
+  5: [
+    [[180,90],[270,90],[270,90],[180,270]],
+    [[0,0],[180,270],[BL,BL],[BL,BL]],
+    [[0,90],[270,90],[270,90],[180,270]],
+    [[BL,BL],[180,90],[270,180],[0,0]],
+    [[BL,BL],[180,90],[270,180],[0,0]],
+    [[180,90],[270,90],[270,90],[0,270]],
+  ],
+  6: [
+    [[180,90],[270,90],[270,90],[180,270]],
+    [[0,0],[180,270],[BL,BL],[BL,BL]],
+    [[0,90],[270,90],[270,90],[180,270]],
+    [[0,0],[180,90],[270,180],[0,0]],
+    [[0,0],[180,90],[270,180],[0,0]],
+    [[0,90],[270,90],[270,90],[0,270]],
+  ],
+  7: [
+    [[180,90],[270,90],[270,90],[180,270]],
+    [[BL,BL],[180,90],[270,180],[0,0]],
+    [[BL,BL],[BL,BL],[BL,BL],[0,0]],
+    [[BL,BL],[BL,BL],[BL,BL],[0,0]],
+    [[BL,BL],[BL,BL],[BL,BL],[0,0]],
+    [[BL,BL],[BL,BL],[BL,BL],[0,90]],
+  ],
+  8: [
+    [[180,90],[270,90],[270,90],[180,270]],
+    [[0,0],[180,270],[180,90],[0,0]],
+    [[0,90],[270,90],[270,90],[0,270]],
+    [[0,0],[180,90],[270,180],[0,0]],
+    [[0,0],[180,90],[270,180],[0,0]],
+    [[0,90],[270,90],[270,90],[0,270]],
+  ],
+  9: [
+    [[180,90],[270,90],[270,90],[180,270]],
+    [[0,0],[180,270],[180,90],[0,0]],
+    [[0,90],[270,90],[0,90],[0,270]],
+    [[BL,BL],[180,90],[270,180],[0,0]],
+    [[BL,BL],[180,90],[270,180],[0,0]],
+    [[180,90],[270,90],[270,90],[0,270]],
+  ],
+};
+
+// Colon: 2 cols x 6 rows
+const COLON = [
+  [[BL,BL],[BL,BL]],
+  [[BL,BL],[BL,BL]],
+  [[180,90],[270,180]],
+  [[0,90],[270,0]],
+  [[BL,BL],[BL,BL]],
+  [[BL,BL],[BL,BL]],
+];
+
+// Grid layout for HH:MM = 4+2+4+2+4 = 16 cols, 6 rows
+// For HH:MM:SS = 4+2+4+2+4+2+4 = 22 cols, 6 rows
+const ROWS = 6;
+
+// Clock state
+let clocks = []; // [{x, y, hand1: {current, target}, hand2: {current, target}}]
+let gridCols, gridRows;
+let clockSize;
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  layoutClocks();
+}
+
+function getTimeDigits() {
+  const now = new Date();
+  let h = now.getHours();
+  let m = now.getMinutes();
+  let s = now.getSeconds();
+  if (use12h) {
+    h = h % 12;
+    if (h === 0) h = 12;
+  }
+  const hStr = String(h).padStart(2, '0');
+  const mStr = String(m).padStart(2, '0');
+  const sStr = String(s).padStart(2, '0');
+  if (showSeconds) {
+    return [hStr[0], hStr[1], ':', mStr[0], mStr[1], ':', sStr[0], sStr[1]];
+  }
+  return [hStr[0], hStr[1], ':', mStr[0], mStr[1]];
+}
+
+function buildTargetGrid() {
+  const digits = getTimeDigits();
+  let grid = [];
+  for (let r = 0; r < ROWS; r++) grid[r] = [];
+
+  for (const ch of digits) {
+    if (ch === ':') {
+      for (let r = 0; r < ROWS; r++) {
+        grid[r].push(...COLON[r]);
+      }
+    } else {
+      const seg = SEGS[parseInt(ch)];
+      for (let r = 0; r < ROWS; r++) {
+        grid[r].push(...seg[r]);
+      }
+    }
+  }
+  return grid;
+}
+
+function layoutClocks() {
+  const digits = getTimeDigits();
+  let totalCols = 0;
+  for (const ch of digits) totalCols += (ch === ':' ? 2 : 4);
+
+  gridCols = totalCols;
+  gridRows = ROWS;
+
+  // Calculate clock size to fit
+  const maxW = canvas.width * 0.88;
+  const maxH = canvas.height * 0.75;
+  clockSize = Math.min(maxW / gridCols, maxH / gridRows);
+  clockSize = Math.min(clockSize, 70);
+
+  const totalW = gridCols * clockSize;
+  const totalH = gridRows * clockSize;
+  const offX = (canvas.width - totalW) / 2;
+  const offY = (canvas.height - totalH) / 2;
+
+  const targetGrid = buildTargetGrid();
+
+  // Initialize or update clocks array
+  const needed = gridCols * gridRows;
+  while (clocks.length < needed) {
+    clocks.push({
+      x: 0, y: 0,
+      hand1: { current: Math.random() * 360, target: BL },
+      hand2: { current: Math.random() * 360, target: BL },
+    });
+  }
+
+  for (let r = 0; r < gridRows; r++) {
+    for (let c = 0; c < gridCols; c++) {
+      const idx = r * gridCols + c;
+      const cl = clocks[idx];
+      cl.x = offX + c * clockSize + clockSize / 2;
+      cl.y = offY + r * clockSize + clockSize / 2;
+      cl.hand1.target = targetGrid[r][c][0];
+      cl.hand2.target = targetGrid[r][c][1];
+    }
+  }
+}
+
+function lerpAngle(from, to, t) {
+  let diff = ((to - from + 540) % 360) - 180;
+  return (from + diff * t + 360) % 360;
+}
+
+function updateClocks() {
+  if (mode === 'time') {
+    const targetGrid = buildTargetGrid();
+    for (let r = 0; r < gridRows; r++) {
+      for (let c = 0; c < gridCols; c++) {
+        const idx = r * gridCols + c;
+        if (idx >= clocks.length) continue;
+        clocks[idx].hand1.target = targetGrid[r][c][0];
+        clocks[idx].hand2.target = targetGrid[r][c][1];
+      }
+    }
+  } else if (mode === 'wave') {
+    const t = Date.now() / 1000;
+    for (let r = 0; r < gridRows; r++) {
+      for (let c = 0; c < gridCols; c++) {
+        const idx = r * gridCols + c;
+        if (idx >= clocks.length) continue;
+        const phase = (c + r) * 0.4;
+        clocks[idx].hand1.target = (Math.sin(t * 1.2 + phase) * 180 + 180) % 360;
+        clocks[idx].hand2.target = (Math.cos(t * 0.8 + phase * 1.3) * 180 + 180) % 360;
+      }
+    }
+  } else if (mode === 'chaos') {
+    const t = Date.now() / 1000;
+    for (let r = 0; r < gridRows; r++) {
+      for (let c = 0; c < gridCols; c++) {
+        const idx = r * gridCols + c;
+        if (idx >= clocks.length) continue;
+        const seed = idx * 137.508;
+        clocks[idx].hand1.target = (Math.sin(t * 0.7 + seed) * 180 + Math.cos(t * 1.1 + seed * 0.3) * 180) % 360;
+        clocks[idx].hand2.target = (Math.cos(t * 0.5 + seed * 0.7) * 180 + Math.sin(t * 1.3 + seed * 0.1) * 180) % 360;
+      }
+    }
+  }
+
+  const speed = 0.08;
+  for (let i = 0; i < gridCols * gridRows && i < clocks.length; i++) {
+    const cl = clocks[i];
+    cl.hand1.current = lerpAngle(cl.hand1.current, cl.hand1.target, speed);
+    cl.hand2.current = lerpAngle(cl.hand2.current, cl.hand2.target, speed);
+  }
+}
+
+function drawClock(cl) {
+  const r = clockSize * 0.42;
+  const cx = cl.x, cy = cl.y;
+
+  // Face
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = palette.face;
+  ctx.fill();
+  ctx.strokeStyle = palette.rim;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Tick marks (12 o'clock only)
+  for (let i = 0; i < 12; i += 3) {
+    const a = (i * 30 - 90) * Math.PI / 180;
+    const x1 = cx + Math.cos(a) * r * 0.82;
+    const y1 = cy + Math.sin(a) * r * 0.82;
+    const x2 = cx + Math.cos(a) * r * 0.92;
+    const y2 = cy + Math.sin(a) * r * 0.92;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = palette.tick;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Hands
+  const drawHand = (angle, len, color, width) => {
+    const a = (angle - 90) * Math.PI / 180;
+    const x = cx + Math.cos(a) * r * len;
+    const y = cy + Math.sin(a) * r * len;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  };
+
+  drawHand(cl.hand1.current, 0.55, palette.handAlt, clockSize * 0.06);
+  drawHand(cl.hand2.current, 0.78, palette.hand, clockSize * 0.04);
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, clockSize * 0.035, 0, Math.PI * 2);
+  ctx.fillStyle = palette.hand;
+  ctx.fill();
+}
+
+function draw() {
+  ctx.fillStyle = palette.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Subtle glow behind grid
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  const gr = Math.max(gridCols, gridRows) * clockSize * 0.6;
+  const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, gr);
+  grd.addColorStop(0, palette.glow);
+  grd.addColorStop(1, 'transparent');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  updateClocks();
+
+  for (let i = 0; i < gridCols * gridRows && i < clocks.length; i++) {
+    drawClock(clocks[i]);
+  }
+
+  requestAnimationFrame(draw);
+}
+
+// Controls
+document.getElementById('btnPalette').addEventListener('click', function() {
+  paletteIdx = (paletteIdx + 1) % PALETTE_NAMES.length;
+  palette = PALETTES[PALETTE_NAMES[paletteIdx]];
+  this.textContent = PALETTE_NAMES[paletteIdx];
+});
+
+document.getElementById('btnMode').addEventListener('click', function() {
+  modeIdx = (modeIdx + 1) % MODES.length;
+  mode = MODES[modeIdx];
+  this.textContent = mode.toUpperCase();
+  if (mode === 'time') layoutClocks();
+});
+
+document.getElementById('btnSeconds').addEventListener('click', function() {
+  showSeconds = !showSeconds;
+  this.textContent = showSeconds ? 'SEC ON' : 'SEC OFF';
+  layoutClocks();
+});
+
+document.getElementById('btn12').addEventListener('click', function() {
+  use12h = !use12h;
+  this.textContent = use12h ? '12H' : '24H';
+  layoutClocks();
+});
+
+window.addEventListener('resize', resize);
+resize();
+draw();
+
+// Recheck digits every second
+setInterval(() => {
+  if (mode === 'time') layoutClocks();
+}, 1000);
+</script>
+</body>
+</html>
