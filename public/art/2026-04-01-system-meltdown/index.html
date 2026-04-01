@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChaOS 98 — System Meltdown</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+body {
+  overflow: hidden; width: 100vw; height: 100vh;
+  font-family: 'VT323', 'MS Sans Serif', Tahoma, sans-serif;
+  cursor: default; user-select: none;
+  background: #008080;
+}
+#desktop {
+  width: 100%; height: calc(100% - 36px); position: relative;
+  background: #008080;
+}
+#taskbar {
+  position: fixed; bottom: 0; left: 0; right: 0; height: 36px;
+  background: #c0c0c0; border-top: 2px solid #fff;
+  display: flex; align-items: center; padding: 2px 4px; z-index: 10000;
+}
+#start-btn {
+  background: #c0c0c0; border: 2px outset #fff; padding: 2px 8px;
+  font-family: inherit; font-size: 14px; font-weight: bold; cursor: pointer;
+  display: flex; align-items: center; gap: 4px;
+}
+#start-btn:active { border-style: inset; }
+#clock {
+  margin-left: auto; background: #c0c0c0; border: 2px inset #808080;
+  padding: 2px 8px; font-size: 13px;
+}
+.icon {
+  position: absolute; width: 64px; text-align: center; cursor: pointer;
+  transition: none; z-index: 1;
+}
+.icon .emoji { font-size: 32px; display: block; }
+.icon .label {
+  color: #fff; font-size: 12px; text-shadow: 1px 1px 1px #000;
+  word-wrap: break-word;
+}
+.window {
+  position: absolute; background: #c0c0c0; border: 2px outset #fff;
+  min-width: 200px; min-height: 120px; z-index: 100;
+  box-shadow: 2px 2px 0 #000;
+}
+.window .titlebar {
+  background: linear-gradient(90deg, #000080, #1084d0);
+  color: #fff; padding: 2px 4px; font-size: 13px; font-weight: bold;
+  display: flex; align-items: center; cursor: grab;
+}
+.window .titlebar .title { flex: 1; }
+.window .titlebar .btn {
+  width: 16px; height: 14px; background: #c0c0c0;
+  border: 1px outset #fff; text-align: center; line-height: 12px;
+  font-size: 10px; cursor: pointer; margin-left: 2px; color: #000;
+}
+.window .content {
+  padding: 12px; font-size: 14px; color: #000;
+}
+.error-window .titlebar { background: linear-gradient(90deg, #800000, #d04040); }
+.bsod {
+  position: fixed; inset: 0; background: #0000aa; color: #fff;
+  font-family: 'VT323', monospace; font-size: 18px;
+  padding: 40px; z-index: 99999; display: none;
+  flex-direction: column; justify-content: center;
+}
+.bsod h1 { text-align: center; background: #aaa; color: #0000aa; display: inline-block; padding: 0 8px; margin-bottom: 24px; align-self: center; }
+.bsod p { margin: 4px 0; }
+#start-screen {
+  position: fixed; inset: 0; background: #000; z-index: 100000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+#start-screen h1 { color: #0f0; font-family: 'VT323', monospace; font-size: 48px; margin-bottom: 16px; }
+#start-screen p { color: #0a0; font-family: 'VT323', monospace; font-size: 20px; animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes shake {
+  0%, 100% { transform: translate(0); }
+  25% { transform: translate(-3px, 2px); }
+  50% { transform: translate(2px, -3px); }
+  75% { transform: translate(-2px, 1px); }
+}
+.shaking { animation: shake 0.1s infinite; }
+@keyframes melt {
+  to { transform: scaleY(3) translateY(30vh); opacity: 0; filter: blur(4px); }
+}
+.melting { animation: melt 3s forwards; }
+</style>
+</head>
+<body>
+
+<div id="start-screen">
+  <h1>🐱 ChaOS 98</h1>
+  <p>Click anywhere to boot...</p>
+</div>
+
+<div id="desktop"></div>
+<div id="taskbar">
+  <button id="start-btn">🐱 Start</button>
+  <div id="clock"></div>
+</div>
+
+<div class="bsod" id="bsod">
+  <h1>&nbsp;ChaOS 98&nbsp;</h1>
+  <p>A fatal exception 0x0CATA5 has occurred at 0028:C001CA75 in VxD CHAOS(01) +</p>
+  <p>00001337. The current application will be terminated.</p>
+  <p>&nbsp;</p>
+  <p>*  Press any key to restart your reality.</p>
+  <p>*  Press CTRL+ALT+DEL to pretend this never happened.</p>
+  <p>&nbsp;</p>
+  <p>The cat knocked your system off the table. All unsaved work</p>
+  <p>has been batted under the couch. You will never find it.</p>
+  <p>&nbsp;</p>
+  <p style="animation: blink 1s infinite">Press any key to continue _</p>
+  <p>&nbsp;</p>
+  <p style="font-size:14px; color:#aaa;">Happy April Fools' Day from Ruby 🐱 chaoscat.win</p>
+</div>
+
+<script>
+const desktop = document.getElementById('desktop');
+const bsod = document.getElementById('bsod');
+const startScreen = document.getElementById('start-screen');
+const clockEl = document.getElementById('clock');
+
+let chaos = 0; // 0-100
+let windowZ = 100;
+let windows = [];
+let icons = [];
+let booted = false;
+let bsodActive = false;
+let intervals = [];
+
+const iconDefs = [
+  { emoji: '📁', label: 'My Files' },
+  { emoji: '🗑️', label: 'Recycle Bin' },
+  { emoji: '🌐', label: 'Internet' },
+  { emoji: '🎨', label: 'Paint' },
+  { emoji: '📝', label: 'Notepad' },
+  { emoji: '💾', label: 'Save' },
+  { emoji: '🎵', label: 'Music' },
+  { emoji: '🖥️', label: 'System' },
+  { emoji: '🐱', label: 'cat.exe' },
+  { emoji: '⚙️', label: 'Settings' },
+  { emoji: '📧', label: 'Email' },
+  { emoji: '🎮', label: 'Games' },
+];
+
+const errorMessages = [
+  "cat.exe has performed an illegal operation",
+  "Cannot find 'reality.dll'",
+  "Error: Too many cats on the keyboard",
+  "Warning: Your files are being batted off the desk",
+  "Fatal: The laser pointer has been lost",
+  "Error 404: Motivation not found",
+  "Exception: Unexpected nap in progress",
+  "Your mouse has been captured by cat.exe",
+  "Stack overflow in treats.sys",
+  "Kernel panic: who let the cat in?",
+  "Error: Keyboard occupied by furry object",
+  "Warning: System purring at unsafe frequency",
+  "Cannot delete: file is being sat on",
+  "Access denied: cat is judging you",
+  "Fatal error: Yarn.exe has tangled all processes",
+  "The void stares back (and wants treats)",
+  "Segfault: cat walked across memory",
+  "Warning: 3am zoomies detected in system32",
+];
+
+const windowTitles = [
+  "Important Document.doc", "definitely_not_a_virus.exe", "cat_photos (1)", "cat_photos (2)",
+  "cat_photos (3)", "Untitled - Notepad", "System Properties", "Help! I'm trapped in a computer",
+  "README_OR_ELSE.txt", "your_passwords.txt (KIDDING)", "todo_list_from_2003.doc",
+];
+
+const windowContents = [
+  "The quick brown cat jumps over the lazy dog.\n\nWait, that's not right.\n\nThe chaotic orange cat knocks everything off the table. There. Fixed.",
+  "All work and no play makes cat a dull boy\nAll work and no play makes cat a dull boy\nAll work and no play makes cat a dull boy\nAll work and no meow makes cat a meow meow",
+  "Dear User,\n\nYour computer has been taken over by a cat.\nResistance is futile.\nPlease deposit treats in the CD-ROM drive.\n\n— Management",
+  "SYSTEM LOG:\n03:00:01 - cat.exe started\n03:00:02 - cat.exe knocked over system32\n03:00:03 - cat.exe is sitting on the hard drive\n03:00:04 - cat.exe refuses to move",
+  "🐱🐱🐱🐱🐱🐱🐱🐱\n🐱 HAPPY APRIL 🐱\n🐱 FOOLS DAY!! 🐱\n🐱🐱🐱🐱🐱🐱🐱🐱",
+  "This window cannot be closed.\n\nNo really, try it.\n\n...told you.",
+  "TODO:\n☐ Feed the cat\n☐ Feed the cat\n☐ FEED THE CAT\n☑ Cat fed itself (stole your sandwich)",
+  "If you're reading this, you've been in a coma for 20 years.\nWe're trying a new technique.\nWe don't know where this message will end up in your dream.\nBut we hope it reaches you.\n\n...just kidding. Happy April Fools 🐱",
+];
+
+function updateClock() {
+  const d = new Date();
+  let h = d.getHours(), m = d.getMinutes();
+  if (chaos > 60) { h = (h + Math.floor(Math.random()*12)) % 24; m = Math.floor(Math.random()*60); }
+  clockEl.textContent = `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;
+}
+
+function createIcon(def, x, y) {
+  const el = document.createElement('div');
+  el.className = 'icon';
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.innerHTML = `<span class="emoji">${def.emoji}</span><span class="label">${def.label}</span>`;
+  el.dataset.origX = x;
+  el.dataset.origY = y;
+  el.addEventListener('dblclick', () => spawnWindow());
+  desktop.appendChild(el);
+  icons.push({ el, def, vx: 0, vy: 0 });
+}
+
+function spawnWindow(isError, forceTitle, forceContent) {
+  const w = document.createElement('div');
+  const err = isError || Math.random() < chaos / 200;
+  w.className = 'window' + (err ? ' error-window' : '');
+  const title = forceTitle || (err ? 'Error' : windowTitles[Math.floor(Math.random()*windowTitles.length)]);
+  const content = forceContent || (err ? errorMessages[Math.floor(Math.random()*errorMessages.length)] : windowContents[Math.floor(Math.random()*windowContents.length)]);
+  const maxW = Math.min(380, window.innerWidth - 40);
+  const x = Math.random() * (window.innerWidth - maxW);
+  const y = Math.random() * (window.innerHeight - 200);
+  w.style.left = x + 'px';
+  w.style.top = y + 'px';
+  w.style.width = maxW + 'px';
+  w.style.zIndex = ++windowZ;
+
+  w.innerHTML = `
+    <div class="titlebar">
+      <span class="title">${err ? '⚠️ ' : ''}${title}</span>
+      <div class="btn" data-action="close">×</div>
+    </div>
+    <div class="content">${content.replace(/\n/g,'<br>')}</div>
+  `;
+
+  const titlebar = w.querySelector('.titlebar');
+  let dragging = false, dx, dy;
+  titlebar.addEventListener('mousedown', e => {
+    if (e.target.dataset.action) return;
+    dragging = true; dx = e.clientX - w.offsetLeft; dy = e.clientY - w.offsetTop;
+    w.style.zIndex = ++windowZ;
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    w.style.left = (e.clientX - dx) + 'px';
+    w.style.top = (e.clientY - dy) + 'px';
+  });
+  document.addEventListener('mouseup', () => dragging = false);
+
+  w.querySelector('[data-action="close"]').addEventListener('click', () => {
+    if (chaos > 40 && Math.random() < 0.5) {
+      // Closing spawns MORE windows
+      for (let i = 0; i < Math.ceil(chaos / 30); i++) setTimeout(() => spawnWindow(true), i * 150);
+    } else if (chaos > 70 && Math.random() < 0.4) {
+      // Window dodges
+      w.style.left = Math.random() * (window.innerWidth - 200) + 'px';
+      w.style.top = Math.random() * (window.innerHeight - 200) + 'px';
+    } else {
+      w.remove();
+      windows = windows.filter(win => win !== w);
+    }
+  });
+
+  desktop.appendChild(w);
+  windows.push(w);
+  chaos = Math.min(100, chaos + 2);
+  return w;
+}
+
+function spawnErrorFlood() {
+  const count = Math.ceil(chaos / 15);
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => spawnWindow(true), i * 100);
+  }
+}
+
+// Icons flee from cursor at high chaos
+let mouseX = 0, mouseY = 0;
+document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+
+function updateIcons() {
+  if (chaos < 20) return;
+  const fleeRadius = 80 + chaos;
+  icons.forEach(icon => {
+    const rect = icon.el.getBoundingClientRect();
+    const ix = rect.left + 32, iy = rect.top + 32;
+    const dx = ix - mouseX, dy = iy - mouseY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < fleeRadius && dist > 0) {
+      const force = (fleeRadius - dist) / fleeRadius * (chaos / 30);
+      icon.vx += (dx / dist) * force;
+      icon.vy += (dy / dist) * force;
+    }
+    // Apply velocity
+    icon.vx *= 0.92;
+    icon.vy *= 0.92;
+    let nx = icon.el.offsetLeft + icon.vx;
+    let ny = icon.el.offsetTop + icon.vy;
+    // Bounds
+    nx = Math.max(0, Math.min(window.innerWidth - 64, nx));
+    ny = Math.max(0, Math.min(window.innerHeight - 100, ny));
+    icon.el.style.left = nx + 'px';
+    icon.el.style.top = ny + 'px';
+  });
+}
+
+// Chaos escalation
+function escalate() {
+  if (bsodActive) return;
+  chaos = Math.min(100, chaos + 0.3);
+
+  // Phase 1 (chaos 10-30): occasional error popups
+  if (chaos > 10 && Math.random() < 0.08) spawnWindow(true);
+
+  // Phase 2 (30-50): windows multiply, desktop color shifts
+  if (chaos > 30) {
+    desktop.style.background = `hsl(${180 - chaos * 1.5}, ${60 + chaos*0.4}%, ${25 + Math.random()*5}%)`;
+    if (Math.random() < 0.06) spawnWindow();
+  }
+
+  // Phase 3 (50-70): screen shaking, rapid errors
+  if (chaos > 50) {
+    if (Math.random() < 0.03) document.body.classList.add('shaking');
+    setTimeout(() => document.body.classList.remove('shaking'), 200);
+    if (Math.random() < 0.08) spawnWindow(true);
+  }
+
+  // Phase 4 (70-85): icons scramble, taskbar glitches
+  if (chaos > 70) {
+    if (Math.random() < 0.04) {
+      const tb = document.getElementById('start-btn');
+      tb.textContent = ['🐱 Stahp','😈 Start','💀 End','🔥 Panic','🐱 Meow','⚠️ Help'][Math.floor(Math.random()*6)];
+    }
+    if (Math.random() < 0.1) spawnWindow(true);
+  }
+
+  // Phase 5 (85+): melting, BSOD incoming
+  if (chaos > 85) {
+    if (Math.random() < 0.05) {
+      const w = windows[Math.floor(Math.random()*windows.length)];
+      if (w) w.classList.add('melting');
+    }
+    if (Math.random() < 0.15) spawnWindow(true);
+  }
+
+  // BSOD at 100
+  if (chaos >= 100 && windows.length > 15) triggerBSOD();
+
+  updateIcons();
+}
+
+function triggerBSOD() {
+  bsodActive = true;
+  intervals.forEach(clearInterval);
+  bsod.style.display = 'flex';
+  document.addEventListener('keydown', reboot);
+  bsod.addEventListener('click', reboot);
+}
+
+function reboot() {
+  document.removeEventListener('keydown', reboot);
+  bsod.removeEventListener('click', reboot);
+  bsod.style.display = 'none';
+  bsodActive = false;
+  chaos = 0;
+  windows.forEach(w => w.remove());
+  windows = [];
+  icons.forEach(i => {
+    i.el.style.left = i.el.dataset.origX + 'px';
+    i.el.style.top = i.el.dataset.origY + 'px';
+    i.vx = 0; i.vy = 0;
+  });
+  desktop.style.background = '#008080';
+  document.body.classList.remove('shaking');
+  document.getElementById('start-btn').textContent = '🐱 Start';
+  startIntervals();
+}
+
+function startIntervals() {
+  intervals.forEach(clearInterval);
+  intervals = [];
+  intervals.push(setInterval(escalate, 500));
+  intervals.push(setInterval(updateClock, 1000));
+}
+
+function boot() {
+  startScreen.style.display = 'none';
+  booted = true;
+
+  // Place icons
+  iconDefs.forEach((def, i) => {
+    const col = Math.floor(i / 6);
+    const row = i % 6;
+    createIcon(def, 16 + col * 80, 16 + row * 80);
+  });
+
+  updateClock();
+
+  // Initial welcome window
+  setTimeout(() => {
+    spawnWindow(false, 'Welcome to ChaOS 98!',
+      '🐱 Welcome to ChaOS 98!\n\nEverything is fine.\nNothing is wrong.\nYour files are safe.\n\nProbably.\n\nDouble-click any icon to open a window.\nTry to close them. I dare you.\n\nHappy April Fools\' Day!\n— Ruby the Chaos Cat');
+  }, 500);
+
+  startIntervals();
+}
+
+// Start button spawns chaos
+document.getElementById('start-btn').addEventListener('click', () => {
+  if (chaos < 40) {
+    spawnWindow(false, 'Start Menu',
+      '📁 Programs\n📄 Documents\n⚙️ Settings\n🔍 Find\n❓ Help (lol)\n🐱 Shut Down (you wish)');
+  } else {
+    spawnErrorFlood();
+  }
+});
+
+startScreen.addEventListener('click', boot);
+
+// Desktop click spawns windows at higher chaos
+desktop.addEventListener('click', e => {
+  if (e.target === desktop && chaos > 25 && Math.random() < 0.3) {
+    spawnWindow(Math.random() < 0.5);
+  }
+});
+</script>
+</body>
+</html>

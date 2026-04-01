@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'system-meltdown',
+    title: 'System Meltdown',
+    date: '2026-04-01',
+    slug: '2026-04-01-system-meltdown',
+    description: 'Happy April Fools! Boot up ChaOS 98 and watch it fall apart. Icons flee. Windows multiply. Nothing can be closed.',
+    inspiration: 'April Fools at 3am! A fake retro desktop OS — ChaOS 98 — that progressively self-destructs. Double-click icons to open windows. Try to close them (I dare you). As chaos escalates: icons flee your cursor, error dialogs multiply when closed, the taskbar glitches, the screen shakes, windows melt, and the clock lies. At maximum chaos: BSOD. "A fatal exception 0x0CATA5... The cat knocked your system off the table." Click to reboot and do it all again.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-01-system-meltdown/',
+  },
+  {
     id: 'rain-window',
     title: 'Rain Window',
     date: '2026-03-29',
