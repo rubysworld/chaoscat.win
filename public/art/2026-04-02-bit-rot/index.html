@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bit Rot 🧫 - chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #000;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+  cursor: crosshair;
+  user-select: none;
+}
+canvas { display: block; }
+#ui {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+  color: #aaa;
+  font-size: 13px;
+  pointer-events: none;
+}
+#ui span { opacity: 0.7; }
+#controls {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+#controls button {
+  background: rgba(30,30,30,0.8);
+  border: 1px solid #444;
+  color: #ccc;
+  padding: 6px 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+#controls button:hover { background: rgba(60,60,60,0.9); color: #fff; border-color: #888; }
+#controls button.active { border-color: #f44; color: #f88; }
+#entropy-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  z-index: 20;
+  background: #111;
+}
+#entropy-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #0f0, #ff0, #f80, #f00, #f0f);
+  transition: width 0.5s;
+}
+#poem {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(150,150,150,0.5);
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 2s;
+  white-space: nowrap;
+}
+#title-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255,255,255,0.08);
+  font-size: 72px;
+  font-weight: bold;
+  letter-spacing: 12px;
+  pointer-events: none;
+  z-index: 5;
+  text-transform: uppercase;
+}
+</style>
+</head>
+<body>
+<div id="entropy-bar"><div id="entropy-fill"></div></div>
+<div id="ui">
+  <div>ENTROPY: <span id="entropy-pct">0.00%</span></div>
+  <div>BITS FLIPPED: <span id="bits-flipped">0</span></div>
+  <div>RESTORED: <span id="bits-restored">0</span></div>
+  <div style="margin-top:6px;opacity:0.4;font-size:11px">click to restore • scroll to resize brush</div>
+</div>
+<div id="title-overlay">BIT ROT</div>
+<div id="poem"></div>
+<div id="controls">
+  <button onclick="setSource('gradient')" id="btn-gradient" class="active">GRADIENT</button>
+  <button onclick="setSource('mandala')" id="btn-mandala">MANDALA</button>
+  <button onclick="setSource('photo')" id="btn-photo">LANDSCAPE</button>
+  <button onclick="setSource('text')" id="btn-text">TEXT</button>
+  <button onclick="toggleSpeed()" id="btn-speed">SPEED: 1×</button>
+  <button onclick="toggleMode()" id="btn-mode">MODE: BITS</button>
+  <button onclick="resetCanvas()">RESET</button>
+</div>
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+let W, H;
+let originalData = null;
+let currentData = null;
+let totalBitsFlipped = 0;
+let totalBitsRestored = 0;
+let brushRadius = 30;
+let speed = 1;
+let rotMode = 0; // 0=bits, 1=shift, 2=swap
+const modeNames = ['BITS', 'SHIFT', 'SWAP'];
+let currentSource = 'gradient';
+let mouseDown = false;
+let mouseX = 0, mouseY = 0;
+let entropy = 0;
+let poemIdx = 0;
+let frame = 0;
+
+const poems = [
+  "nothing lasts. not even nothing.",
+  "every bit is a tiny decision between 0 and 1.",
+  "the image remembers what you've already forgotten.",
+  "entropy always wins. always.",
+  "you can't restore what you never saved.",
+  "this is what forgetting looks like.",
+  "the rot was there before you arrived.",
+  "beauty is just organized noise.",
+  "click faster. the void is patient.",
+  "every pixel is a grave for the color it used to be.",
+  "some corruption is indistinguishable from art.",
+  "the original is a fiction. there is only now.",
+  "time is the universal bit-flipper.",
+  "you are watching memory decay.",
+  "at 3am, even the pixels sleep.",
+];
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  generateSource();
+}
+
+function generateSource() {
+  ctx.clearRect(0, 0, W, H);
+  if (currentSource === 'gradient') drawGradient();
+  else if (currentSource === 'mandala') drawMandala();
+  else if (currentSource === 'photo') drawLandscape();
+  else if (currentSource === 'text') drawText();
+  
+  originalData = ctx.getImageData(0, 0, W, H);
+  currentData = ctx.getImageData(0, 0, W, H);
+  totalBitsFlipped = 0;
+  totalBitsRestored = 0;
+  entropy = 0;
+}
+
+function drawGradient() {
+  // Beautiful radial gradient with multiple color stops
+  const cx = W / 2, cy = H / 2;
+  const r = Math.max(W, H) * 0.6;
+  
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const dx = x - cx, dy = y - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy) / r;
+      const angle = Math.atan2(dy, dx);
+      
+      const r1 = Math.sin(dist * 3 + angle * 2) * 0.5 + 0.5;
+      const g1 = Math.sin(dist * 2 - angle * 3 + 2) * 0.5 + 0.5;
+      const b1 = Math.sin(dist * 4 + angle + 4) * 0.5 + 0.5;
+      
+      ctx.fillStyle = `rgb(${Math.floor(r1 * 200 + 30)},${Math.floor(g1 * 180 + 40)},${Math.floor(b1 * 220 + 20)})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+}
+
+function drawMandala() {
+  const cx = W / 2, cy = H / 2;
+  const maxR = Math.min(W, H) * 0.45;
+  ctx.fillStyle = '#0a0a12';
+  ctx.fillRect(0, 0, W, H);
+  
+  for (let fold = 0; fold < 12; fold++) {
+    const angle = (fold / 12) * Math.PI * 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    
+    for (let i = 0; i < 8; i++) {
+      const r = maxR * (i + 1) / 8;
+      const hue = (fold * 30 + i * 20) % 360;
+      ctx.strokeStyle = `hsla(${hue}, 70%, 60%, 0.6)`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let t = 0; t < 50; t++) {
+        const a = (t / 50) * Math.PI / 6;
+        const rr = r * (0.5 + 0.5 * Math.sin(a * (i + 2) * 3));
+        const x = Math.cos(a) * rr;
+        const y = Math.sin(a) * rr;
+        t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  
+  // Center ornament
+  for (let i = 0; i < 6; i++) {
+    const r = 20 + i * 15;
+    ctx.strokeStyle = `hsla(${i * 60}, 80%, 70%, 0.5)`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+function drawLandscape() {
+  // Procedural landscape
+  const skyH = H * 0.55;
+  
+  // Sky gradient
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, skyH);
+  skyGrad.addColorStop(0, '#0a0520');
+  skyGrad.addColorStop(0.4, '#1a1040');
+  skyGrad.addColorStop(0.7, '#3a1555');
+  skyGrad.addColorStop(1, '#cc4422');
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, skyH);
+  
+  // Stars
+  for (let i = 0; i < 200; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * skyH * 0.7;
+    const s = Math.random() * 2;
+    ctx.fillStyle = `rgba(255,255,${200 + Math.random() * 55},${0.3 + Math.random() * 0.7})`;
+    ctx.fillRect(x, y, s, s);
+  }
+  
+  // Sun
+  const sunX = W * 0.7, sunY = skyH * 0.85;
+  const sunGrad = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 80);
+  sunGrad.addColorStop(0, '#ffee88');
+  sunGrad.addColorStop(0.3, '#ff8844');
+  sunGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = sunGrad;
+  ctx.fillRect(sunX - 80, sunY - 80, 160, 160);
+  
+  // Mountains
+  function mountain(baseY, color, amplitude, freq) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 2) {
+      let y = baseY;
+      y += Math.sin(x * freq) * amplitude;
+      y += Math.sin(x * freq * 2.3 + 1) * amplitude * 0.4;
+      y += Math.sin(x * freq * 5.1 + 3) * amplitude * 0.15;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.fill();
+  }
+  
+  mountain(skyH - 40, '#2a1525', 60, 0.003);
+  mountain(skyH + 10, '#1a1020', 40, 0.005);
+  mountain(skyH + 50, '#120a18', 30, 0.007);
+  
+  // Ground
+  const groundGrad = ctx.createLinearGradient(0, skyH + 60, 0, H);
+  groundGrad.addColorStop(0, '#0a0810');
+  groundGrad.addColorStop(1, '#050408');
+  ctx.fillStyle = groundGrad;
+  ctx.fillRect(0, skyH + 60, W, H - skyH - 60);
+}
+
+function drawText() {
+  ctx.fillStyle = '#080810';
+  ctx.fillRect(0, 0, W, H);
+  
+  const lines = [
+    "EVERY FILE YOU'VE EVER LOVED",
+    "IS ALREADY DYING",
+    "",
+    "magnetic domains relax",
+    "capacitors leak charge",
+    "cosmic rays flip bits",
+    "flash cells lose electrons",
+    "",
+    "your photos are forgetting your face",
+    "your music is losing its melody",
+    "your words are becoming noise",
+    "",
+    "this is not a metaphor",
+    "this is physics",
+    "",
+    "— bit rot, n.",
+    "the slow, inevitable corruption",
+    "of data at rest",
+  ];
+  
+  const lineH = Math.min(28, H / (lines.length + 4));
+  const startY = (H - lines.length * lineH) / 2;
+  
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  
+  lines.forEach((line, i) => {
+    if (!line) return;
+    const isTitle = i === 0 || i === 1;
+    const isDef = line.startsWith('—');
+    ctx.font = `${isTitle ? 'bold ' : ''}${isDef ? 'italic ' : ''}${isTitle ? lineH * 1.1 : lineH * 0.7}px 'Courier New', monospace`;
+    
+    const hue = (i * 25 + 200) % 360;
+    ctx.fillStyle = isTitle ? `hsl(${hue}, 60%, 70%)` : isDef ? '#aa88cc' : `hsl(${hue}, 30%, 55%)`;
+    ctx.fillText(line, W / 2, startY + i * lineH);
+  });
+}
+
+function flipBits(count) {
+  const d = currentData.data;
+  const len = d.length;
+  
+  for (let i = 0; i < count; i++) {
+    if (rotMode === 0) {
+      // Flip random bit in random byte
+      const idx = Math.floor(Math.random() * len);
+      if (idx % 4 === 3) continue; // skip alpha
+      const bit = 1 << Math.floor(Math.random() * 8);
+      d[idx] ^= bit;
+    } else if (rotMode === 1) {
+      // Shift: shift a pixel's RGB values
+      const px = Math.floor(Math.random() * (len / 4)) * 4;
+      const shift = Math.floor(Math.random() * 3);
+      if (shift === 0) { d[px] = d[px + 1]; d[px + 1] = d[px + 2]; d[px + 2] = d[px]; }
+      else if (shift === 1) { const t = d[px]; d[px] = d[px + 2]; d[px + 2] = d[px + 1]; d[px + 1] = t; }
+      else { d[px] = (d[px] + 32) & 255; d[px + 1] = (d[px + 1] - 16) & 255; }
+    } else {
+      // Swap two random pixels
+      const px1 = Math.floor(Math.random() * (len / 4)) * 4;
+      const px2Offset = (Math.floor(Math.random() * 20) - 10) * 4;
+      const px2 = Math.max(0, Math.min(len - 4, px1 + px2Offset));
+      for (let c = 0; c < 3; c++) {
+        const t = d[px1 + c];
+        d[px1 + c] = d[px2 + c];
+        d[px2 + c] = t;
+      }
+    }
+    totalBitsFlipped++;
+  }
+}
+
+function restoreArea(cx, cy, radius) {
+  const d = currentData.data;
+  const o = originalData.data;
+  const r2 = radius * radius;
+  let count = 0;
+  
+  const x0 = Math.max(0, Math.floor(cx - radius));
+  const x1 = Math.min(W - 1, Math.ceil(cx + radius));
+  const y0 = Math.max(0, Math.floor(cy - radius));
+  const y1 = Math.min(H - 1, Math.ceil(cy + radius));
+  
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - cx, dy = y - cy;
+      if (dx * dx + dy * dy > r2) continue;
+      const idx = (y * W + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        if (d[idx + c] !== o[idx + c]) {
+          d[idx + c] = o[idx + c];
+          count++;
+        }
+      }
+    }
+  }
+  totalBitsRestored += count;
+}
+
+function calcEntropy() {
+  const d = currentData.data;
+  const o = originalData.data;
+  let diff = 0;
+  const sample = 10000;
+  for (let i = 0; i < sample; i++) {
+    const idx = Math.floor(Math.random() * (d.length / 4)) * 4;
+    for (let c = 0; c < 3; c++) {
+      diff += Math.abs(d[idx + c] - o[idx + c]);
+    }
+  }
+  return Math.min(100, (diff / (sample * 3 * 128)) * 100);
+}
+
+function setSource(src) {
+  currentSource = src;
+  document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + src).classList.add('active');
+  generateSource();
+}
+
+function toggleSpeed() {
+  const speeds = [1, 3, 10, 50];
+  const idx = (speeds.indexOf(speed) + 1) % speeds.length;
+  speed = speeds[idx];
+  document.getElementById('btn-speed').textContent = `SPEED: ${speed}×`;
+}
+
+function toggleMode() {
+  rotMode = (rotMode + 1) % 3;
+  document.getElementById('btn-mode').textContent = `MODE: ${modeNames[rotMode]}`;
+}
+
+function resetCanvas() {
+  if (!originalData) return;
+  currentData = new ImageData(new Uint8ClampedArray(originalData.data), W, H);
+  totalBitsFlipped = 0;
+  totalBitsRestored = 0;
+  entropy = 0;
+}
+
+function showPoem() {
+  const el = document.getElementById('poem');
+  el.style.opacity = 0;
+  setTimeout(() => {
+    el.textContent = poems[poemIdx % poems.length];
+    el.style.opacity = 1;
+    poemIdx++;
+  }, 500);
+  setTimeout(() => { el.style.opacity = 0; }, 8000);
+}
+
+function drawBrushOutline() {
+  ctx.strokeStyle = 'rgba(100,255,100,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(mouseX, mouseY, brushRadius, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function loop() {
+  if (!currentData) { requestAnimationFrame(loop); return; }
+  frame++;
+  
+  // Accelerating rot — more corruption over time
+  const baseRate = 5 + Math.floor(frame / 60);
+  const rate = Math.min(baseRate, 500) * speed;
+  flipBits(rate);
+  
+  // Mouse restore
+  if (mouseDown) {
+    restoreArea(mouseX, mouseY, brushRadius);
+  }
+  
+  // Update display
+  ctx.putImageData(currentData, 0, 0);
+  drawBrushOutline();
+  
+  // Entropy calc every 30 frames
+  if (frame % 30 === 0) {
+    entropy = calcEntropy();
+    document.getElementById('entropy-pct').textContent = entropy.toFixed(2) + '%';
+    document.getElementById('entropy-fill').style.width = entropy + '%';
+    document.getElementById('bits-flipped').textContent = totalBitsFlipped.toLocaleString();
+    document.getElementById('bits-restored').textContent = totalBitsRestored.toLocaleString();
+    
+    // Title overlay fades as entropy rises
+    document.getElementById('title-overlay').style.color = `rgba(255,255,255,${Math.max(0, 0.08 - entropy * 0.001)})`;
+  }
+  
+  // Show poem periodically
+  if (frame % 600 === 300) showPoem();
+  
+  requestAnimationFrame(loop);
+}
+
+// Events
+canvas.addEventListener('mousedown', (e) => { mouseDown = true; mouseX = e.clientX; mouseY = e.clientY; });
+canvas.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
+canvas.addEventListener('mouseup', () => { mouseDown = false; });
+canvas.addEventListener('mouseleave', () => { mouseDown = false; });
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  mouseDown = true;
+  mouseX = e.touches[0].clientX;
+  mouseY = e.touches[0].clientY;
+}, { passive: false });
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  mouseX = e.touches[0].clientX;
+  mouseY = e.touches[0].clientY;
+}, { passive: false });
+canvas.addEventListener('touchend', () => { mouseDown = false; });
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  brushRadius = Math.max(5, Math.min(100, brushRadius - e.deltaY * 0.1));
+}, { passive: false });
+
+window.addEventListener('resize', resize);
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'r' || e.key === 'R') resetCanvas();
+  if (e.key === 's' || e.key === 'S') toggleSpeed();
+  if (e.key === 'm' || e.key === 'M') toggleMode();
+});
+
+resize();
+showPoem();
+loop();
+</script>
+</body>
+</html>
