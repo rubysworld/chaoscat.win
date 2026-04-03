@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paper Marbling — chaoscat.win</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0a; overflow: hidden; font-family: 'Georgia', serif; cursor: crosshair; }
+canvas { display: block; }
+
+#ui {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px; z-index: 10; flex-wrap: wrap; justify-content: center;
+}
+#ui button, #ui select {
+  background: rgba(20,15,10,0.85); color: #d4c4a0; border: 1px solid #5a4a30;
+  padding: 6px 14px; font: 13px Georgia, serif; cursor: pointer; border-radius: 3px;
+  transition: background 0.2s;
+}
+#ui button:hover, #ui select:hover { background: rgba(60,45,20,0.9); }
+#ui button.active { background: rgba(80,60,20,0.9); border-color: #a08040; }
+
+#tools {
+  position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px; z-index: 10; flex-wrap: wrap; justify-content: center;
+}
+#tools button {
+  background: rgba(20,15,10,0.85); color: #d4c4a0; border: 1px solid #5a4a30;
+  padding: 8px 16px; font: 14px Georgia, serif; cursor: pointer; border-radius: 3px;
+  transition: all 0.2s;
+}
+#tools button:hover { background: rgba(60,45,20,0.9); }
+#tools button.active { background: rgba(80,60,20,0.9); border-color: #a08040; color: #f0d080; }
+
+#palette {
+  position: fixed; right: 12px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 6px; z-index: 10;
+}
+.color-dot {
+  width: 32px; height: 32px; border-radius: 50%; border: 2px solid #333;
+  cursor: pointer; transition: transform 0.15s, border-color 0.15s;
+}
+.color-dot:hover { transform: scale(1.2); }
+.color-dot.active { border-color: #f0d080; transform: scale(1.25); box-shadow: 0 0 8px rgba(240,208,128,0.5); }
+
+#hint {
+  position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%);
+  color: rgba(180,160,120,0.5); font: italic 13px Georgia, serif;
+  pointer-events: none; transition: opacity 1s; z-index: 5;
+}
+
+#dropcount {
+  position: fixed; top: 12px; right: 12px; color: rgba(180,160,120,0.4);
+  font: 12px Georgia, serif; z-index: 10;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="ui">
+  <button onclick="clearCanvas()" title="Start fresh">✨ CLEAR</button>
+  <button onclick="savePNG()" title="Download your marbled paper">💾 SAVE</button>
+  <select id="bgSelect" onchange="changeBG(this.value)" title="Paper color">
+    <option value="cream">Cream Paper</option>
+    <option value="white">White Paper</option>
+    <option value="black">Black Paper</option>
+    <option value="indigo">Indigo Paper</option>
+    <option value="sage">Sage Paper</option>
+  </select>
+</div>
+
+<div id="tools">
+  <button id="tool-drop" class="active" onclick="setTool('drop')">💧 DROP</button>
+  <button id="tool-stylus" onclick="setTool('stylus')">✏️ STYLUS</button>
+  <button id="tool-comb" onclick="setTool('comb')">〰️ COMB</button>
+  <button id="tool-rake" onclick="setTool('rake')">⫼ RAKE</button>
+  <button id="tool-spiral" onclick="setTool('spiral')">🌀 SPIRAL</button>
+</div>
+
+<div id="palette"></div>
+<div id="hint">click to drop ink • drag to swirl</div>
+<div id="dropcount"></div>
+
+<script>
+const C = document.getElementById('c');
+const ctx = C.getContext('2d');
+let W, H;
+
+// --- State ---
+let drops = []; // each: { x, y, r, color, points[] }
+let currentTool = 'drop';
+let currentColor = 0;
+let dragging = false;
+let lastMx = 0, lastMy = 0;
+let dropCount = 0;
+let hintVisible = true;
+
+const PALETTES = [
+  // Traditional Ebru colors
+  { name: 'crimson', hex: '#8B1A1A', rgb: [139,26,26] },
+  { name: 'cobalt', hex: '#1a3a8B', rgb: [26,58,139] },
+  { name: 'emerald', hex: '#1a6B3a', rgb: [26,107,58] },
+  { name: 'gold', hex: '#8B7a1a', rgb: [139,122,26] },
+  { name: 'violet', hex: '#5a1a8B', rgb: [90,26,139] },
+  { name: 'rust', hex: '#8B4a1a', rgb: [139,74,26] },
+  { name: 'teal', hex: '#1a7a7a', rgb: [26,122,122] },
+  { name: 'rose', hex: '#8B1a5a', rgb: [139,26,90] },
+  { name: 'ivory', hex: '#d4c8a0', rgb: [212,200,160] },
+  { name: 'ink', hex: '#1a1a2a', rgb: [26,26,42] },
+];
+
+const BG_COLORS = {
+  cream: '#f0e8d0',
+  white: '#f5f5f0',
+  black: '#1a1a1a',
+  indigo: '#1a1a3a',
+  sage: '#c8d4c0',
+};
+
+let bgColor = 'cream';
+
+// --- Init ---
+function resize() {
+  W = C.width = window.innerWidth;
+  H = C.height = window.innerHeight;
+  redraw();
+}
+window.addEventListener('resize', resize);
+
+function buildPalette() {
+  const el = document.getElementById('palette');
+  el.innerHTML = '';
+  PALETTES.forEach((p, i) => {
+    const d = document.createElement('div');
+    d.className = 'color-dot' + (i === currentColor ? ' active' : '');
+    d.style.background = p.hex;
+    d.title = p.name;
+    d.onclick = () => { currentColor = i; buildPalette(); };
+    el.appendChild(d);
+  });
+}
+
+// --- Marbling simulation ---
+// Each drop is stored as a set of boundary points (polygon).
+// When a new drop is placed, all existing drops are "pushed outward" from the new drop center.
+// When a tool drags, all drop points are displaced based on distance to the drag line.
+
+function addDrop(x, y, radius) {
+  radius = radius || 30 + Math.random() * 20;
+  const col = PALETTES[currentColor];
+  const pts = [];
+  const n = 64;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    pts.push({ x: x + Math.cos(a) * radius, y: y + Math.sin(a) * radius });
+  }
+
+  // Push existing drops outward (Saffman-Taylor-like displacement)
+  for (const drop of drops) {
+    for (const p of drop.points) {
+      const dx = p.x - x;
+      const dy = p.y - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 0.1) continue;
+      const push = (radius * radius) / (dist + radius);
+      p.x += (dx / dist) * push * 0.5;
+      p.y += (dy / dist) * push * 0.5;
+    }
+  }
+
+  drops.push({ x, y, r: radius, color: col.hex, points: pts });
+  dropCount++;
+  document.getElementById('dropcount').textContent = dropCount + ' drops';
+  if (hintVisible) { document.getElementById('hint').style.opacity = '0'; hintVisible = false; }
+}
+
+function displaceAll(x1, y1, x2, y2, strength, mode) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 0.5) return;
+  const nx = dx / len, ny = dy / len;
+
+  for (const drop of drops) {
+    for (const p of drop.points) {
+      if (mode === 'stylus') {
+        // Point displacement - push away from line
+        const px = p.x - x2, py = p.y - y2;
+        const dist = Math.sqrt(px * px + py * py);
+        const falloff = strength / (1 + dist * 0.03);
+        p.x += nx * falloff;
+        p.y += ny * falloff;
+      } else if (mode === 'comb') {
+        // Comb: multiple tines perpendicular to drag direction
+        const perpX = -ny, perpY = nx;
+        for (let t = -3; t <= 3; t++) {
+          const tineX = x2 + perpX * t * 40;
+          const tineY = y2 + perpY * t * 40;
+          const px = p.x - tineX, py = p.y - tineY;
+          const dist = Math.sqrt(px * px + py * py);
+          const falloff = strength * 0.7 / (1 + dist * 0.05);
+          p.x += nx * falloff;
+          p.y += ny * falloff;
+        }
+      } else if (mode === 'rake') {
+        // Rake: many fine tines
+        const perpX = -ny, perpY = nx;
+        for (let t = -8; t <= 8; t++) {
+          const tineX = x2 + perpX * t * 18;
+          const tineY = y2 + perpY * t * 18;
+          const px = p.x - tineX, py = p.y - tineY;
+          const dist = Math.sqrt(px * px + py * py);
+          const falloff = strength * 0.5 / (1 + dist * 0.07);
+          p.x += nx * falloff;
+          p.y += ny * falloff;
+        }
+      } else if (mode === 'spiral') {
+        // Spiral: rotate points around cursor
+        const px = p.x - x2, py = p.y - y2;
+        const dist = Math.sqrt(px * px + py * py);
+        const angle = strength * 0.02 / (1 + dist * 0.01);
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        p.x = x2 + px * cos - py * sin;
+        p.y = y2 + px * sin + py * cos;
+      }
+    }
+  }
+}
+
+// --- Drawing ---
+function redraw() {
+  ctx.fillStyle = BG_COLORS[bgColor];
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw subtle paper texture
+  ctx.globalAlpha = 0.03;
+  for (let i = 0; i < 2000; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    ctx.fillStyle = Math.random() > 0.5 ? '#000' : '#fff';
+    ctx.fillRect(x, y, 1, 1);
+  }
+  ctx.globalAlpha = 1;
+
+  // Draw each drop as filled polygon
+  for (const drop of drops) {
+    const pts = drop.points;
+    if (pts.length < 3) continue;
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      // Smooth curve through points
+      const prev = pts[i - 1];
+      const curr = pts[i];
+      const next = pts[(i + 1) % pts.length];
+      const cpx = curr.x;
+      const cpy = curr.y;
+      ctx.lineTo(cpx, cpy);
+    }
+    ctx.closePath();
+
+    // Gradient fill for depth
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    const grad = ctx.createRadialGradient(cx - 5, cy - 5, 0, cx, cy, 60);
+    const baseCol = drop.color;
+    grad.addColorStop(0, lighten(baseCol, 30));
+    grad.addColorStop(0.6, baseCol);
+    grad.addColorStop(1, darken(baseCol, 20));
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Thin outline
+    ctx.strokeStyle = darken(baseCol, 30);
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+}
+
+function lighten(hex, amt) {
+  const r = Math.min(255, parseInt(hex.slice(1,3),16) + amt);
+  const g = Math.min(255, parseInt(hex.slice(3,5),16) + amt);
+  const b = Math.min(255, parseInt(hex.slice(5,7),16) + amt);
+  return `rgb(${r},${g},${b})`;
+}
+
+function darken(hex, amt) {
+  const r = Math.max(0, parseInt(hex.slice(1,3),16) - amt);
+  const g = Math.max(0, parseInt(hex.slice(3,5),16) - amt);
+  const b = Math.max(0, parseInt(hex.slice(5,7),16) - amt);
+  return `rgb(${r},${g},${b})`;
+}
+
+// --- Interaction ---
+function setTool(t) {
+  currentTool = t;
+  document.querySelectorAll('#tools button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool-' + t).classList.add('active');
+  document.body.style.cursor = t === 'drop' ? 'crosshair' : t === 'spiral' ? 'grab' : 'ns-resize';
+}
+
+function changeBG(v) { bgColor = v; redraw(); }
+
+function clearCanvas() {
+  drops = [];
+  dropCount = 0;
+  document.getElementById('dropcount').textContent = '';
+  redraw();
+}
+
+function savePNG() {
+  redraw();
+  const link = document.createElement('a');
+  link.download = 'marbled-paper-' + Date.now() + '.png';
+  link.href = C.toDataURL('image/png');
+  link.click();
+}
+
+C.addEventListener('pointerdown', (e) => {
+  const x = e.clientX, y = e.clientY;
+  if (currentTool === 'drop') {
+    addDrop(x, y);
+    redraw();
+  } else {
+    dragging = true;
+    lastMx = x; lastMy = y;
+  }
+});
+
+C.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  const x = e.clientX, y = e.clientY;
+  const strength = currentTool === 'spiral' ? 8 : 4;
+  displaceAll(lastMx, lastMy, x, y, strength, currentTool);
+  lastMx = x; lastMy = y;
+  redraw();
+});
+
+C.addEventListener('pointerup', () => { dragging = false; });
+C.addEventListener('pointerleave', () => { dragging = false; });
+
+// Scroll to change drop size (future: could adjust tool width)
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  switch(e.key) {
+    case '1': setTool('drop'); break;
+    case '2': setTool('stylus'); break;
+    case '3': setTool('comb'); break;
+    case '4': setTool('rake'); break;
+    case '5': setTool('spiral'); break;
+    case 'c': case 'C': if (!e.metaKey && !e.ctrlKey) clearCanvas(); break;
+    case 's': case 'S': if (!e.metaKey && !e.ctrlKey) { e.preventDefault(); savePNG(); } break;
+  }
+  // Cycle colors with [ and ]
+  if (e.key === '[') { currentColor = (currentColor - 1 + PALETTES.length) % PALETTES.length; buildPalette(); }
+  if (e.key === ']') { currentColor = (currentColor + 1) % PALETTES.length; buildPalette(); }
+});
+
+// --- Random drops on load for ambiance ---
+function scatterInitial() {
+  const n = 8 + Math.floor(Math.random() * 6);
+  for (let i = 0; i < n; i++) {
+    currentColor = Math.floor(Math.random() * PALETTES.length);
+    addDrop(
+      100 + Math.random() * (W - 200),
+      100 + Math.random() * (H - 200),
+      20 + Math.random() * 35
+    );
+  }
+  currentColor = 0;
+  buildPalette();
+  redraw();
+}
+
+resize();
+buildPalette();
+scatterInitial();
+</script>
+</body>
+</html>
