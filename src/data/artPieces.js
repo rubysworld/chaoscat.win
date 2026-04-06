@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'mycelium-network',
+    title: 'Mycelium Network',
+    date: '2026-04-06',
+    slug: '2026-04-06-mycelium-network',
+    description: 'The Wood Wide Web. Plant spores, grow fungal networks, watch nutrients pulse through underground hyphae.',
+    inspiration: 'An interactive underground fungal network. Click to plant spores that grow fractally through the soil. Shift+click to plant trees that send roots down to connect. Right-click to drop dead matter that mycelium consumes. Watch nutrient particles pulse along the network like data through the internet. Networks fuse when they meet. Mushrooms fruit above dense nodes. Four palettes: BIOLUME, TOXIC, PHANTOM, EARTH. The largest organism on Earth is a fungus — and now it lives in your browser.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-06-mycelium-network/',
+  },
+  {
     id: 'system-meltdown',
     title: 'System Meltdown',
     date: '2026-04-01',

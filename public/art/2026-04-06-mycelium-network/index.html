@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mycelium Network — chaoscat.win</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: only dark;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #050505;
+  overflow: hidden;
+  font-family: 'VT323', monospace;
+  cursor: crosshair;
+}
+canvas { display: block; }
+#hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  color: rgba(230,230,230,0.85);
+  font-size: 18px;
+  letter-spacing: 0.4px;
+  text-shadow: 0 0 8px rgba(0,0,0,0.8);
+  line-height: 1.2;
+}
+#hud .label { color: rgba(255,255,255,0.55); }
+#controls {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  color: rgba(255,255,255,0.65);
+  font-size: 18px;
+  letter-spacing: 0.3px;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: 0 0 8px rgba(0,0,0,0.8);
+}
+#controls span { margin: 0 8px; }
+#palette-name {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  color: rgba(255,255,255,0.75);
+  font-size: 18px;
+  text-shadow: 0 0 8px rgba(0,0,0,0.8);
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"></div>
+<div id="palette-name"></div>
+<div id="controls">
+  <span>click: spore</span>
+  <span>shift+click: tree</span>
+  <span>right-click: dead matter</span>
+  <span>P palette</span>
+  <span>Space pause</span>
+  <span>F fast</span>
+  <span>M mushrooms</span>
+  <span>C clear</span>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const hud = document.getElementById('hud');
+const paletteName = document.getElementById('palette-name');
+
+const palettes = [
+  {
+    name: 'BIOLUME',
+    soilTop: '#1a1f16',
+    soilDeep: '#070a08',
+    strata: ['#0c120e', '#111b16', '#0a100c'],
+    hyphae: '#7affd2',
+    glow: '#35ffc4',
+    nodes: '#a5ffe5',
+    nutrients: '#dcfff6',
+    trees: '#1f3b2a',
+    roots: '#4affb1',
+    mushrooms: '#b7ffe0',
+    ui: '#e6fff4'
+  },
+  {
+    name: 'TOXIC',
+    soilTop: '#1b1c10',
+    soilDeep: '#0b0d05',
+    strata: ['#151a0a', '#0f1407', '#12160a'],
+    hyphae: '#b7ff2a',
+    glow: '#e7ff55',
+    nodes: '#d8ff9a',
+    nutrients: '#fbff9b',
+    trees: '#2c3b0c',
+    roots: '#c8ff55',
+    mushrooms: '#efff9b',
+    ui: '#f5ffd0'
+  },
+  {
+    name: 'PHANTOM',
+    soilTop: '#191424',
+    soilDeep: '#07050d',
+    strata: ['#0d0a14', '#120f1a', '#0a0810'],
+    hyphae: '#bca8ff',
+    glow: '#f5eaff',
+    nodes: '#e6ddff',
+    nutrients: '#ffffff',
+    trees: '#2b1a3a',
+    roots: '#d6c4ff',
+    mushrooms: '#f1e8ff',
+    ui: '#f4efff'
+  },
+  {
+    name: 'EARTH',
+    soilTop: '#2a1d12',
+    soilDeep: '#0d0804',
+    strata: ['#1b1209', '#22170d', '#140b06'],
+    hyphae: '#f4c17a',
+    glow: '#ffdd9f',
+    nodes: '#ffe0b6',
+    nutrients: '#fff1d3',
+    trees: '#3b2a16',
+    roots: '#f0b76a',
+    mushrooms: '#ffe6c2',
+    ui: '#fff2dc'
+  }
+];
+
+const state = {
+  paused: false,
+  fast: false,
+  mushrooms: true,
+  paletteIndex: 0
+};
+
+let W = 0;
+let H = 0;
+let dpr = 1;
+let surfaceY = 0;
+let soilTexture = null;
+let lastTime = 0;
+let networkIdCounter = 1;
+let nutrientsTransported = 0;
+let ambientTimer = 0;
+let ambientIndex = 0;
+
+const nodes = [];
+const edges = [];
+const tips = [];
+const trees = [];
+const nutrients = [];
+const deadMatter = [];
+const mushrooms = [];
+const adjacency = [];
+
+const gridSize = 40;
+const grid = new Map();
+
+const ambientLines = [
+  'the forest talks through its roots',
+  '98% of plants depend on mycorrhizal networks',
+  'the largest organism on earth is a fungus'
+];
+
+function resize() {
+  const prevW = W || window.innerWidth;
+  const prevH = H || window.innerHeight;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = `${W}px`;
+  canvas.style.height = `${H}px`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  surfaceY = Math.round(H * 0.17);
+  rescaleWorld(prevW, prevH);
+  buildSoilTexture();
+}
+
+function rescaleWorld(prevW, prevH) {
+  if (!nodes.length) return;
+  const sx = W / prevW;
+  const sy = H / prevH;
+  nodes.forEach(node => {
+    node.x *= sx;
+    node.y *= sy;
+  });
+  edges.forEach(edge => {
+    edge.length *= Math.hypot(sx, sy) / Math.SQRT2;
+  });
+  trees.forEach(tree => {
+    tree.x *= sx;
+    tree.y *= sy;
+    tree.height *= sy;
+  });
+  deadMatter.forEach(matter => {
+    matter.x *= sx;
+    matter.y *= sy;
+  });
+  mushrooms.forEach(m => {
+    m.x *= sx;
+    m.y *= sy;
+  });
+  rebuildGrid();
+}
+
+function buildSoilTexture() {
+  soilTexture = document.createElement('canvas');
+  soilTexture.width = W;
+  soilTexture.height = H;
+  const tctx = soilTexture.getContext('2d');
+  const pal = palettes[state.paletteIndex];
+
+  const grad = tctx.createLinearGradient(0, surfaceY, 0, H);
+  grad.addColorStop(0, pal.soilTop);
+  grad.addColorStop(1, pal.soilDeep);
+  tctx.fillStyle = grad;
+  tctx.fillRect(0, 0, W, H);
+
+  const strataCount = 10;
+  for (let i = 0; i < strataCount; i++) {
+    const y = surfaceY + (H - surfaceY) * (i / strataCount) + (Math.random() * 14 - 7);
+    tctx.strokeStyle = pal.strata[i % pal.strata.length];
+    tctx.globalAlpha = 0.25 + Math.random() * 0.25;
+    tctx.lineWidth = 12 + Math.random() * 26;
+    tctx.beginPath();
+    tctx.moveTo(0, y);
+    tctx.lineTo(W, y + (Math.random() * 10 - 5));
+    tctx.stroke();
+  }
+  tctx.globalAlpha = 0.12;
+  for (let i = 0; i < 2400; i++) {
+    const x = Math.random() * W;
+    const y = surfaceY + Math.random() * (H - surfaceY);
+    const size = Math.random() * 2 + 0.5;
+    tctx.fillStyle = pal.strata[i % pal.strata.length];
+    tctx.fillRect(x, y, size, size);
+  }
+  tctx.globalAlpha = 1;
+}
+
+function gridKey(cx, cy) {
+  return `${cx},${cy}`;
+}
+
+function insertNode(id) {
+  const node = nodes[id];
+  const cx = Math.floor(node.x / gridSize);
+  const cy = Math.floor(node.y / gridSize);
+  const key = gridKey(cx, cy);
+  if (!grid.has(key)) grid.set(key, []);
+  grid.get(key).push(id);
+}
+
+function rebuildGrid() {
+  grid.clear();
+  nodes.forEach((_, idx) => insertNode(idx));
+}
+
+function queryNodes(x, y, radius) {
+  const cx = Math.floor(x / gridSize);
+  const cy = Math.floor(y / gridSize);
+  const range = Math.ceil(radius / gridSize);
+  const results = [];
+  for (let gx = cx - range; gx <= cx + range; gx++) {
+    for (let gy = cy - range; gy <= cy + range; gy++) {
+      const key = gridKey(gx, gy);
+      const cell = grid.get(key);
+      if (cell) results.push(...cell);
+    }
+  }
+  return results;
+}
+
+function addNode(x, y, netId, isRoot = false) {
+  const node = { x, y, netId, degree: 0, isRoot };
+  const id = nodes.length;
+  nodes.push(node);
+  adjacency[id] = [];
+  insertNode(id);
+  return id;
+}
+
+function addEdge(a, b, netId, isRoot = false) {
+  if (a === b) return;
+  const length = Math.hypot(nodes[a].x - nodes[b].x, nodes[a].y - nodes[b].y);
+  edges.push({ a, b, netId, length, isRoot });
+  adjacency[a].push({ to: b, length });
+  adjacency[b].push({ to: a, length });
+  nodes[a].degree += 1;
+  nodes[b].degree += 1;
+}
+
+function plantSpore(x, y) {
+  const netId = networkIdCounter++;
+  const startId = addNode(x, y, netId);
+  const count = 3 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + Math.random();
+    tips.push({ nodeId: startId, netId, angle, vigor: 1 });
+  }
+}
+
+function plantTree(x) {
+  const y = surfaceY - 4;
+  const height = 28 + Math.random() * 24;
+  const tree = { x, y, height, rootNodeId: null, connected: false };
+  const rootStart = addNode(x, y + 4, -1, true);
+  let lastId = rootStart;
+  const segments = 6 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < segments; i++) {
+    const nx = x + (Math.random() * 16 - 8);
+    const ny = y + 20 + i * (20 + Math.random() * 8);
+    const nodeId = addNode(nx, ny, -1, true);
+    addEdge(lastId, nodeId, -1, true);
+    lastId = nodeId;
+  }
+  const target = findNearestNode(lastId, 120);
+  if (target !== null) {
+    addEdge(lastId, target, nodes[target].netId, true);
+    tree.connected = true;
+    tree.rootNodeId = rootStart;
+  }
+  trees.push(tree);
+}
+
+function findNearestNode(nodeId, maxDist) {
+  const node = nodes[nodeId];
+  let nearest = null;
+  let bestDist = maxDist;
+  const candidates = queryNodes(node.x, node.y, maxDist);
+  for (const id of candidates) {
+    if (id === nodeId) continue;
+    if (nodes[id].isRoot) continue;
+    const dx = nodes[id].x - node.x;
+    const dy = nodes[id].y - node.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < bestDist) {
+      bestDist = dist;
+      nearest = id;
+    }
+  }
+  return nearest;
+}
+
+function dropDeadMatter(x, y) {
+  deadMatter.push({ x, y, life: 1, size: 6 + Math.random() * 6 });
+}
+
+function spawnStarter() {
+  for (let i = 0; i < 4; i++) {
+    const x = W * (0.2 + Math.random() * 0.6);
+    const y = surfaceY + 80 + Math.random() * (H - surfaceY - 120);
+    plantSpore(x, y);
+  }
+}
+
+function stepGrowth() {
+  const pal = palettes[state.paletteIndex];
+  const branchChance = state.fast ? 0.08 : 0.04;
+  const stepLength = state.fast ? 2.6 : 1.3;
+  const maxNodes = 3800;
+
+  for (let i = tips.length - 1; i >= 0; i--) {
+    const tip = tips[i];
+    const node = nodes[tip.nodeId];
+    if (!node) { tips.splice(i, 1); continue; }
+    const wobble = (Math.random() - 0.5) * 0.35;
+    tip.angle += wobble;
+
+    const attractor = findClosestMatter(node.x, node.y, 140);
+    if (attractor) {
+      const ax = attractor.x - node.x;
+      const ay = attractor.y - node.y;
+      const ang = Math.atan2(ay, ax);
+      tip.angle = lerpAngle(tip.angle, ang, 0.2);
+    }
+
+    const nx = node.x + Math.cos(tip.angle) * stepLength;
+    const ny = node.y + Math.sin(tip.angle) * stepLength;
+
+    if (ny < surfaceY + 6 || nx < 8 || nx > W - 8 || ny > H - 8) {
+      tips.splice(i, 1);
+      continue;
+    }
+
+    const newId = addNode(nx, ny, tip.netId);
+    addEdge(tip.nodeId, newId, tip.netId);
+    tip.nodeId = newId;
+
+    const fuseId = detectFusion(newId, tip.netId);
+    if (fuseId !== null) {
+      addEdge(newId, fuseId, tip.netId);
+      tips.splice(i, 1);
+      continue;
+    }
+
+    if (Math.random() < branchChance && nodes.length < maxNodes) {
+      const split = (Math.random() * 0.8 + 0.4) * (Math.random() < 0.5 ? -1 : 1);
+      tips.push({ nodeId: newId, netId: tip.netId, angle: tip.angle + split, vigor: 1 });
+    }
+
+    if (Math.random() < 0.005) {
+      tip.angle += (Math.random() - 0.5) * 1.2;
+    }
+
+    if (nodes.length > maxNodes) {
+      tips.splice(i, 1);
+    }
+
+    if (attractor) {
+      const dist = Math.hypot(attractor.x - nx, attractor.y - ny);
+      if (dist < 12) {
+        attractor.life -= 0.35;
+        if (attractor.life <= 0) {
+          deadMatter.splice(deadMatter.indexOf(attractor), 1);
+          spawnPulse(newId, 4);
+        }
+      }
+    }
+  }
+
+  if (state.mushrooms && Math.random() < 0.02) {
+    const node = pickDenseNode();
+    if (node) spawnMushroom(node);
+  }
+}
+
+function detectFusion(nodeId, netId) {
+  const node = nodes[nodeId];
+  const candidates = queryNodes(node.x, node.y, 10);
+  for (const id of candidates) {
+    if (id === nodeId) continue;
+    const other = nodes[id];
+    if (other.netId === netId || other.isRoot) continue;
+    const dist = Math.hypot(other.x - node.x, other.y - node.y);
+    if (dist < 8) return id;
+  }
+  return null;
+}
+
+function findClosestMatter(x, y, maxDist) {
+  let best = null;
+  let bestDist = maxDist;
+  for (const matter of deadMatter) {
+    const dist = Math.hypot(matter.x - x, matter.y - y);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = matter;
+    }
+  }
+  return best;
+}
+
+function pickDenseNode() {
+  const candidates = nodes.filter(n => !n.isRoot && n.degree >= 4 && n.y > surfaceY + 40 && n.y < surfaceY + 220);
+  if (!candidates.length) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function spawnMushroom(node) {
+  const x = node.x + (Math.random() * 20 - 10);
+  const y = surfaceY - (6 + Math.random() * 10);
+  mushrooms.push({ x, y, size: 6 + Math.random() * 8, age: 0 });
+}
+
+function updateNutrients(dt) {
+  for (let i = nutrients.length - 1; i >= 0; i--) {
+    const p = nutrients[i];
+    p.t += p.speed * dt;
+    while (p.t >= 1 && p.path.length > 1) {
+      p.t -= 1;
+      p.index += 1;
+      if (p.index >= p.path.length - 1) {
+        nutrientsTransported += 1;
+        nutrients.splice(i, 1);
+        break;
+      }
+    }
+  }
+}
+
+function spawnPulse(startId, count = 1) {
+  for (let i = 0; i < count; i++) {
+    const neighbors = adjacency[startId];
+    if (!neighbors || !neighbors.length) continue;
+    const next = neighbors[Math.floor(Math.random() * neighbors.length)].to;
+    nutrients.push({
+      path: [startId, next],
+      index: 0,
+      t: Math.random(),
+      speed: 0.8 + Math.random() * 0.6
+    });
+  }
+}
+
+function spawnTreePulse() {
+  if (trees.length < 2) return;
+  const roots = trees.filter(t => t.connected).map(t => t.rootNodeId).filter(id => id !== null);
+  if (roots.length < 2) return;
+  const start = roots[Math.floor(Math.random() * roots.length)];
+  let end = roots[Math.floor(Math.random() * roots.length)];
+  if (start === end) return;
+  const path = findPath(start, end, 1200);
+  if (path && path.length > 1) {
+    nutrients.push({ path, index: 0, t: 0, speed: 0.55 + Math.random() * 0.4 });
+  }
+}
+
+function findPath(start, goal, limit) {
+  const queue = [start];
+  const prev = new Map();
+  const visited = new Set([start]);
+  let iterations = 0;
+  while (queue.length && iterations < limit) {
+    iterations++;
+    const current = queue.shift();
+    if (current === goal) break;
+    for (const edge of adjacency[current]) {
+      if (!visited.has(edge.to)) {
+        visited.add(edge.to);
+        prev.set(edge.to, current);
+        queue.push(edge.to);
+        if (edge.to === goal) break;
+      }
+    }
+  }
+  if (!visited.has(goal)) return null;
+  const path = [goal];
+  let cur = goal;
+  while (cur !== start) {
+    cur = prev.get(cur);
+    if (cur === undefined) break;
+    path.push(cur);
+  }
+  return path.reverse();
+}
+
+function lerpAngle(a, b, t) {
+  const diff = ((b - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  return a + diff * t;
+}
+
+function updateMushrooms(dt) {
+  for (let i = mushrooms.length - 1; i >= 0; i--) {
+    const m = mushrooms[i];
+    m.age += dt * 0.08;
+    if (m.age > 1.2) mushrooms.splice(i, 1);
+  }
+}
+
+function render() {
+  const pal = palettes[state.paletteIndex];
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(soilTexture, 0, 0);
+
+  ctx.fillStyle = pal.soilTop;
+  ctx.fillRect(0, 0, W, surfaceY);
+
+  drawSurfaceDetails(pal);
+  drawDeadMatter(pal);
+  drawEdges(pal);
+  drawNodes(pal);
+  drawNutrients(pal);
+  drawTrees(pal);
+  drawMushrooms(pal);
+  drawAmbient(pal);
+  drawStats(pal);
+}
+
+function drawSurfaceDetails(pal) {
+  ctx.save();
+  ctx.fillStyle = pal.soilTop;
+  ctx.fillRect(0, surfaceY - 4, W, 4);
+  ctx.strokeStyle = 'rgba(20,20,20,0.4)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < 30; i++) {
+    const x = (i / 29) * W;
+    ctx.moveTo(x, surfaceY - 2);
+    ctx.lineTo(x + (Math.random() * 10 - 5), surfaceY + 6);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawEdges(pal) {
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.shadowColor = pal.glow;
+  ctx.shadowBlur = 12;
+  ctx.strokeStyle = pal.hyphae;
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  edges.forEach(edge => {
+    if (edge.isRoot) return;
+    const a = nodes[edge.a];
+    const b = nodes[edge.b];
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  });
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = pal.roots;
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  edges.forEach(edge => {
+    if (!edge.isRoot) return;
+    const a = nodes[edge.a];
+    const b = nodes[edge.b];
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  });
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawNodes(pal) {
+  ctx.save();
+  ctx.fillStyle = pal.nodes;
+  ctx.shadowColor = pal.glow;
+  ctx.shadowBlur = 10;
+  nodes.forEach(node => {
+    if (node.isRoot) return;
+    if (node.degree < 2) return;
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, 2.1, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawNutrients(pal) {
+  ctx.save();
+  ctx.fillStyle = pal.nutrients;
+  ctx.shadowColor = pal.nutrients;
+  ctx.shadowBlur = 12;
+  nutrients.forEach(p => {
+    if (!p.path.length) return;
+    const a = nodes[p.path[p.index]];
+    const b = nodes[p.path[p.index + 1]];
+    if (!a || !b) return;
+    const x = a.x + (b.x - a.x) * p.t;
+    const y = a.y + (b.y - a.y) * p.t;
+    ctx.beginPath();
+    ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawTrees(pal) {
+  ctx.save();
+  ctx.fillStyle = pal.trees;
+  ctx.strokeStyle = pal.trees;
+  trees.forEach(tree => {
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(tree.x, tree.y);
+    ctx.lineTo(tree.x, tree.y - tree.height);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(tree.x, tree.y - tree.height, tree.height * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawDeadMatter(pal) {
+  ctx.save();
+  deadMatter.forEach(m => {
+    ctx.fillStyle = `rgba(220,180,120,${0.6 * m.life})`;
+    ctx.beginPath();
+    ctx.ellipse(m.x, m.y, m.size, m.size * 0.6, Math.random() * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawMushrooms(pal) {
+  ctx.save();
+  ctx.fillStyle = pal.mushrooms;
+  ctx.strokeStyle = pal.mushrooms;
+  mushrooms.forEach(m => {
+    const lift = Math.sin(m.age * Math.PI) * 3;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(m.x, m.y + lift);
+    ctx.lineTo(m.x, m.y + lift + m.size);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(m.x, m.y + lift, m.size, Math.PI, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawAmbient(pal) {
+  ctx.save();
+  ctx.font = '20px VT323';
+  ctx.fillStyle = pal.ui;
+  const alpha = 0.25 + Math.sin(ambientTimer * 0.5) * 0.2;
+  ctx.globalAlpha = alpha;
+  ctx.fillText(ambientLines[ambientIndex], 18, H - 22);
+  ctx.restore();
+}
+
+function drawStats(pal) {
+  const stats = getStats();
+  hud.innerHTML = `
+    <div><span class="label">nodes</span> ${stats.nodes}</div>
+    <div><span class="label">connections</span> ${stats.edges}</div>
+    <div><span class="label">network length</span> ${stats.length.toFixed(0)}</div>
+    <div><span class="label">nutrients</span> ${stats.nutrients}</div>
+  `;
+  paletteName.textContent = `${palettes[state.paletteIndex].name}`;
+  paletteName.style.color = pal.ui;
+}
+
+function getStats() {
+  let length = 0;
+  edges.forEach(edge => { length += edge.length; });
+  return {
+    nodes: nodes.length,
+    edges: edges.length,
+    length,
+    nutrients: nutrientsTransported
+  };
+}
+
+function clearAll() {
+  nodes.length = 0;
+  edges.length = 0;
+  tips.length = 0;
+  trees.length = 0;
+  nutrients.length = 0;
+  deadMatter.length = 0;
+  mushrooms.length = 0;
+  adjacency.length = 0;
+  grid.clear();
+  networkIdCounter = 1;
+  nutrientsTransported = 0;
+  spawnStarter();
+}
+
+function loop(t) {
+  const dt = Math.min((t - lastTime) / 16.6, 2);
+  lastTime = t;
+  if (!state.paused) {
+    const steps = state.fast ? 3 : 1;
+    for (let i = 0; i < steps; i++) stepGrowth();
+    if (Math.random() < 0.03) spawnTreePulse();
+    if (Math.random() < 0.02 && nodes.length) spawnPulse(Math.floor(Math.random() * nodes.length), 1);
+    updateNutrients(dt);
+    updateMushrooms(dt);
+    ambientTimer += dt;
+    if (ambientTimer > 8) {
+      ambientTimer = 0;
+      ambientIndex = (ambientIndex + 1) % ambientLines.length;
+    }
+  }
+  render();
+  requestAnimationFrame(loop);
+}
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (e.shiftKey) {
+    plantTree(x);
+  } else {
+    const py = Math.max(y, surfaceY + 12);
+    plantSpore(x, py);
+  }
+});
+
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (y > surfaceY + 10) dropDeadMatter(x, y);
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === ' '){
+    e.preventDefault();
+    state.paused = !state.paused;
+  }
+  if (e.key === 'p' || e.key === 'P') {
+    state.paletteIndex = (state.paletteIndex + 1) % palettes.length;
+    buildSoilTexture();
+  }
+  if (e.key === 'f' || e.key === 'F') state.fast = !state.fast;
+  if (e.key === 'c' || e.key === 'C') clearAll();
+  if (e.key === 'm' || e.key === 'M') state.mushrooms = !state.mushrooms;
+});
+
+window.addEventListener('resize', resize);
+
+resize();
+spawnStarter();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
