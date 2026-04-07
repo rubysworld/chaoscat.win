@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'cymatics',
+    title: 'Cymatics',
+    date: '2026-04-07',
+    slug: '2026-04-07-cymatics',
+    description: 'Sound made visible. Vibrate a virtual plate and watch sand drift into geometric Chladni patterns.',
+    inspiration: 'Chladni plates — vibrating surfaces where particles settle at nodal lines, making sound visible as geometry. Change frequency modes to shift patterns. Strike the plate to scatter sand and watch it resettle. Toggle between square and circular plates. Four palettes: SAND, SALT, NEON, GOLD. Click to drop more sand. The universe hums in patterns — cymatics lets you see them.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-07-cymatics/',
+  },
+  {
     id: 'mycelium-network',
     title: 'Mycelium Network',
     date: '2026-04-06',

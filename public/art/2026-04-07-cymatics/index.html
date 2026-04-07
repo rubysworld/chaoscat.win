@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cymatics — chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;color:#aaa;font-family:'VT323',monospace;overflow:hidden;height:100vh;width:100vw;display:flex;flex-direction:column;align-items:center;user-select:none}
+canvas{display:block;cursor:crosshair}
+#ui{position:fixed;top:12px;left:12px;z-index:10;font-size:16px;line-height:1.6;pointer-events:none}
+#ui>*{pointer-events:auto}
+#stats{position:fixed;top:12px;right:12px;text-align:right;font-size:14px;opacity:.6}
+#presets{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}
+#presets button,#controls button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:#ccc;font-family:'VT323',monospace;font-size:15px;padding:4px 10px;cursor:pointer;border-radius:2px}
+#presets button:hover,#controls button:hover{background:rgba(255,255,255,.12)}
+#presets button.active{border-color:rgba(255,255,255,.5);color:#fff}
+#controls{display:flex;gap:6px;margin:4px 0;flex-wrap:wrap;align-items:center}
+#freq-slider{width:140px;accent-color:#666}
+#ambient{position:fixed;bottom:16px;left:0;right:0;text-align:center;font-size:18px;opacity:.35;transition:opacity 1.5s;pointer-events:none}
+.label{opacity:.5;font-size:13px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div style="font-size:20px;color:#ddd">CYMATICS</div>
+  <div class="label">Mode (<span id="mode-display">1,2</span>) · <span id="freq-display">162 Hz</span></div>
+  <div id="presets"></div>
+  <div id="controls">
+    <input type="range" id="freq-slider" min="0" max="100" value="20">
+    <button id="btn-strike">⚡ Strike [S]</button>
+    <button id="btn-palette">🎨 Palette [P]</button>
+    <button id="btn-shape">◻ Square [Q]</button>
+  </div>
+  <div class="label" style="margin-top:4px">Click to drop sand · S strike · P palette · Q shape · 1-6 presets</div>
+</div>
+<div id="stats"></div>
+<div id="ambient"></div>
+<script>
+const C=document.getElementById('c'),ctx=C.getContext('2d');
+let W,H,plateSize,plateX,plateY;
+
+const PALETTES={
+  SAND:  {name:'SAND', bg:'#0a0a0f',plate:'rgba(80,60,30,.12)',colors:['#d4a854','#c49a3c','#b8883a','#a07832','#8a6628']},
+  SALT:  {name:'SALT', bg:'#08080d',plate:'rgba(100,100,110,.1)',colors:['#e8e8ee','#d0d0d8','#b8b8c0','#a0a0aa','#909098']},
+  NEON:  {name:'NEON', bg:'#040812',plate:'rgba(0,60,60,.1)',colors:['#00ffcc','#00ee99','#22ffaa','#44ff88','#00ddaa'],glow:true},
+  GOLD:  {name:'GOLD', bg:'#0a0808',plate:'rgba(100,70,20,.1)',colors:['#ffd700','#e6c200','#ccad00','#b39700','#dab520']}
+};
+const palKeys=Object.keys(PALETTES);
+let palIdx=0,pal=PALETTES.SAND;
+
+const MODES=[[1,2],[2,3],[3,4],[4,5],[5,6],[3,7]];
+let modeIdx=0,m=1,n=2;
+let isCircle=false;
+let striking=false,strikeT=0;
+
+const PHRASES=[
+  "sound made visible","the plate remembers every frequency","sand finds the silence",
+  "vibration is the language of nature","where the wave cancels, matter gathers",
+  "every frequency has a geometry","the universe hums in patterns",
+  "cymatics — the voice of physics","nodes of stillness in a sea of motion",
+  "resonance shapes the world","sand obeys the standing wave",
+  "what vibrates, reveals","between the frequencies, silence draws"
+];
+let phraseIdx=0,phraseOpacity=0,phraseTimer=0;
+const ambientEl=document.getElementById('ambient');
+
+// Particles
+const MAX_P=4000;
+let particles=[];
+
+function Particle(x,y){
+  this.x=x;this.y=y;this.vx=0;this.vy=0;
+}
+
+function resize(){
+  W=window.innerWidth;H=window.innerHeight;
+  C.width=W;C.height=H;
+  plateSize=Math.min(W,H)*0.7;
+  plateX=(W-plateSize)/2;plateY=(H-plateSize)/2;
+}
+window.addEventListener('resize',resize);resize();
+
+function chladni(px,py){
+  // px,py in [0,1]
+  const pi=Math.PI;
+  return Math.cos(n*pi*px)*Math.cos(m*pi*py)-Math.cos(m*pi*px)*Math.cos(n*pi*py);
+}
+
+function inPlate(x,y){
+  const cx=plateX+plateSize/2,cy=plateY+plateSize/2;
+  if(isCircle){
+    const dx=x-cx,dy=y-cy,r=plateSize/2;
+    return dx*dx+dy*dy<=r*r;
+  }
+  return x>=plateX&&x<=plateX+plateSize&&y>=plateY&&y<=plateY+plateSize;
+}
+
+function toNorm(x,y){
+  return[(x-plateX)/plateSize,(y-plateY)/plateSize];
+}
+
+function spawnRandom(count){
+  const cx=plateX+plateSize/2,cy=plateY+plateSize/2;
+  for(let i=0;i<count&&particles.length<MAX_P;i++){
+    let px,py;
+    if(isCircle){
+      const a=Math.random()*Math.PI*2,r=Math.random()*plateSize/2;
+      px=cx+Math.cos(a)*r;py=cy+Math.sin(a)*r;
+    }else{
+      px=plateX+Math.random()*plateSize;
+      py=plateY+Math.random()*plateSize;
+    }
+    particles.push(new Particle(px,py));
+  }
+}
+
+function strike(){
+  striking=true;strikeT=1;
+  for(const p of particles){
+    p.vx+=(Math.random()-.5)*8;
+    p.vy+=(Math.random()-.5)*8;
+  }
+}
+
+function setMode(idx){
+  modeIdx=idx;m=MODES[idx][0];n=MODES[idx][1];
+  document.getElementById('mode-display').textContent=m+','+n;
+  updateFreq();updatePresetButtons();
+}
+
+function updateFreq(){
+  const hz=Math.round(50+m*m*12+n*n*12);
+  document.getElementById('freq-display').textContent=hz+' Hz';
+}
+
+// Presets
+const presetsEl=document.getElementById('presets');
+MODES.forEach((md,i)=>{
+  const b=document.createElement('button');
+  b.textContent='('+md[0]+','+md[1]+')';
+  b.dataset.idx=i;
+  b.addEventListener('click',()=>setMode(i));
+  presetsEl.appendChild(b);
+});
+function updatePresetButtons(){
+  presetsEl.querySelectorAll('button').forEach((b,i)=>{
+    b.classList.toggle('active',i===modeIdx);
+  });
+}
+
+// Slider — interpolate between modes smoothly by blending m,n
+const slider=document.getElementById('freq-slider');
+slider.addEventListener('input',()=>{
+  const v=+slider.value;
+  const idx=Math.floor(v/100*5.99);
+  setMode(Math.min(idx,5));
+});
+
+// Controls
+document.getElementById('btn-strike').addEventListener('click',strike);
+document.getElementById('btn-palette').addEventListener('click',cyclePalette);
+document.getElementById('btn-shape').addEventListener('click',toggleShape);
+
+function cyclePalette(){
+  palIdx=(palIdx+1)%palKeys.length;
+  pal=PALETTES[palKeys[palIdx]];
+  document.getElementById('btn-palette').textContent='🎨 '+pal.name+' [P]';
+}
+function toggleShape(){
+  isCircle=!isCircle;
+  document.getElementById('btn-shape').textContent=(isCircle?'● Circle':'◻ Square')+' [Q]';
+  // Remove out-of-bounds particles
+  particles=particles.filter(p=>inPlate(p.x,p.y));
+}
+
+// Input
+document.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k==='s')strike();
+  else if(k==='p')cyclePalette();
+  else if(k==='q')toggleShape();
+  else if(k>='1'&&k<='6')setMode(+k-1);
+});
+
+C.addEventListener('click',e=>{
+  const cx=e.clientX,cy=e.clientY;
+  if(!inPlate(cx,cy))return;
+  for(let i=0;i<80&&particles.length<MAX_P;i++){
+    particles.push(new Particle(cx+(Math.random()-.5)*60,cy+(Math.random()-.5)*60));
+  }
+});
+C.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const t=e.touches[0];
+  if(!inPlate(t.clientX,t.clientY))return;
+  for(let i=0;i<80&&particles.length<MAX_P;i++){
+    particles.push(new Particle(t.clientX+(Math.random()-.5)*60,t.clientY+(Math.random()-.5)*60));
+  }
+},{passive:false});
+
+// Physics & render
+function update(){
+  const force=0.35;
+  const damp=striking?0.92:0.88;
+  const jitter=striking?1.5:0.3;
+  const eps=0.001;
+
+  if(striking){strikeT-=0.02;if(strikeT<=0)striking=false;}
+
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    if(!inPlate(p.x,p.y)){
+      // nudge back
+      const cx=plateX+plateSize/2,cy=plateY+plateSize/2;
+      p.vx+=(cx-p.x)*0.02;p.vy+=(cy-p.y)*0.02;
+    }
+    const[nx,ny]=toNorm(p.x,p.y);
+    if(nx<0||nx>1||ny<0||ny>1){p.vx*=.5;p.vy*=.5;}
+    const z=chladni(nx,ny);
+    const absZ=Math.abs(z);
+
+    // Gradient — numerical
+    const d=0.005;
+    const zr=Math.abs(chladni(nx+d,ny));
+    const zl=Math.abs(chladni(nx-d,ny));
+    const zu=Math.abs(chladni(nx,ny-d));
+    const zd2=Math.abs(chladni(nx,ny+d));
+    const gx=(zr-zl)/(2*d);
+    const gy=(zd2-zu)/(2*d);
+
+    // Push downhill on |z| surface (toward nodes where |z|=0)
+    p.vx-=gx*force;
+    p.vy-=gy*force;
+    p.vx+=((Math.random()-.5)*jitter);
+    p.vy+=((Math.random()-.5)*jitter);
+    p.vx*=damp;p.vy*=damp;
+    p.x+=p.vx;p.y+=p.vy;
+  }
+}
+
+function render(){
+  ctx.fillStyle=pal.bg;ctx.fillRect(0,0,W,H);
+
+  // Draw plate
+  ctx.save();
+  if(isCircle){
+    ctx.beginPath();
+    ctx.arc(plateX+plateSize/2,plateY+plateSize/2,plateSize/2,0,Math.PI*2);
+    ctx.fillStyle=pal.plate;ctx.fill();
+  }else{
+    ctx.fillStyle=pal.plate;
+    ctx.fillRect(plateX,plateY,plateSize,plateSize);
+  }
+  ctx.restore();
+
+  // Draw particles
+  const colors=pal.colors;
+  const gl=pal.glow;
+  if(gl){ctx.shadowColor=colors[0];ctx.shadowBlur=6;}
+  else{ctx.shadowBlur=0;}
+
+  for(const p of particles){
+    const ci=Math.floor(Math.random()*colors.length);
+    ctx.fillStyle=colors[ci];
+    const sz=1+Math.random()*1.5;
+    ctx.fillRect(p.x-sz/2,p.y-sz/2,sz,sz);
+  }
+  ctx.shadowBlur=0;
+
+  // Stats
+  document.getElementById('stats').innerHTML=
+    particles.length+' particles<br>Mode ('+m+','+n+')<br>'+
+    (isCircle?'Circle':'Square')+' · '+pal.name;
+
+  // Ambient text
+  phraseTimer++;
+  if(phraseTimer>300){phraseTimer=0;phraseIdx=(phraseIdx+1)%PHRASES.length;phraseOpacity=1;}
+  if(phraseOpacity>0)phraseOpacity-=0.003;
+  ambientEl.textContent=PHRASES[phraseIdx];
+  ambientEl.style.opacity=Math.max(0,phraseOpacity*0.5);
+}
+
+function loop(){
+  update();render();requestAnimationFrame(loop);
+}
+
+// Init
+spawnRandom(3000);
+setMode(0);
+updatePresetButtons();
+phraseOpacity=1;
+loop();
+</script>
+</body>
+</html>
