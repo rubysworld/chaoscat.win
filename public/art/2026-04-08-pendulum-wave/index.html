@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pendulum Wave</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;color:#aaa;font-family:'VT323',monospace;overflow:hidden;width:100vw;height:100vh;display:flex;flex-direction:column}
+canvas{flex:1;display:block}
+#ui{position:fixed;bottom:0;left:0;right:0;padding:10px 16px;background:rgba(10,10,15,.85);border-top:1px solid #222;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-size:16px;z-index:10}
+#ui label{display:flex;align-items:center;gap:6px}
+#ui button{background:#181820;color:#aaa;border:1px solid #333;padding:4px 12px;font-family:'VT323',monospace;font-size:16px;cursor:pointer}
+#ui button:hover{background:#252530;color:#fff}
+input[type=range]{width:100px;accent-color:#666}
+#info{position:fixed;top:10px;left:16px;font-size:18px;z-index:10;line-height:1.5}
+#phase{position:fixed;top:10px;right:16px;font-size:18px;text-align:right;z-index:10;line-height:1.5}
+#ambient{position:fixed;bottom:60px;left:0;right:0;text-align:center;font-size:20px;color:#555;z-index:10;pointer-events:none;transition:opacity 1s}
+#vignette{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.6) 100%);z-index:5}
+</style>
+</head>
+<body>
+<div id="vignette"></div>
+<div id="info"><span id="time">0.0s</span> | <span id="cycle">0%</span> cycle</div>
+<div id="phase">SYNCHRONIZED<br><span id="pcount">24 pendulums</span></div>
+<div id="ambient"></div>
+<canvas id="c"></canvas>
+<div id="ui">
+<button id="btnRelease">⟳ Release [R]</button>
+<label>Gravity <input type="range" id="gravSlider" min="0.2" max="5" step="0.1" value="1"><span id="gravVal">1.0x</span></label>
+<label><input type="checkbox" id="dampToggle"> Damping</label>
+<button id="btnPalette">Palette: NEON [P]</button>
+<button id="btnStyle">Style: CIRCLE [S]</button>
+<button id="btnTrail">Trails: OFF [T]</button>
+<span style="margin-left:auto;color:#555">SPACE pause | click to pluck</span>
+</div>
+<script>
+const C=document.getElementById('c'),ctx=C.getContext('2d');
+const N=24, T_GRAND=60, BASE_N=30, A0=Math.PI/6, G0=9.81;
+const PALETTES={
+  NEON:i=>`hsl(${i/N*360},100%,60%)`,
+  EMBER:i=>`hsl(${10+i/N*40},100%,${50+i/N*20}%)`,
+  GHOST:i=>`hsla(${200+i/N*40},30%,${70+i/N*20}%,.85)`,
+  VOID:i=>`hsl(${260+i/N*30},${60+i/N*30}%,${45+i/N*25}%)`
+};
+const PNAMES=Object.keys(PALETTES);
+const PHRASES=["order emerges from difference","each pendulum follows its own time","synchronization is temporary. chaos is patient.","the wave is an illusion. only individual swings are real.","complexity from simplicity. always.","they will align again. they always do.","between order and chaos: beauty","resonance is just agreement in disguise"];
+
+let palIdx=0,styleIdx=0,trails=false,paused=false,damping=false,gravMul=1;
+let elapsed=0,lastT=0;
+let trailBuf=[];
+
+// Pendulum state: each has amplitude and phase offset
+let pends=[];
+function initPends(){
+  pends=[];trailBuf=[];
+  for(let i=0;i<N;i++){
+    const ni=BASE_N+i;
+    const Ti=T_GRAND/ni;
+    pends.push({Ti,amp:A0,phase:0,ni});
+  }
+  elapsed=0;
+}
+initPends();
+
+function resize(){C.width=innerWidth;C.height=innerHeight}
+addEventListener('resize',resize);resize();
+
+// Ambient text
+let ambIdx=0;
+const ambEl=document.getElementById('ambient');
+function nextAmb(){ambEl.style.opacity=0;setTimeout(()=>{ambEl.textContent='"'+PHRASES[ambIdx%PHRASES.length]+'"';ambEl.style.opacity=1;ambIdx++},1000)}
+nextAmb();setInterval(nextAmb,9000);
+
+// Phase detection
+function detectPhase(){
+  const angles=pends.map((p)=>{
+    const t=elapsed;
+    const theta=p.amp*Math.cos(2*Math.PI*t/p.Ti+p.phase);
+    return theta;
+  });
+  const mean=angles.reduce((a,b)=>a+b,0)/N;
+  const variance=angles.reduce((a,v)=>a+(v-mean)**2,0)/N;
+  const maxVar=A0*A0;
+  const normVar=variance/maxVar;
+  
+  // Check sequential phase pattern (traveling wave)
+  let seqDiffs=0;
+  for(let i=1;i<N;i++){
+    if((angles[i]-angles[i-1])*(angles[1]-angles[0])>0) seqDiffs++;
+  }
+  const seqRatio=seqDiffs/(N-1);
+  
+  const cyclePos=(elapsed%T_GRAND)/T_GRAND;
+  
+  if(normVar<0.02) return 'SYNCHRONIZED';
+  if(cyclePos>0.85) return 'CONVERGING';
+  if(seqRatio>0.75) return 'TRAVELING WAVE';
+  if(normVar<0.15) return 'STANDING WAVE';
+  return 'CHAOS';
+}
+
+function draw(ts){
+  if(!lastT)lastT=ts;
+  const dt=Math.min((ts-lastT)/1000,0.05)*gravMul;
+  lastT=ts;
+  if(!paused) elapsed+=dt/Math.sqrt(gravMul); // time advances, gravity affects period via sqrt
+  
+  const W=C.width,H=C.height;
+  const pivotY=H*0.08;
+  const maxLen=H*0.55;
+  const spacing=W/(N+1);
+  
+  if(!trails){
+    ctx.fillStyle='#0a0a0f';
+    ctx.fillRect(0,0,W,H);
+  } else {
+    ctx.fillStyle='rgba(10,10,15,0.03)';
+    ctx.fillRect(0,0,W,H);
+  }
+  
+  // Pivot bar
+  ctx.strokeStyle='#333';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(spacing*0.5,pivotY);ctx.lineTo(W-spacing*0.5,pivotY);ctx.stroke();
+  
+  const pal=PALETTES[PNAMES[palIdx]];
+  const styles=['CIRCLE','GLOW','TRAIL'];
+  const style=styles[styleIdx];
+  
+  for(let i=0;i<N;i++){
+    const p=pends[i];
+    const t=elapsed;
+    // Apply gravity multiplier to period: effective T = T_base / sqrt(gravMul)
+    const Teff=p.Ti/Math.sqrt(gravMul);
+    let amp=p.amp;
+    if(damping&&!paused) p.amp*=(1-0.0003*dt*60);
+    const theta=amp*Math.cos(2*Math.PI*t/Teff+p.phase);
+    
+    const px=spacing*(i+1);
+    // String length proportional to period squared
+    const lenFrac=(p.Ti*p.Ti)/(pends[0].Ti*pends[0].Ti);
+    const len=maxLen*0.4+maxLen*0.6*lenFrac;
+    
+    const bx=px+Math.sin(theta)*len;
+    const by=pivotY+Math.cos(theta)*len;
+    const col=pal(i);
+    
+    // String
+    ctx.strokeStyle='#444';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(px,pivotY);ctx.lineTo(bx,by);ctx.stroke();
+    
+    // Bob
+    const r=Math.max(4,8-N*0.1);
+    if(style==='CIRCLE'){
+      ctx.beginPath();ctx.arc(bx,by,r,0,Math.PI*2);
+      ctx.fillStyle=col;ctx.fill();
+      ctx.shadowBlur=8;ctx.shadowColor=col;ctx.fill();ctx.shadowBlur=0;
+    } else if(style==='GLOW'){
+      const g=ctx.createRadialGradient(bx,by,0,bx,by,r*3);
+      g.addColorStop(0,col);g.addColorStop(1,'transparent');
+      ctx.beginPath();ctx.arc(bx,by,r*3,0,Math.PI*2);
+      ctx.fillStyle=g;ctx.fill();
+      ctx.beginPath();ctx.arc(bx,by,r*0.6,0,Math.PI*2);
+      ctx.fillStyle='#fff';ctx.fill();
+    } else { // TRAIL
+      ctx.beginPath();ctx.arc(bx,by,r*0.7,0,Math.PI*2);
+      ctx.fillStyle=col;ctx.fill();
+    }
+  }
+  
+  // Update HUD
+  const cycleT=T_GRAND/Math.sqrt(gravMul);
+  const pct=((elapsed%cycleT)/cycleT*100).toFixed(0);
+  document.getElementById('time').textContent=elapsed.toFixed(1)+'s';
+  document.getElementById('cycle').textContent=pct+'%';
+  document.getElementById('phase').innerHTML=detectPhase()+'<br><span id="pcount">'+N+' pendulums</span>';
+  
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+// Controls
+document.getElementById('btnRelease').onclick=()=>{initPends()};
+document.getElementById('gravSlider').oninput=e=>{gravMul=+e.target.value;document.getElementById('gravVal').textContent=gravMul.toFixed(1)+'x'};
+document.getElementById('dampToggle').onchange=e=>{damping=e.target.checked};
+document.getElementById('btnPalette').onclick=()=>{palIdx=(palIdx+1)%PNAMES.length;document.getElementById('btnPalette').textContent='Palette: '+PNAMES[palIdx]+' [P]'};
+document.getElementById('btnStyle').onclick=()=>{const s=['CIRCLE','GLOW','TRAIL'];styleIdx=(styleIdx+1)%s.length;document.getElementById('btnStyle').textContent='Style: '+s[styleIdx]+' [S]'};
+document.getElementById('btnTrail').onclick=()=>{trails=!trails;document.getElementById('btnTrail').textContent='Trails: '+(trails?'ON':'OFF')+' [T]'};
+
+addEventListener('keydown',e=>{
+  if(e.code==='Space'){e.preventDefault();paused=!paused;lastT=0}
+  if(e.code==='KeyR')initPends();
+  if(e.code==='KeyP')document.getElementById('btnPalette').click();
+  if(e.code==='KeyS')document.getElementById('btnStyle').click();
+  if(e.code==='KeyT')document.getElementById('btnTrail').click();
+});
+
+// Click to pluck
+C.addEventListener('click',e=>{
+  const rect=C.getBoundingClientRect();
+  const mx=e.clientX-rect.left;
+  const spacing=C.width/(N+1);
+  let closest=-1,minD=Infinity;
+  for(let i=0;i<N;i++){
+    const d=Math.abs(mx-spacing*(i+1));
+    if(d<minD){minD=d;closest=i}
+  }
+  if(closest>=0&&minD<spacing){
+    pends[closest].amp=Math.min(pends[closest].amp+A0*0.3,Math.PI/3);
+  }
+});
+C.addEventListener('touchstart',e=>{
+  const t=e.touches[0];
+  C.dispatchEvent(new MouseEvent('click',{clientX:t.clientX,clientY:t.clientY}));
+},{passive:true});
+</script>
+</body>
+</html>
