@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harmonograph ✒️ | chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #050510; overflow: hidden; font-family: 'VT323', 'Courier New', monospace; cursor: crosshair; }
+canvas { display: block; }
+#ui {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 10px; z-index: 10; flex-wrap: wrap; justify-content: center;
+}
+.btn {
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.6); padding: 6px 14px; font-family: inherit;
+  font-size: 13px; cursor: pointer; border-radius: 3px; transition: all 0.2s;
+  backdrop-filter: blur(4px); text-transform: uppercase; letter-spacing: 1px;
+}
+.btn:hover { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.9); }
+#info {
+  position: fixed; top: 15px; right: 15px; color: rgba(255,255,255,0.3);
+  font-size: 13px; text-align: right; z-index: 10; line-height: 1.8;
+  font-family: 'VT323', monospace;
+}
+#poem {
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,255,255,0.2); font-size: 14px; font-style: italic;
+  text-align: center; z-index: 10; transition: opacity 2s; white-space: nowrap;
+  text-shadow: 0 0 20px rgba(0,0,0,0.8);
+}
+#back {
+  position: fixed; top: 15px; left: 15px; z-index: 10;
+}
+#back a {
+  color: rgba(255,255,255,0.3); text-decoration: none; font-size: 13px;
+  font-family: 'VT323', monospace;
+}
+#back a:hover { color: rgba(255,255,255,0.7); }
+#complete {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  color: rgba(255,255,255,0.4); font-size: 18px; z-index: 10;
+  opacity: 0; transition: opacity 2s; pointer-events: none;
+  font-family: 'VT323', monospace;
+}
+#vignette {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(5,5,16,0.7) 100%);
+  pointer-events: none; z-index: 5;
+}
+</style>
+</head>
+<body>
+<div id="vignette"></div>
+<div id="back"><a href="/art/">← gallery</a></div>
+<div id="info">
+  <div id="infoRatio">ratio: —</div>
+  <div id="infoPreset">random</div>
+  <div id="infoVelocity">velocity: 0</div>
+  <div id="infoComplete">0%</div>
+</div>
+<div id="poem"></div>
+<div id="complete">✦ complete</div>
+<div id="ui">
+  <button class="btn" onclick="newRandom()">NEW [n]</button>
+  <button class="btn" onclick="nextPreset()">PRESET [p]</button>
+  <button class="btn" id="btnSpeed" onclick="cycleSpeed()">1×</button>
+  <button class="btn" id="btnDecay" onclick="cycleDecay()">DECAY: LOW</button>
+  <button class="btn" id="btnColor" onclick="cycleColor()">INK</button>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, cx, cy, scale;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cx = W / 2; cy = H / 2;
+  scale = Math.min(W, H) * 0.38;
+}
+window.addEventListener('resize', () => { resize(); restart(); });
+resize();
+
+// --- Poems ---
+const poems = [
+  "every pendulum is a conversation between gravity and time",
+  "the pattern was always there — the pen just reveals it",
+  "harmony is what happens when chaos finds a ratio",
+  "the most beautiful curves are the ones that slowly die",
+  "two frequencies, one truth",
+  "resonance is the universe rhyming with itself",
+  "decay is not loss. it is the shape of letting go",
+  "somewhere between order and entropy, there is grace",
+  "the pen forgets nothing. the pendulum forgives everything",
+  "all motion is a question. stillness is the answer",
+  "what the eye calls beauty, the ear calls consonance",
+  "a ratio is just two rhythms learning to dance",
+  "silence is the harmonograph at rest",
+  "the curve does not know it is beautiful",
+  "every ending is a spiral that found its center"
+];
+let poemIdx = 0;
+function rotatePoem() {
+  const el = document.getElementById('poem');
+  el.style.opacity = 0;
+  setTimeout(() => {
+    poemIdx = (poemIdx + 1) % poems.length;
+    el.textContent = poems[poemIdx];
+    el.style.opacity = 1;
+  }, 2000);
+}
+document.getElementById('poem').textContent = poems[0];
+document.getElementById('poem').style.opacity = 1;
+setInterval(rotatePoem, 10000);
+
+// --- Palettes ---
+const palettes = ['INK', 'SPECTRUM', 'NEON', 'EMBER', 'AURORA'];
+let paletteIdx = 0;
+
+function getColor(t, x, y, vx, vy) {
+  const vel = Math.sqrt(vx * vx + vy * vy);
+  const angle = Math.atan2(vy, vx);
+  const completion = 1 - currentAmplitude();
+  switch (palettes[paletteIdx]) {
+    case 'INK':
+      return 'rgba(240,235,220,0.8)';
+    case 'SPECTRUM': {
+      const hue = vel > 0.5 ? 20 + (1 - Math.min(vel / 3, 1)) * 200 : 220;
+      return `hsla(${hue},80%,65%,0.8)`;
+    }
+    case 'NEON': {
+      const nx = (x / scale + 1) / 2;
+      const hue = 180 + nx * 120;
+      return `hsla(${hue},90%,65%,0.8)`;
+    }
+    case 'EMBER': {
+      const hue = 10 + completion * 30;
+      const light = 60 - completion * 25;
+      return `hsla(${hue},90%,${light}%,0.8)`;
+    }
+    case 'AURORA': {
+      const hue = 120 + (Math.sin(angle) * 0.5 + 0.5) * 160;
+      return `hsla(${hue},70%,60%,0.75)`;
+    }
+  }
+}
+
+// --- Presets ---
+const presets = [
+  { name: 'Perfect Fifth', r1: 3/2, r2: 1 },
+  { name: 'Octave', r1: 2/1, r2: 1 },
+  { name: 'Major Third', r1: 5/4, r2: 1 },
+  { name: 'Unison Drift', r1: 1.008, r2: 1.003 },
+  { name: 'Complex', r1: 7/5, r2: 1 },
+  { name: 'Chaos', r1: Math.SQRT2, r2: 1 }
+];
+let presetIdx = -1;
+
+// --- State ---
+let pends = { f1:2, f2:3, f3:2, a1:1, a2:1, a3:1, p1:0, p2:0, p3:0, d1:0.001, d2:0.001, d3:0.001 };
+let t = 0;
+let paused = false;
+let speeds = [1, 3, 8, 20];
+let speedIdx = 0;
+let stepsPerFrame = 60;
+let decayLevels = [
+  { name: 'LOW', mult: 1 },
+  { name: 'MED', mult: 3 },
+  { name: 'HIGH', mult: 8 }
+];
+let decayIdx = 0;
+let completed = false;
+let prevX = null, prevY = null;
+let currentPresetName = 'random';
+
+const dt = 0.008;
+
+function pos(time) {
+  const dm = decayLevels[decayIdx].mult;
+  const x = pends.a1 * Math.sin(pends.f1 * time + pends.p1) * Math.exp(-pends.d1 * dm * time)
+          + pends.a2 * Math.sin(pends.f2 * time + pends.p2) * Math.exp(-pends.d2 * dm * time);
+  const y = pends.a3 * Math.sin(pends.f3 * time + pends.p3) * Math.exp(-pends.d3 * dm * time);
+  return { x, y };
+}
+
+function currentAmplitude() {
+  const dm = decayLevels[decayIdx].mult;
+  const a = Math.max(
+    pends.a1 * Math.exp(-pends.d1 * dm * t),
+    pends.a2 * Math.exp(-pends.d2 * dm * t),
+    pends.a3 * Math.exp(-pends.d3 * dm * t)
+  );
+  return a / Math.max(pends.a1, pends.a2, pends.a3);
+}
+
+// --- Generation ---
+const harmonicRatios = [1, 6/5, 5/4, 4/3, 3/2, 5/3, 2, 7/5, 7/4, 9/8];
+
+function randomParams() {
+  presetIdx = -1;
+  currentPresetName = 'random';
+  const base = 2 + Math.random() * 2;
+  const ratio = harmonicRatios[Math.floor(Math.random() * harmonicRatios.length)];
+  const drift1 = (Math.random() - 0.5) * 0.04;
+  const drift2 = (Math.random() - 0.5) * 0.04;
+  pends.f1 = base;
+  pends.f2 = base * ratio + drift1;
+  pends.f3 = base * (harmonicRatios[Math.floor(Math.random() * harmonicRatios.length)]) + drift2;
+  pends.a1 = 0.8 + Math.random() * 0.4;
+  pends.a2 = 0.8 + Math.random() * 0.4;
+  pends.a3 = 0.8 + Math.random() * 0.4;
+  pends.p1 = Math.random() * Math.PI * 2;
+  pends.p2 = Math.random() * Math.PI * 2;
+  pends.p3 = Math.random() * Math.PI * 2;
+  pends.d1 = 0.0003 + Math.random() * 0.003;
+  pends.d2 = 0.0003 + Math.random() * 0.003;
+  pends.d3 = 0.0003 + Math.random() * 0.003;
+  updateRatioDisplay();
+}
+
+function applyPreset(p) {
+  const base = 2.5;
+  const drift = () => (Math.random() - 0.5) * 0.02;
+  pends.f1 = base;
+  pends.f2 = base * p.r1 + drift();
+  pends.f3 = base * p.r2 + drift();
+  pends.a1 = 1; pends.a2 = 1; pends.a3 = 1;
+  pends.p1 = Math.random() * Math.PI * 2;
+  pends.p2 = Math.random() * Math.PI * 2;
+  pends.p3 = Math.random() * Math.PI * 2;
+  pends.d1 = 0.001 + Math.random() * 0.001;
+  pends.d2 = 0.001 + Math.random() * 0.001;
+  pends.d3 = 0.001 + Math.random() * 0.001;
+  currentPresetName = p.name;
+  updateRatioDisplay();
+}
+
+function updateRatioDisplay() {
+  const r = (pends.f2 / pends.f1).toFixed(3);
+  document.getElementById('infoRatio').textContent = `ratio: ${r}`;
+  document.getElementById('infoPreset').textContent = currentPresetName;
+}
+
+// --- Controls ---
+function restart() {
+  t = 0; prevX = null; prevY = null; completed = false;
+  document.getElementById('complete').style.opacity = 0;
+  ctx.fillStyle = '#050510';
+  ctx.fillRect(0, 0, W, H);
+}
+
+function newRandom() { randomParams(); restart(); }
+function nextPreset() {
+  presetIdx = (presetIdx + 1) % presets.length;
+  applyPreset(presets[presetIdx]);
+  restart();
+}
+function cycleSpeed() {
+  speedIdx = (speedIdx + 1) % speeds.length;
+  document.getElementById('btnSpeed').textContent = speeds[speedIdx] + '×';
+}
+function cycleDecay() {
+  decayIdx = (decayIdx + 1) % decayLevels.length;
+  document.getElementById('btnDecay').textContent = 'DECAY: ' + decayLevels[decayIdx].name;
+  restart();
+}
+function cycleColor() {
+  paletteIdx = (paletteIdx + 1) % palettes.length;
+  document.getElementById('btnColor').textContent = palettes[paletteIdx];
+  restart();
+}
+
+// --- Input ---
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'n') newRandom();
+  else if (k === 'p') nextPreset();
+  else if (k === 's') cycleSpeed();
+  else if (k === 'c') cycleColor();
+  else if (k === ' ') { e.preventDefault(); paused = !paused; }
+  else if (k === 'd') cycleDecay();
+  else if (k === 'r') restart();
+});
+
+canvas.addEventListener('click', e => {
+  restart();
+});
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  restart();
+}, { passive: false });
+
+// --- Draw ---
+function draw() {
+  requestAnimationFrame(draw);
+  if (paused || completed) return;
+
+  const steps = stepsPerFrame * speeds[speedIdx];
+
+  for (let i = 0; i < steps; i++) {
+    const p = pos(t);
+    const sx = cx + p.x * scale;
+    const sy = cy + p.y * scale;
+
+    if (prevX !== null) {
+      const vx = sx - prevX;
+      const vy = sy - prevY;
+      const col = getColor(t, p.x, p.y, vx, vy);
+      ctx.beginPath();
+      ctx.moveTo(prevX, prevY);
+      ctx.lineTo(sx, sy);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+
+    prevX = sx; prevY = sy;
+    t += dt;
+
+    if (currentAmplitude() < 0.005) {
+      completed = true;
+      document.getElementById('complete').style.opacity = 1;
+      break;
+    }
+  }
+
+  // Draw pen dot with glow
+  if (prevX !== null && !completed) {
+    const pulse = 0.7 + 0.3 * Math.sin(Date.now() * 0.008);
+    ctx.save();
+    ctx.shadowColor = palettes[paletteIdx] === 'INK' ? '#fffbe8' : '#fff';
+    ctx.shadowBlur = 15 * pulse;
+    ctx.beginPath();
+    ctx.arc(prevX, prevY, 2.5 * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Update info
+  if (prevX !== null) {
+    const vel = speeds[speedIdx] * stepsPerFrame * dt;
+    document.getElementById('infoVelocity').textContent = `velocity: ${vel.toFixed(2)}`;
+    const comp = Math.min(100, ((1 - currentAmplitude()) * 100)).toFixed(0);
+    document.getElementById('infoComplete').textContent = comp + '%';
+  }
+}
+
+// Init
+ctx.fillStyle = '#050510';
+ctx.fillRect(0, 0, W, H);
+randomParams();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
