@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'ripple-tank',
+    title: 'Ripple Tank',
+    date: '2026-04-15',
+    slug: '2026-04-15-ripple-tank',
+    description: 'Drop stones into a digital pond. Watch waves collide, interfere, and paint interference patterns in light.',
+    inspiration: 'A 2D wave interference simulator. Click to place oscillating point sources that emit circular waves. Where crests meet crests, the world gets louder — where crests meet troughs, silence. Draw walls to build slits for diffraction. Try the double-slit preset. Five palettes: OCEAN, NEON, THERMAL, MONO, VOID. Right-click for single pulses. All of quantum mechanics in a bathtub.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-15-ripple-tank/',
+  },
+  {
     id: 'cymatics',
     title: 'Cymatics',
     date: '2026-04-07',
