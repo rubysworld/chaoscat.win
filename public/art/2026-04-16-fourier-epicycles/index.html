@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fourier Epicycles — chaoscat.win</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;overflow:hidden;font-family:'VT323',monospace;color:#aaa;width:100vw;height:100vh;display:flex;flex-direction:column;user-select:none;-webkit-user-select:none}
+canvas{display:block;flex:1;cursor:crosshair}
+#ui{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:12px;padding:8px 14px;background:rgba(10,10,15,.85);font-size:16px;flex-wrap:wrap;z-index:10}
+#ui button{font-family:'VT323',monospace;font-size:15px;background:none;border:1px solid #555;color:#aaa;padding:2px 10px;cursor:pointer;border-radius:2px;white-space:nowrap}
+#ui button:hover,#ui button.active{border-color:#fff;color:#fff}
+#ui label{display:flex;align-items:center;gap:4px;font-size:14px}
+#ui input[type=range]{width:70px;accent-color:#888}
+#stats{position:absolute;top:0;right:14px;padding:8px;font-size:14px;color:#666;text-align:right;z-index:10;pointer-events:none;background:rgba(10,10,15,.85)}
+#ambient{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:18px;color:rgba(180,180,200,.4);z-index:10;pointer-events:none;transition:opacity 1.5s}
+#vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.55) 100%);z-index:5}
+#prompt{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:28px;color:rgba(200,200,220,.6);z-index:10;pointer-events:none;text-align:center;line-height:1.6;transition:opacity .8s}
+</style>
+</head>
+<body>
+<div id="vignette"></div>
+<div id="ui">
+  <button onclick="clearAll()">✏️ DRAW [C]</button>
+  <button id="btnSpeed1" class="active" onclick="setSpeed(1)">1×</button>
+  <button id="btnSpeed2" onclick="setSpeed(2)">2×</button>
+  <button id="btnSpeed4" onclick="setSpeed(4)">4×</button>
+  <span style="color:#555">|</span>
+  <label>Circles: <input type="range" id="slCircles" min="1" max="200" value="80" oninput="setCircleCount(+this.value)"><span id="valCircles">80</span></label>
+  <span style="color:#555">|</span>
+  <button id="btnPalette" onclick="cyclePalette()">🎨 NEON</button>
+  <button onclick="cyclePreset()">★ PRESET</button>
+  <button id="btnCircles" onclick="toggleShowCircles()">◎ ON</button>
+  <button id="btnOriginal" onclick="toggleOriginal()">TRACE ON</button>
+</div>
+<div id="stats"></div>
+<div id="prompt">DRAW A SHAPE<br><span style="font-size:20px;color:rgba(180,180,200,.35)">click and drag anywhere · then release to watch the magic</span></div>
+<div id="ambient"></div>
+<script>
+const C=document.createElement('canvas');document.body.prepend(C);const ctx=C.getContext('2d');
+let W,H;function resize(){W=C.width=innerWidth;H=C.height=innerHeight}
+resize();addEventListener('resize',resize);
+
+// State
+let drawing=true, points=[], fourierX=[], fourierY=[], time=0, path=[];
+let speed=1, maxCircles=80, paletteIdx=0, showCircles=true, showOriginal=true;
+let presetIdx=-1;
+
+const PALETTES=[
+  {name:'NEON',  circle:'rgba(0,255,255,.25)',line:'#0ff',tip:'#fff',path:'#f0f',orig:'rgba(255,255,0,.2)',bg:[10,10,15]},
+  {name:'EMBER', circle:'rgba(255,120,40,.2)',line:'#f84',tip:'#fff',path:'#ff4',orig:'rgba(255,80,20,.15)',bg:[15,8,5]},
+  {name:'GHOST', circle:'rgba(120,255,120,.15)',line:'#8f8',tip:'#fff',path:'#8ff',orig:'rgba(100,255,100,.12)',bg:[5,12,8]},
+  {name:'VOID',  circle:'rgba(180,100,255,.2)',line:'#b8f',tip:'#fff',path:'#f8f',orig:'rgba(140,80,255,.15)',bg:[10,5,18]},
+  {name:'MONO',  circle:'rgba(200,200,200,.15)',line:'#aaa',tip:'#fff',path:'#fff',orig:'rgba(200,200,200,.1)',bg:[8,8,8]},
+];
+let pal=PALETTES[0];
+
+const PRESETS={
+  cat:[],star:[],heart:[],infinity:[],spiral:[],treble:[]
+};
+
+// Generate preset paths
+function genPresets(){
+  const N=256,r=Math.min(W,H)*.28;
+  // Cat face
+  PRESETS.cat=[];
+  for(let i=0;i<N;i++){
+    let t=i/N*Math.PI*2;
+    // Main head circle
+    let x=Math.cos(t)*r*.8;
+    let y=Math.sin(t)*r*.8;
+    // Ear bumps
+    if(t>Math.PI*.7&&t<Math.PI*.95){let s=(t-Math.PI*.7)/.25;x+=Math.sin(s*Math.PI)*r*.35;y-=Math.sin(s*Math.PI)*r*.4}
+    if(t>Math.PI*1.05&&t<Math.PI*1.3){let s=(t-Math.PI*1.05)/.25;x-=Math.sin(s*Math.PI)*r*.35;y-=Math.sin(s*Math.PI)*r*.4}
+    PRESETS.cat.push([x,y]);
+  }
+  // Star
+  PRESETS.star=[];
+  for(let i=0;i<N;i++){
+    let t=i/N*Math.PI*2;
+    let rad=i%2===0?r:r*.4;
+    // smooth star
+    let ang=t-Math.PI/2;
+    let starR=r*(.5+.5*Math.cos(5*ang));
+    PRESETS.star.push([Math.cos(ang)*starR,Math.sin(ang)*starR]);
+  }
+  // Heart
+  PRESETS.heart=[];
+  for(let i=0;i<N;i++){
+    let t=i/N*Math.PI*2;
+    let x=16*Math.pow(Math.sin(t),3);
+    let y=-(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t));
+    PRESETS.heart.push([x*r/18,y*r/18]);
+  }
+  // Infinity
+  PRESETS.infinity=[];
+  for(let i=0;i<N;i++){
+    let t=i/N*Math.PI*2;
+    let s=1/(1+Math.sin(t)*Math.sin(t));
+    PRESETS.infinity.push([r*.9*Math.cos(t)*s,r*.45*Math.sin(2*t)*s*.5]);
+  }
+  // Spiral
+  PRESETS.spiral=[];
+  for(let i=0;i<N;i++){
+    let t=i/N*Math.PI*6;
+    let sr=r*.1+r*.7*(i/N);
+    PRESETS.spiral.push([Math.cos(t)*sr,Math.sin(t)*sr]);
+  }
+  // Treble clef (simplified)
+  PRESETS.treble=[];
+  for(let i=0;i<N;i++){
+    let t=i/N;
+    let a=t*Math.PI*4;
+    let rr=r*(.2+.5*t)*(.8+.2*Math.sin(a*3));
+    PRESETS.treble.push([Math.cos(a)*rr*.6,Math.sin(a)*rr-r*.1]);
+  }
+}
+
+// DFT
+function dft(vals){
+  const N=vals.length,X=[];
+  for(let k=0;k<N;k++){
+    let re=0,im=0;
+    for(let n=0;n<N;n++){
+      let phi=-2*Math.PI*k*n/N;
+      re+=vals[n]*Math.cos(phi);
+      im+=vals[n]*Math.sin(phi);
+    }
+    re/=N;im/=N;
+    X.push({re,im,freq:k,amp:Math.sqrt(re*re+im*im),phase:Math.atan2(im,re)});
+  }
+  return X.sort((a,b)=>b.amp-a.amp);
+}
+
+function computeFourier(){
+  if(points.length<3)return;
+  // Resample to even spacing
+  let resampled=resample(points,Math.min(points.length,512));
+  let xs=resampled.map(p=>p[0]);
+  let ys=resampled.map(p=>p[1]);
+  fourierX=dft(xs);
+  fourierY=dft(ys);
+  time=0;
+  path=[];
+}
+
+function resample(pts,n){
+  // Compute total length
+  let dists=[0];
+  for(let i=1;i<pts.length;i++){
+    let dx=pts[i][0]-pts[i-1][0],dy=pts[i][1]-pts[i-1][1];
+    dists.push(dists[i-1]+Math.sqrt(dx*dx+dy*dy));
+  }
+  let total=dists[dists.length-1];
+  if(total<1)return pts;
+  let result=[];
+  for(let i=0;i<n;i++){
+    let target=total*i/n;
+    let j=1;
+    while(j<dists.length-1&&dists[j]<target)j++;
+    let seg=(target-dists[j-1])/(dists[j]-dists[j-1]||1);
+    result.push([
+      pts[j-1][0]+(pts[j][0]-pts[j-1][0])*seg,
+      pts[j-1][1]+(pts[j][1]-pts[j-1][1])*seg
+    ]);
+  }
+  return result;
+}
+
+function drawEpicycles(x,y,rotation,fourier,numCircles){
+  let N=Math.min(numCircles,fourier.length);
+  for(let i=0;i<N;i++){
+    let {amp,freq,phase}=fourier[i];
+    if(amp<.3)continue;
+    let prevX=x,prevY=y;
+    let angle=freq*time*Math.PI*2+phase+rotation;
+    x+=amp*Math.cos(angle);
+    y+=amp*Math.sin(angle);
+    if(showCircles){
+      ctx.beginPath();
+      ctx.arc(prevX,prevY,amp,0,Math.PI*2);
+      ctx.strokeStyle=pal.circle;
+      ctx.lineWidth=.8;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(prevX,prevY);
+      ctx.lineTo(x,y);
+      ctx.strokeStyle=pal.line;
+      ctx.lineWidth=.6;
+      ctx.stroke();
+    }
+  }
+  return {x,y};
+}
+
+// Drawing input
+let isDown=false;
+C.addEventListener('pointerdown',e=>{
+  if(!drawing){clearAll();return}
+  isDown=true;
+  points=[];
+  path=[];
+  fourierX=[];fourierY=[];
+  let r=C.getBoundingClientRect();
+  points.push([e.clientX-r.left-W/2,e.clientY-r.top-H/2]);
+  document.getElementById('prompt').style.opacity='0';
+});
+C.addEventListener('pointermove',e=>{
+  if(!isDown||!drawing)return;
+  let r=C.getBoundingClientRect();
+  points.push([e.clientX-r.left-W/2,e.clientY-r.top-H/2]);
+});
+C.addEventListener('pointerup',()=>{
+  if(!isDown)return;
+  isDown=false;
+  if(points.length>5){
+    drawing=false;
+    computeFourier();
+  }
+});
+
+// Keyboard
+addEventListener('keydown',e=>{
+  let k=e.key.toLowerCase();
+  if(k==='c')clearAll();
+  if(k==='1')setSpeed(1);if(k==='2')setSpeed(2);if(k==='4')setSpeed(4);
+  if(k==='p')cyclePalette();
+  if(k==='o')toggleShowCircles();
+  if(k==='t')toggleOriginal();
+  if(k==='s')cyclePreset();
+});
+
+function clearAll(){
+  drawing=true;points=[];path=[];fourierX=[];fourierY=[];time=0;
+  document.getElementById('prompt').style.opacity='1';
+  presetIdx=-1;
+}
+function setSpeed(s){
+  speed=s;
+  document.querySelectorAll('[id^=btnSpeed]').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btnSpeed'+s).classList.add('active');
+}
+function setCircleCount(n){maxCircles=n;document.getElementById('valCircles').textContent=n}
+function cyclePalette(){
+  paletteIdx=(paletteIdx+1)%PALETTES.length;
+  pal=PALETTES[paletteIdx];
+  document.getElementById('btnPalette').textContent='🎨 '+pal.name;
+}
+function toggleShowCircles(){
+  showCircles=!showCircles;
+  document.getElementById('btnCircles').textContent='◎ '+(showCircles?'ON':'OFF');
+}
+function toggleOriginal(){
+  showOriginal=!showOriginal;
+  document.getElementById('btnOriginal').textContent='TRACE '+(showOriginal?'ON':'OFF');
+}
+function cyclePreset(){
+  genPresets();
+  let keys=Object.keys(PRESETS);
+  presetIdx=(presetIdx+1)%keys.length;
+  let name=keys[presetIdx];
+  points=PRESETS[name].map(p=>[p[0],p[1]]);
+  drawing=false;
+  computeFourier();
+  document.getElementById('prompt').style.opacity='0';
+}
+
+// Ambient text
+const PHRASES=[
+  "every curve is a sum of circles",
+  "fourier proved that chaos is just harmony in disguise",
+  "infinite circles, finite beauty",
+  "the universe decomposes into spinning things",
+  "draw anything. math will find the circles.",
+  "jean-baptiste joseph fourier, 1807",
+  "epicycles all the way down",
+  "ptolemy was almost right — everything IS circles",
+  "frequency is just how fast a circle spins",
+  "your handwriting is a fourier series",
+  "sound is circles. light is circles. everything is circles.",
+  "the discrete fourier transform doesn't care what you draw",
+  "amplitude is devotion. phase is timing. frequency is purpose.",
+  "somewhere, euler is smiling",
+  "complexity is just simplicity, layered",
+];
+let ambIdx=0;
+function nextAmbient(){
+  let el=document.getElementById('ambient');
+  el.style.opacity='0';
+  setTimeout(()=>{
+    el.textContent=PHRASES[ambIdx%PHRASES.length];
+    el.style.opacity='1';
+    ambIdx++;
+  },1500);
+}
+nextAmbient();setInterval(nextAmbient,9000);
+
+// Main loop
+let frame=0;
+function render(){
+  requestAnimationFrame(render);
+  frame++;
+
+  let bg=pal.bg;
+  ctx.fillStyle=`rgba(${bg[0]},${bg[1]},${bg[2]},.12)`;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.save();
+  ctx.translate(W/2,H/2);
+
+  // Drawing mode — show user's line
+  if(drawing&&points.length>1){
+    ctx.beginPath();
+    ctx.moveTo(points[0][0],points[0][1]);
+    for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);
+    ctx.strokeStyle='rgba(255,255,255,.5)';
+    ctx.lineWidth=2;
+    ctx.stroke();
+  }
+
+  // Playback mode
+  if(!drawing&&fourierX.length>0){
+    let nc=Math.min(maxCircles,fourierX.length,fourierY.length);
+
+    // Draw original path faintly
+    if(showOriginal&&points.length>1){
+      ctx.beginPath();
+      ctx.moveTo(points[0][0],points[0][1]);
+      for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);
+      ctx.closePath();
+      ctx.strokeStyle=pal.orig;
+      ctx.lineWidth=1.5;
+      ctx.stroke();
+    }
+
+    // Draw completed path
+    if(path.length>1){
+      ctx.beginPath();
+      ctx.moveTo(path[0][0],path[0][1]);
+      for(let i=1;i<path.length;i++)ctx.lineTo(path[i][0],path[i][1]);
+      ctx.strokeStyle=pal.path;
+      ctx.lineWidth=2;
+      ctx.shadowColor=pal.path;
+      ctx.shadowBlur=8;
+      ctx.stroke();
+      ctx.shadowBlur=0;
+    }
+
+    // Epicycles for X (horizontal, drawn at top)
+    let vx=drawEpicycles(0,0,0,fourierX,nc);
+    // Epicycles for Y (vertical)
+    let vy=drawEpicycles(0,0,Math.PI/2,fourierY,nc);
+
+    // The traced point
+    let px=vx.x, py=vy.y;
+
+    // Connection lines from epicycle tips to point
+    if(showCircles){
+      ctx.setLineDash([4,4]);
+      ctx.beginPath();ctx.moveTo(vx.x,vx.y);ctx.lineTo(px,py);
+      ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=.5;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(vy.x,vy.y);ctx.lineTo(px,py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Glowing tip
+    ctx.beginPath();
+    ctx.arc(px,py,4,0,Math.PI*2);
+    ctx.fillStyle=pal.tip;
+    ctx.shadowColor=pal.tip;
+    ctx.shadowBlur=15;
+    ctx.fill();
+    ctx.shadowBlur=0;
+
+    path.push([px,py]);
+
+    let dt=Math.PI*2/fourierX.length;
+    for(let s=0;s<speed;s++) time+=dt;
+
+    // Loop
+    if(time>=Math.PI*2){
+      time=0;
+      path=[];
+    }
+  }
+
+  ctx.restore();
+
+  // Stats
+  let el=document.getElementById('stats');
+  if(!drawing&&fourierX.length>0){
+    let pct=((time/(Math.PI*2))*100).toFixed(0);
+    el.innerHTML=`circles: ${Math.min(maxCircles,fourierX.length)}<br>samples: ${fourierX.length}<br>progress: ${pct}%<br>path pts: ${path.length}`;
+  }else if(drawing){
+    el.innerHTML=`points: ${points.length}`;
+  }
+}
+render();
+</script>
+</body>
+</html>

@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'fourier-epicycles',
+    title: 'Fourier Epicycles',
+    date: '2026-04-16',
+    slug: '2026-04-16-fourier-epicycles',
+    description: 'Draw anything. Watch spinning circles recreate it. The Discrete Fourier Transform turns your doodle into a symphony of rotating circles.',
+    inspiration: 'Draw any shape — a cat, a heart, your name — then release and watch a chain of spinning circles trace your drawing with impossible precision. Each circle spins at a different frequency, and together they reconstruct ANY path. Adjust how many circles to use: fewer = abstract approximation, more = perfect recreation. Six presets (cat, star, heart, infinity, spiral, treble). Five palettes: NEON, EMBER, GHOST, VOID, MONO. Toggle the spinning circles on/off to see just the traced path. Ptolemy was almost right — everything IS circles.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-16-fourier-epicycles/',
+  },
+  {
     id: 'ripple-tank',
     title: 'Ripple Tank',
     date: '2026-04-15',
