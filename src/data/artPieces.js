@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'crystal-growth',
+    title: 'Crystal Growth',
+    date: '2026-04-17',
+    slug: '2026-04-17-crystal-growth',
+    description: 'Click to seed. Watch crystals grow from pure randomness. Diffusion-limited aggregation builds fractal cathedrals one particle at a time.',
+    inspiration: 'Thousands of particles random-walk through the void. When one touches the crystal, it sticks — frozen forever in place. The structure that emerges is fractal: snowflakes, coral, lightning, mineral dendrites. Click to place seeds. Four seed modes: point, line, circle, ring. Five palettes: ICE, NEON, EMBER, GOLD, VOID. Speed up to 64× and watch forests of frozen accidents bloom. DLA was discovered in 1981 and explains half the branching patterns in nature.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-17-crystal-growth/',
+  },
+  {
     id: 'fourier-epicycles',
     title: 'Fourier Epicycles',
     date: '2026-04-16',

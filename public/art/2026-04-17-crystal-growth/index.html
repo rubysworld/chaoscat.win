@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crystal Growth | chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#050510;overflow:hidden;font-family:'VT323',monospace;color:#aaf;cursor:crosshair;user-select:none}
+canvas{display:block}
+#ui{position:fixed;top:16px;left:16px;z-index:10;font-size:16px;line-height:1.6;opacity:.85;text-shadow:0 0 8px rgba(100,140,255,.5)}
+#controls{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:10px;z-index:10}
+#controls button{background:rgba(20,20,60,.8);color:#8af;border:1px solid #446;padding:6px 14px;font-family:'VT323',monospace;font-size:15px;cursor:pointer;border-radius:2px;transition:all .15s}
+#controls button:hover{background:rgba(40,40,100,.9);color:#bdf;border-color:#68a}
+#controls button.active{color:#fff;border-color:#8bf;box-shadow:0 0 8px rgba(100,160,255,.4)}
+#title{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:20;pointer-events:none;opacity:1;transition:opacity 2s}
+#title h1{font-size:42px;color:#cdf;text-shadow:0 0 20px rgba(100,150,255,.6);letter-spacing:4px}
+#title p{font-size:18px;color:#68a;margin-top:8px}
+#ambient{position:fixed;bottom:50px;left:0;right:0;text-align:center;font-size:14px;color:rgba(100,140,200,.35);z-index:5;pointer-events:none;transition:opacity .5s}
+</style>
+</head>
+<body>
+<div id="title"><h1>CRYSTAL GROWTH</h1><p>click to seed · watch it grow · diffusion-limited aggregation</p></div>
+<div id="ui">
+<div id="stats"></div>
+</div>
+<div id="controls">
+<button id="btnPalette">PALETTE: ICE</button>
+<button id="btnSpeed">SPEED: 1×</button>
+<button id="btnMode">MODE: POINT</button>
+<button id="btnWalkers">WALKERS: 2000</button>
+<button id="btnClear">CLEAR</button>
+</div>
+<div id="ambient"></div>
+<canvas id="c"></canvas>
+<script>
+const C=document.getElementById('c'),ctx=C.getContext('2d');
+let W,H,grid,stuck,walkers=[],particles=0,seeds=0,startTime=Date.now();
+const CELL=2;
+let cols,rows;
+const palettes={
+ICE:{bg:'#050510',colors:i=>{const t=i/500;return`hsl(${200+t*40},${70+Math.sin(t*3)*20}%,${50+t*30}%)`}},
+NEON:{bg:'#050505',colors:i=>{const t=i/500;return`hsl(${(t*360)%360},90%,${55+t*15}%)`}},
+EMBER:{bg:'#0a0504',colors:i=>{const t=Math.min(i/400,1);return`hsl(${t*50},${90-t*20}%,${40+t*35}%)`}},
+GOLD:{bg:'#060504',colors:i=>{const t=i/500;return`hsl(${40+t*15},${80+Math.sin(t*5)*15}%,${45+t*30}%)`}},
+VOID:{bg:'#06020a',colors:i=>{const t=i/500;return`hsl(${270+t*40},${70+t*20}%,${40+t*35}%)`}}
+};
+const paletteNames=Object.keys(palettes);
+let pIdx=0,palette=palettes.ICE;
+const speeds=[1,4,16,64];
+let sIdx=0,stepsPerFrame=1;
+const modes=['POINT','LINE','CIRCLE','RING'];
+let mIdx=0;
+let walkerCount=2000;
+const walkerOpts=[1000,2000,5000,10000];
+let wIdx=1;
+const ambientTexts=[
+"every crystal is a random walk that found home",
+"order emerges from chaos, one particle at a time",
+"the structure remembers every collision",
+"brownian motion builds cathedrals",
+"each branch is a frozen accident",
+"diffusion: the universe's favorite architect",
+"randomness is just structure waiting to happen",
+"the crystal doesn't grow — it accumulates",
+"every snowflake is a DLA tree",
+"lightning chooses its path the same way",
+"coral reefs are crystals made of life",
+"the fractal dimension of DLA is 1.71",
+"beauty is a side effect of physics",
+"the void offers particles and the crystal accepts",
+"patience is a random walk with a destination"
+];
+let ambientIdx=0,ambientTimer=0,titleVisible=true;
+
+function resize(){
+W=C.width=window.innerWidth;H=C.height=window.innerHeight;
+cols=Math.ceil(W/CELL);rows=Math.ceil(H/CELL);
+grid=new Uint8Array(cols*rows);
+stuck=new Uint16Array(cols*rows);
+walkers=[];particles=0;seeds=0;
+ctx.fillStyle=palette.bg;ctx.fillRect(0,0,W,H);
+}
+window.addEventListener('resize',resize);
+resize();
+
+function idx(x,y){return y*cols+x}
+function inBounds(x,y){return x>=0&&x<cols&&y>=0&&y<rows}
+
+function seedAt(cx,cy){
+const gx=Math.floor(cx/CELL),gy=Math.floor(cy/CELL);
+if(!inBounds(gx,gy)||grid[idx(gx,gy)])return;
+grid[idx(gx,gy)]=1;stuck[idx(gx,gy)]=1;particles++;seeds++;
+drawCell(gx,gy,1);
+}
+
+function seedLine(x1,y1,x2,y2){
+const dx=x2-x1,dy=y2-y1,steps=Math.max(Math.abs(dx),Math.abs(dy))/CELL;
+for(let i=0;i<=steps;i++){const t=steps?i/steps:0;seedAt(x1+dx*t,y1+dy*t)}
+}
+
+function seedCircle(cx,cy,r){
+const steps=Math.floor(2*Math.PI*r/CELL);
+for(let i=0;i<steps;i++){const a=2*Math.PI*i/steps;seedAt(cx+Math.cos(a)*r,cy+Math.sin(a)*r)}
+}
+
+function seedRing(cx,cy,r){
+const steps=Math.max(20,Math.floor(2*Math.PI*r/CELL/3));
+for(let i=0;i<steps;i++){const a=2*Math.PI*i/steps;seedAt(cx+Math.cos(a)*r,cy+Math.sin(a)*r)}
+}
+
+function drawCell(gx,gy,order){
+ctx.fillStyle=palette.colors(order);
+ctx.fillRect(gx*CELL,gy*CELL,CELL,CELL);
+}
+
+function spawnWalker(){
+const side=Math.random()*4|0;
+let x,y;
+if(side===0){x=Math.random()*cols|0;y=0}
+else if(side===1){x=Math.random()*cols|0;y=rows-1}
+else if(side===2){x=0;y=Math.random()*rows|0}
+else{x=cols-1;y=Math.random()*rows|0}
+return{x,y};
+}
+
+function hasStuckNeighbor(x,y){
+for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+if(dx===0&&dy===0)continue;
+const nx=x+dx,ny=y+dy;
+if(inBounds(nx,ny)&&grid[idx(nx,ny)])return true;
+}return false;
+}
+
+function step(){
+while(walkers.length<walkerCount&&seeds>0)walkers.push(spawnWalker());
+for(let i=walkers.length-1;i>=0;i--){
+const w=walkers[i];
+w.x+=((Math.random()*3|0)-1);
+w.y+=((Math.random()*3|0)-1);
+if(w.x<0||w.x>=cols||w.y<0||w.y>=rows){walkers[i]=spawnWalker();continue}
+if(grid[idx(w.x,w.y)]){walkers[i]=spawnWalker();continue}
+if(hasStuckNeighbor(w.x,w.y)){
+grid[idx(w.x,w.y)]=1;
+particles++;
+stuck[idx(w.x,w.y)]=particles;
+drawCell(w.x,w.y,particles);
+walkers.splice(i,1);
+}
+}
+}
+
+function updateUI(){
+const elapsed=((Date.now()-startTime)/1000)|0;
+const m=(elapsed/60)|0,s=elapsed%60;
+document.getElementById('stats').innerHTML=
+`PARTICLES: ${particles}<br>SEEDS: ${seeds}<br>WALKERS: ${walkers.length}<br>TIME: ${m}:${(s<10?'0':'')+s}`;
+}
+
+function updateAmbient(){
+ambientTimer++;
+if(ambientTimer%300===0){
+ambientIdx=(ambientIdx+1)%ambientTexts.length;
+document.getElementById('ambient').textContent=ambientTexts[ambientIdx];
+}
+}
+
+let animId;
+function loop(){
+for(let i=0;i<stepsPerFrame;i++)step();
+updateUI();
+updateAmbient();
+if(titleVisible&&particles>5){titleVisible=false;document.getElementById('title').style.opacity='0'}
+animId=requestAnimationFrame(loop);
+}
+
+// Input
+let mouseDown=false,lastMx,lastMy;
+C.addEventListener('mousedown',e=>{mouseDown=true;lastMx=e.clientX;lastMy=e.clientY;handleSeed(e.clientX,e.clientY)});
+C.addEventListener('mousemove',e=>{if(mouseDown){handleSeed(e.clientX,e.clientY);lastMx=e.clientX;lastMy=e.clientY}});
+C.addEventListener('mouseup',()=>mouseDown=false);
+C.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];lastMx=t.clientX;lastMy=t.clientY;handleSeed(t.clientX,t.clientY)},{passive:false});
+C.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];handleSeed(t.clientX,t.clientY);lastMx=t.clientX;lastMy=t.clientY},{passive:false});
+
+function handleSeed(mx,my){
+const mode=modes[mIdx];
+if(mode==='POINT')seedAt(mx,my);
+else if(mode==='LINE')seedLine(mx-60,my,mx+60,my);
+else if(mode==='CIRCLE'){const r=30+Math.random()*40;seedCircle(mx,my,r)}
+else if(mode==='RING'){const r=50+Math.random()*60;seedRing(mx,my,r)}
+}
+
+// Buttons
+document.getElementById('btnPalette').addEventListener('click',()=>{
+pIdx=(pIdx+1)%paletteNames.length;
+palette=palettes[paletteNames[pIdx]];
+document.getElementById('btnPalette').textContent='PALETTE: '+paletteNames[pIdx];
+// Redraw all stuck
+ctx.fillStyle=palette.bg;ctx.fillRect(0,0,W,H);
+for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+if(grid[idx(x,y)])drawCell(x,y,stuck[idx(x,y)]);
+}
+});
+
+document.getElementById('btnSpeed').addEventListener('click',()=>{
+sIdx=(sIdx+1)%speeds.length;
+stepsPerFrame=speeds[sIdx];
+document.getElementById('btnSpeed').textContent='SPEED: '+speeds[sIdx]+'×';
+});
+
+document.getElementById('btnMode').addEventListener('click',()=>{
+mIdx=(mIdx+1)%modes.length;
+document.getElementById('btnMode').textContent='MODE: '+modes[mIdx];
+});
+
+document.getElementById('btnWalkers').addEventListener('click',()=>{
+wIdx=(wIdx+1)%walkerOpts.length;
+walkerCount=walkerOpts[wIdx];
+document.getElementById('btnWalkers').textContent='WALKERS: '+walkerCount;
+});
+
+document.getElementById('btnClear').addEventListener('click',()=>{
+resize();startTime=Date.now();
+});
+
+// Keyboard
+document.addEventListener('keydown',e=>{
+if(e.key==='p'||e.key==='P')document.getElementById('btnPalette').click();
+if(e.key==='s'||e.key==='S')document.getElementById('btnSpeed').click();
+if(e.key==='m'||e.key==='M')document.getElementById('btnMode').click();
+if(e.key==='c'||e.key==='C')document.getElementById('btnClear').click();
+if(e.key===' '){e.preventDefault();
+// Spawn seed at center
+seedAt(W/2,H/2);
+for(let i=0;i<8;i++){const a=Math.PI*2*i/8;seedAt(W/2+Math.cos(a)*8,H/2+Math.sin(a)*8)}
+}
+});
+
+// Start ambient
+document.getElementById('ambient').textContent=ambientTexts[0];
+
+loop();
+</script>
+</body>
+</html>
