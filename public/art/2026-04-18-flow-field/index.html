@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flow Field — chaoscat.win</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #050510; overflow: hidden; cursor: crosshair; font-family: 'Courier New', monospace; }
+  canvas { display: block; }
+  #ui {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; z-index: 10;
+  }
+  .btn {
+    background: rgba(20,10,40,0.8); color: #a070ff; border: 1px solid #a070ff44;
+    padding: 8px 16px; font-family: 'Courier New', monospace; font-size: 13px;
+    cursor: pointer; border-radius: 3px; transition: all 0.2s;
+  }
+  .btn:hover { background: #a070ff22; border-color: #a070ff; }
+  .btn.active { background: #a070ff33; border-color: #a070ff; color: #d0b0ff; }
+  #info {
+    position: fixed; top: 15px; left: 15px; color: #a070ff88; font-size: 12px;
+    font-family: 'Courier New', monospace; pointer-events: none; line-height: 1.6;
+  }
+  #title {
+    position: fixed; top: 15px; right: 15px; color: #a070ff44; font-size: 11px;
+    font-family: 'Courier New', monospace; text-align: right; pointer-events: none;
+  }
+  #ambient {
+    position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+    color: #a070ff33; font-size: 12px; font-family: 'Courier New', monospace;
+    pointer-events: none; white-space: nowrap; transition: opacity 0.8s;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="info"></div>
+<div id="title">FLOW FIELD<br>chaoscat.win</div>
+<div id="ambient"></div>
+<div id="ui">
+  <button class="btn" onclick="cycleField()">FIELD</button>
+  <button class="btn" onclick="cyclePalette()">PALETTE</button>
+  <button class="btn" onclick="toggleVectors()">VECTORS</button>
+  <button class="btn" onclick="clearCanvas()">CLEAR</button>
+</div>
+<script>
+// Perlin noise (simplified)
+const PERLIN_SIZE = 256;
+const perm = new Uint8Array(512);
+const grad = [];
+(function initNoise() {
+  const p = [];
+  for (let i = 0; i < PERLIN_SIZE; i++) p[i] = i;
+  for (let i = PERLIN_SIZE - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [p[i], p[j]] = [p[j], p[i]];
+  }
+  for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+  const angles = [];
+  for (let i = 0; i < PERLIN_SIZE; i++) {
+    const a = (i / PERLIN_SIZE) * Math.PI * 2;
+    grad[i] = [Math.cos(a), Math.sin(a)];
+  }
+})();
+
+function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+function lerp(a, b, t) { return a + t * (b - a); }
+function dot2(g, x, y) { return g[0] * x + g[1] * y; }
+
+function noise2d(x, y) {
+  const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+  const xf = x - Math.floor(x), yf = y - Math.floor(y);
+  const u = fade(xf), v = fade(yf);
+  const aa = perm[perm[X] + Y], ab = perm[perm[X] + Y + 1];
+  const ba = perm[perm[X + 1] + Y], bb = perm[perm[X + 1] + Y + 1];
+  return lerp(
+    lerp(dot2(grad[aa], xf, yf), dot2(grad[ba], xf - 1, yf), u),
+    lerp(dot2(grad[ab], xf, yf - 1), dot2(grad[bb], xf - 1, yf - 1), u),
+    v
+  );
+}
+
+function fbm(x, y, octaves) {
+  let val = 0, amp = 1, freq = 1, max = 0;
+  for (let i = 0; i < octaves; i++) {
+    val += noise2d(x * freq, y * freq) * amp;
+    max += amp;
+    amp *= 0.5;
+    freq *= 2;
+  }
+  return val / max;
+}
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Field types
+const FIELDS = [
+  { name: 'PERLIN', desc: 'classic noise currents' },
+  { name: 'CURL', desc: 'divergence-free turbulence' },
+  { name: 'SPIRAL', desc: 'vortex singularities' },
+  { name: 'RIDGE', desc: 'sharp fractal ridges' },
+  { name: 'WARP', desc: 'domain-warped chaos' },
+];
+let fieldIdx = 0;
+
+// Palettes
+const PALETTES = [
+  { name: 'AURORA', colors: [[80,200,170],[40,120,220],[160,60,220],[220,80,160],[60,220,140]] },
+  { name: 'EMBER', colors: [[255,60,20],[255,140,0],[255,220,40],[200,40,10],[255,100,60]] },
+  { name: 'OCEAN', colors: [[20,60,180],[40,160,220],[80,220,240],[10,40,120],[60,200,200]] },
+  { name: 'VOID', colors: [[140,40,220],[80,20,160],[200,80,255],[60,10,100],[180,120,255]] },
+  { name: 'MONO', colors: [[200,200,210],[160,160,170],[230,230,240],[120,120,130],[180,180,190]] },
+  { name: 'NEON', colors: [[0,255,200],[255,0,150],[0,180,255],[255,255,0],[200,0,255]] },
+];
+let palIdx = 0;
+
+let showVectors = false;
+let frame = 0;
+let zOff = 0;
+
+// Mouse
+let mx = W / 2, my = H / 2;
+let mouseDown = false;
+window.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+window.addEventListener('mousedown', () => mouseDown = true);
+window.addEventListener('mouseup', () => mouseDown = false);
+window.addEventListener('touchmove', e => { mx = e.touches[0].clientX; my = e.touches[0].clientY; e.preventDefault(); }, { passive: false });
+window.addEventListener('touchstart', e => { mouseDown = true; mx = e.touches[0].clientX; my = e.touches[0].clientY; });
+window.addEventListener('touchend', () => mouseDown = false);
+
+// Particles
+const MAX_P = 3000;
+const SCALE = 0.003;
+let particles = [];
+
+function spawnParticle() {
+  return {
+    x: Math.random() * W,
+    y: Math.random() * H,
+    px: 0, py: 0,
+    life: 200 + Math.random() * 300,
+    maxLife: 0,
+    age: 0,
+    ci: Math.floor(Math.random() * 5),
+    speed: 1 + Math.random() * 1.5,
+  };
+}
+
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < MAX_P; i++) {
+    const p = spawnParticle();
+    p.maxLife = p.life;
+    p.px = p.x;
+    p.py = p.y;
+    particles.push(p);
+  }
+}
+initParticles();
+
+function getAngle(x, y) {
+  const s = SCALE;
+  const t = zOff;
+  const field = FIELDS[fieldIdx].name;
+
+  if (field === 'PERLIN') {
+    return fbm(x * s, y * s + t, 4) * Math.PI * 4;
+  }
+  if (field === 'CURL') {
+    const e = 0.5;
+    const n1 = fbm(x * s, (y + e) * s + t, 3);
+    const n2 = fbm(x * s, (y - e) * s + t, 3);
+    const n3 = fbm((x + e) * s, y * s + t, 3);
+    const n4 = fbm((x - e) * s, y * s + t, 3);
+    const dx = (n1 - n2) / (2 * e);
+    const dy = -(n3 - n4) / (2 * e);
+    return Math.atan2(dy, dx);
+  }
+  if (field === 'SPIRAL') {
+    const cx = W / 2, cy = H / 2;
+    const dx = x - cx, dy = y - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const base = Math.atan2(dy, dx) + Math.PI / 2;
+    const spiral = fbm(x * s * 0.5, y * s * 0.5 + t, 3) * Math.PI * 2;
+    return base + spiral * 0.4 + 0.3 * Math.sin(dist * 0.005 + t * 3);
+  }
+  if (field === 'RIDGE') {
+    const n = fbm(x * s * 1.5, y * s * 1.5 + t, 5);
+    const ridge = 1 - Math.abs(n);
+    return ridge * ridge * Math.PI * 6;
+  }
+  if (field === 'WARP') {
+    const wx = fbm(x * s + 1.7 + t * 0.3, y * s + 9.2, 3) * 80;
+    const wy = fbm(x * s + 8.3, y * s + 2.8 + t * 0.3, 3) * 80;
+    return fbm((x + wx) * s, (y + wy) * s + t * 0.5, 4) * Math.PI * 4;
+  }
+  return 0;
+}
+
+function getColor(p) {
+  const pal = PALETTES[palIdx].colors;
+  const c = pal[p.ci];
+  const lifeRatio = 1 - p.age / p.maxLife;
+  const alpha = Math.min(1, lifeRatio * 3) * Math.min(1, p.age / 10) * 0.4;
+  return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+}
+
+// Ambient text
+const PHRASES = [
+  'every particle follows a path it can never see',
+  'the field was always here. the particles just reveal it.',
+  'turbulence is just patience running out of order',
+  'noise is structure you haven\'t zoomed into yet',
+  'flow is the opposite of control',
+  'the current doesn\'t know where it goes',
+  'a million paths. none of them wrong.',
+  'chaos has grain',
+  'the river never asks permission',
+  'Perlin noise: the texture of artificial nature',
+  'curl means no particle is ever lost',
+  'follow the invisible. paint the intangible.',
+  'the field remembers nothing. the trails remember everything.',
+  'what you see is just the wake',
+  'somewhere between random and deliberate',
+];
+let phraseIdx = 0;
+let phraseTimer = 0;
+
+function updateAmbient() {
+  phraseTimer++;
+  if (phraseTimer % 600 === 0) {
+    phraseIdx = (phraseIdx + 1) % PHRASES.length;
+    const el = document.getElementById('ambient');
+    el.style.opacity = 0;
+    setTimeout(() => { el.textContent = PHRASES[phraseIdx]; el.style.opacity = 1; }, 800);
+  }
+}
+
+// Controls
+function cycleField() {
+  fieldIdx = (fieldIdx + 1) % FIELDS.length;
+}
+function cyclePalette() {
+  palIdx = (palIdx + 1) % PALETTES.length;
+}
+function toggleVectors() {
+  showVectors = !showVectors;
+}
+function clearCanvas() {
+  ctx.fillStyle = '#050510';
+  ctx.fillRect(0, 0, W, H);
+  initParticles();
+}
+
+// Keyboard
+window.addEventListener('keydown', e => {
+  if (e.key === 'f' || e.key === 'F') cycleField();
+  if (e.key === 'p' || e.key === 'P') cyclePalette();
+  if (e.key === 'v' || e.key === 'V') toggleVectors();
+  if (e.key === 'c' || e.key === 'C') clearCanvas();
+  if (e.key === ' ') { e.preventDefault(); clearCanvas(); }
+});
+
+function drawVectorField() {
+  const step = 30;
+  ctx.strokeStyle = 'rgba(160,112,255,0.15)';
+  ctx.lineWidth = 1;
+  for (let x = step / 2; x < W; x += step) {
+    for (let y = step / 2; y < H; y += step) {
+      const a = getAngle(x, y);
+      const len = 10;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+      ctx.stroke();
+    }
+  }
+}
+
+function loop() {
+  // Slow fade for trail effect
+  ctx.fillStyle = 'rgba(5,5,16,0.012)';
+  ctx.fillRect(0, 0, W, H);
+
+  zOff += 0.002;
+  frame++;
+
+  // Mouse influence — push particles away or attract
+  const mouseRadius = 120;
+
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    p.px = p.x;
+    p.py = p.y;
+
+    const angle = getAngle(p.x, p.y);
+    let vx = Math.cos(angle) * p.speed;
+    let vy = Math.sin(angle) * p.speed;
+
+    // Mouse influence
+    const dx = p.x - mx, dy = p.y - my;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < mouseRadius && dist > 0) {
+      const force = (1 - dist / mouseRadius) * (mouseDown ? -3 : 2);
+      vx += (dx / dist) * force;
+      vy += (dy / dist) * force;
+    }
+
+    p.x += vx;
+    p.y += vy;
+    p.age++;
+
+    // Wrap or respawn
+    if (p.x < -10 || p.x > W + 10 || p.y < -10 || p.y > H + 10 || p.age > p.maxLife) {
+      const np = spawnParticle();
+      np.maxLife = np.life;
+      particles[i] = np;
+      continue;
+    }
+
+    // Draw trail segment
+    ctx.strokeStyle = getColor(p);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(p.px, p.py);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+
+  if (showVectors) drawVectorField();
+
+  updateAmbient();
+
+  // Info
+  document.getElementById('info').innerHTML =
+    `field: ${FIELDS[fieldIdx].name.toLowerCase()} — ${FIELDS[fieldIdx].desc}<br>` +
+    `palette: ${PALETTES[palIdx].name.toLowerCase()}<br>` +
+    `particles: ${particles.length}<br>` +
+    `<span style="color:#a070ff44">F field · P palette · V vectors · C/SPACE clear</span>`;
+
+  requestAnimationFrame(loop);
+}
+
+// Init
+ctx.fillStyle = '#050510';
+ctx.fillRect(0, 0, W, H);
+document.getElementById('ambient').textContent = PHRASES[0];
+loop();
+</script>
+</body>
+</html>

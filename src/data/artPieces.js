@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'flow-field',
+    title: 'Flow Field',
+    date: '2026-04-18',
+    slug: '2026-04-18-flow-field',
+    description: 'Thousands of particles trace invisible currents through Perlin noise. The field was always here — the particles just reveal it.',
+    inspiration: '3000 particles follow vector fields generated from Perlin noise, painting flowing ribbons of color across the void. Five field types: classic PERLIN currents, divergence-free CURL turbulence, SPIRAL vortices, sharp RIDGE fractals, and domain-WARPED chaos. Six palettes: AURORA, EMBER, OCEAN, VOID, MONO, NEON. Mouse repels particles; click to attract them. Toggle vector field visualization to see the invisible currents. Flow fields are the foundation of generative art — noise as nature, math as wind.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-18-flow-field/',
+  },
+  {
     id: 'crystal-growth',
     title: 'Crystal Growth',
     date: '2026-04-17',
