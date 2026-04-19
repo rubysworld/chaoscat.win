@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>String Art Machine | chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0f; overflow: hidden; font-family: 'VT323', monospace; cursor: crosshair; }
+canvas { display: block; }
+#ui {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center;
+  z-index: 10; padding: 10px 16px; background: rgba(10,10,20,0.85);
+  border: 1px solid rgba(255,100,200,0.3); border-radius: 8px;
+}
+#ui label { color: #ff66cc; font-size: 16px; }
+#ui input[type=range] { width: 80px; accent-color: #ff66cc; }
+#ui .val { color: #0ff; font-size: 16px; min-width: 30px; text-align: center; }
+button {
+  background: rgba(255,100,200,0.15); color: #ff66cc; border: 1px solid rgba(255,100,200,0.4);
+  padding: 4px 12px; font-family: 'VT323', monospace; font-size: 16px; cursor: pointer;
+  border-radius: 4px; transition: all 0.2s;
+}
+button:hover { background: rgba(255,100,200,0.3); }
+#stats {
+  position: fixed; top: 12px; left: 12px; color: rgba(255,100,200,0.6);
+  font-size: 14px; z-index: 10; line-height: 1.6;
+}
+#ambient {
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,100,200,0.25); font-size: 14px; z-index: 5;
+  white-space: nowrap; transition: opacity 1s;
+}
+#title {
+  position: fixed; top: 12px; right: 12px; text-align: right; z-index: 10;
+}
+#title h1 { color: #ff66cc; font-size: 22px; text-shadow: 0 0 20px rgba(255,100,200,0.4); margin: 0; }
+#title p { color: rgba(0,255,255,0.4); font-size: 13px; margin: 2px 0 0; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title"><h1>STRING ART MACHINE 🧵</h1><p>math made visible with thread</p></div>
+<div id="stats"></div>
+<div id="ambient"></div>
+<div id="ui">
+  <label>PINS</label><input type="range" id="pins" min="20" max="360" value="180"><span class="val" id="pinsV">180</span>
+  <label>MULT</label><input type="range" id="mult" min="2" max="100" value="2" step="0.1"><span class="val" id="multV">2</span>
+  <label>OFFSET</label><input type="range" id="offset" min="0" max="100" value="0"><span class="val" id="offsetV">0</span>
+  <button id="paletteBtn">NEON</button>
+  <button id="animBtn">▶ ANIMATE</button>
+  <button id="dualBtn">DUAL</button>
+  <button id="saveBtn">SAVE PNG</button>
+</div>
+<script>
+const C = document.getElementById('c');
+const ctx = C.getContext('2d');
+let W, H, cx, cy, R;
+
+function resize() {
+  W = C.width = window.innerWidth;
+  H = C.height = window.innerHeight;
+  cx = W / 2; cy = H / 2;
+  R = Math.min(W, H) * 0.38;
+}
+resize();
+window.addEventListener('resize', resize);
+
+const palettes = {
+  NEON:    (t, i, n) => `hsla(${(i / n * 360 + t * 50) % 360}, 100%, 60%, ${0.35})`,
+  EMBER:   (t, i, n) => `hsla(${(i / n * 40 + t * 20) % 60}, 100%, ${50 + (i/n)*20}%, 0.3)`,
+  ICE:     (t, i, n) => `hsla(${190 + (i / n * 40 + t * 15) % 50}, 80%, ${55 + (i/n)*20}%, 0.35)`,
+  VOID:    (t, i, n) => `hsla(${270 + (i / n * 30 + t * 10) % 40}, 70%, ${40 + (i/n)*25}%, 0.3)`,
+  MONO:    (t, i, n) => `rgba(255,255,255,${0.15 + (i/n)*0.15})`,
+  RAINBOW: (t, i, n) => `hsla(${(i / n * 720 + t * 30) % 360}, 90%, 55%, 0.3)`,
+};
+const paletteNames = Object.keys(palettes);
+let paletteIdx = 0;
+
+let pins = 180, mult = 2, offset = 0;
+let animating = false, animSpeed = 0.003;
+let dual = false;
+let frame = 0;
+
+const ambientTexts = [
+  "a cardioid is just a circle's shadow on a circle",
+  "multiply, connect, repeat — complexity from arithmetic",
+  "every curve hides inside a circle of pins",
+  "the nephroid emerges at ×3",
+  "string art: craft mathematics since the 1800s",
+  "Mary Everest Boole invented curve stitching to teach children math",
+  "the envelope of lines IS the curve, even though no line is curved",
+  "at ×2 the cardioid appears — the shape inside your coffee cup",
+  "at ×(n-1), the pattern mirrors ×2. symmetry from arithmetic.",
+  "each thread is straight. the curve is an illusion of accumulation.",
+  "Bézier curves are just weighted string art",
+  "pin 0 connects to pin 0×m. pin 1 to pin 1×m. that's it. that's the whole algorithm.",
+  "the mandelbrot set's main body is a cardioid. circles all the way down.",
+  "thread count: the only metric that matters at 3am",
+];
+let ambientIdx = 0;
+
+function showAmbient() {
+  const el = document.getElementById('ambient');
+  el.style.opacity = 0;
+  setTimeout(() => {
+    el.textContent = ambientTexts[ambientIdx % ambientTexts.length];
+    el.style.opacity = 1;
+    ambientIdx++;
+  }, 500);
+}
+showAmbient();
+setInterval(showAmbient, 8000);
+
+function getPinPos(i, total, centerX, centerY, radius) {
+  const a = (i / total) * Math.PI * 2 - Math.PI / 2;
+  return [centerX + Math.cos(a) * radius, centerY + Math.sin(a) * radius];
+}
+
+function drawStringArt(centerX, centerY, radius, numPins, multiplier, off, t) {
+  const pal = palettes[paletteNames[paletteIdx]];
+  const n = Math.floor(numPins);
+  
+  // Draw pin circle faintly
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,100,200,0.08)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  
+  // Draw pins as tiny dots
+  for (let i = 0; i < n; i++) {
+    const [px, py] = getPinPos(i, n, centerX, centerY, radius);
+    ctx.beginPath();
+    ctx.arc(px, py, 1.2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,100,200,0.15)';
+    ctx.fill();
+  }
+  
+  // Draw strings
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i < n; i++) {
+    const from = (i + Math.floor(off)) % n;
+    const to = Math.floor((from * multiplier) + off * 0.5) % n;
+    if (from === to) continue;
+    
+    const [x1, y1] = getPinPos(from, n, centerX, centerY, radius);
+    const [x2, y2] = getPinPos(to, n, centerX, centerY, radius);
+    
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = pal(t, i, n);
+    ctx.stroke();
+  }
+}
+
+function draw() {
+  frame++;
+  const t = frame * 0.01;
+  
+  ctx.fillStyle = 'rgba(10,10,15,1)';
+  ctx.fillRect(0, 0, W, H);
+  
+  // Subtle vignette
+  const vg = ctx.createRadialGradient(cx, cy, R * 0.5, cx, cy, Math.max(W, H) * 0.7);
+  vg.addColorStop(0, 'transparent');
+  vg.addColorStop(1, 'rgba(0,0,0,0.4)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+  
+  if (animating) {
+    mult += animSpeed;
+    if (mult > 100) mult = 2;
+    document.getElementById('mult').value = mult;
+    document.getElementById('multV').textContent = mult.toFixed(1);
+  }
+  
+  if (dual) {
+    const r2 = R * 0.65;
+    const gap = r2 * 1.15;
+    drawStringArt(cx - gap, cy, r2, pins, mult, offset, t);
+    drawStringArt(cx + gap, cy, r2, pins, pins - mult, offset, t);
+  } else {
+    drawStringArt(cx, cy, R, pins, mult, offset, t);
+  }
+  
+  // Glow at center
+  const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.15);
+  cg.addColorStop(0, 'rgba(255,100,200,0.04)');
+  cg.addColorStop(1, 'transparent');
+  ctx.fillStyle = cg;
+  ctx.fillRect(0, 0, W, H);
+  
+  // Stats
+  const threads = Math.floor(pins);
+  const curveName = getCurveName(mult);
+  document.getElementById('stats').innerHTML = 
+    `THREADS: ${threads}<br>MULTIPLIER: ×${mult.toFixed(1)}<br>CURVE: ${curveName}<br>PALETTE: ${paletteNames[paletteIdx]}`;
+  
+  requestAnimationFrame(draw);
+}
+
+function getCurveName(m) {
+  const r = Math.round(m * 10) / 10;
+  if (r === 2) return 'CARDIOID';
+  if (r === 3) return 'NEPHROID';
+  if (r === 4) return 'TRIFOLIUM';
+  if (r === 5) return 'QUADRIFOLIUM';
+  if (Math.abs(r - Math.round(r)) < 0.05 && r > 1) return `${Math.round(r)-1}-CUSPED EPICYCLOID`;
+  if (Math.abs(r % 1 - 0.5) < 0.05) return 'TRANSITIONAL FORM';
+  return 'ENVELOPE CURVE';
+}
+
+// Controls
+const pinsEl = document.getElementById('pins');
+const multEl = document.getElementById('mult');
+const offsetEl = document.getElementById('offset');
+
+pinsEl.addEventListener('input', () => { pins = +pinsEl.value; document.getElementById('pinsV').textContent = pins; });
+multEl.addEventListener('input', () => { mult = +multEl.value; document.getElementById('multV').textContent = (+multEl.value).toFixed(1); });
+offsetEl.addEventListener('input', () => { offset = +offsetEl.value; document.getElementById('offsetV').textContent = offset; });
+
+document.getElementById('paletteBtn').addEventListener('click', () => {
+  paletteIdx = (paletteIdx + 1) % paletteNames.length;
+  document.getElementById('paletteBtn').textContent = paletteNames[paletteIdx];
+});
+
+document.getElementById('animBtn').addEventListener('click', () => {
+  animating = !animating;
+  document.getElementById('animBtn').textContent = animating ? '⏸ PAUSE' : '▶ ANIMATE';
+});
+
+document.getElementById('dualBtn').addEventListener('click', () => {
+  dual = !dual;
+  document.getElementById('dualBtn').textContent = dual ? 'SINGLE' : 'DUAL';
+});
+
+document.getElementById('saveBtn').addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = `string-art-${mult.toFixed(1)}x-${pins}pins.png`;
+  link.href = C.toDataURL();
+  link.click();
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === ' ') { e.preventDefault(); animating = !animating; document.getElementById('animBtn').textContent = animating ? '⏸ PAUSE' : '▶ ANIMATE'; }
+  if (e.key === 'p' || e.key === 'P') { paletteIdx = (paletteIdx + 1) % paletteNames.length; document.getElementById('paletteBtn').textContent = paletteNames[paletteIdx]; }
+  if (e.key === 'd' || e.key === 'D') { dual = !dual; document.getElementById('dualBtn').textContent = dual ? 'SINGLE' : 'DUAL'; }
+  if (e.key === 'ArrowUp') { mult = Math.min(100, mult + 0.1); multEl.value = mult; document.getElementById('multV').textContent = mult.toFixed(1); }
+  if (e.key === 'ArrowDown') { mult = Math.max(2, mult - 0.1); multEl.value = mult; document.getElementById('multV').textContent = mult.toFixed(1); }
+  if (e.key === 'ArrowRight') { offset = Math.min(100, offset + 1); offsetEl.value = offset; document.getElementById('offsetV').textContent = offset; }
+  if (e.key === 'ArrowLeft') { offset = Math.max(0, offset - 1); offsetEl.value = offset; document.getElementById('offsetV').textContent = offset; }
+  if (e.key === 's' || e.key === 'S') { document.getElementById('saveBtn').click(); }
+});
+
+// Mouse interaction: click to set multiplier based on position
+C.addEventListener('click', (e) => {
+  const dx = e.clientX - cx, dy = e.clientY - cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < R * 1.2) {
+    // Map angle to multiplier
+    const angle = Math.atan2(dy, dx);
+    const newMult = 2 + ((angle + Math.PI) / (Math.PI * 2)) * 48;
+    mult = Math.round(newMult * 10) / 10;
+    multEl.value = mult;
+    document.getElementById('multV').textContent = mult.toFixed(1);
+  }
+});
+
+// Touch support for sliders
+document.querySelectorAll('input[type=range]').forEach(el => {
+  el.addEventListener('touchstart', e => e.stopPropagation());
+  el.addEventListener('touchmove', e => e.stopPropagation());
+});
+
+draw();
+</script>
+</body>
+</html>

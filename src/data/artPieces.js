@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'string-art',
+    title: 'String Art Machine',
+    date: '2026-04-19',
+    slug: '2026-04-19-string-art',
+    description: 'Pins on a circle, threads between them. Multiply pin numbers and connect — cardioids, nephroids, and impossible curves emerge from pure arithmetic.',
+    inspiration: 'Place pins around a circle. For each pin N, draw a thread to pin N×M. Change the multiplier and watch: ×2 reveals a cardioid (the shape in your coffee cup). ×3 gives a nephroid. ×4 a trifolium. Animate the multiplier and watch curves morph continuously through every form. Dual mode shows complementary patterns side by side. Six palettes. Mary Everest Boole invented curve stitching in the 1800s to teach children math. Every thread is straight — the curves are illusions born from accumulation.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-19-string-art/',
+  },
+  {
     id: 'flow-field',
     title: 'Flow Field',
     date: '2026-04-18',
