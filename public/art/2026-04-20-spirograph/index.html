@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spirograph Engine — chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;overflow:hidden;font-family:'VT323',monospace;cursor:crosshair;user-select:none}
+canvas{display:block}
+#ui{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:10;flex-wrap:wrap;justify-content:center}
+.btn{background:rgba(20,10,30,0.8);color:#0ff;border:1px solid #0ff33;padding:6px 14px;font-family:'VT323',monospace;font-size:16px;cursor:pointer;transition:all .2s;border-radius:2px}
+.btn:hover{background:#0ff2;color:#fff;border-color:#0ff}
+.btn.active{background:#0ff3;color:#fff;border-color:#0ff}
+#info{position:fixed;top:15px;left:15px;color:#0ff8;font-size:14px;z-index:10;pointer-events:none;line-height:1.6}
+#controls{position:fixed;top:15px;right:15px;z-index:10;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.slider-row{display:flex;align-items:center;gap:8px;color:#0ff8;font-size:14px}
+.slider-row input[type=range]{width:120px;accent-color:#0ff}
+.slider-row .val{min-width:35px;text-align:right;color:#0ff}
+#ambient{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);color:#fff2;font-size:14px;text-align:center;pointer-events:none;z-index:5;white-space:nowrap;transition:opacity 1s}
+#equation{position:fixed;top:50%;right:15px;transform:translateY(-50%);color:#0ff3;font-size:13px;pointer-events:none;z-index:5;text-align:right;line-height:1.8}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="info">
+  <div id="title">SPIROGRAPH ENGINE</div>
+  <div id="stats"></div>
+</div>
+
+<div id="controls">
+  <div class="slider-row"><span>R (outer)</span><input type="range" id="sR" min="50" max="300" value="180"><span class="val" id="vR">180</span></div>
+  <div class="slider-row"><span>r (inner)</span><input type="range" id="sr" min="10" max="200" value="72"><span class="val" id="vr">72</span></div>
+  <div class="slider-row"><span>d (pen)</span><input type="range" id="sd" min="5" max="250" value="120"><span class="val" id="vd">120</span></div>
+  <div class="slider-row"><span>speed</span><input type="range" id="sSpeed" min="1" max="20" value="5"><span class="val" id="vSpeed">5</span></div>
+</div>
+
+<div id="ui">
+  <button class="btn" id="bPalette">PALETTE: NEON</button>
+  <button class="btn" id="bType">HYPO</button>
+  <button class="btn" id="bGears">GEARS: ON</button>
+  <button class="btn" id="bClear">CLEAR</button>
+  <button class="btn" id="bRandom">RANDOM</button>
+  <button class="btn" id="bAnimate">ANIMATE</button>
+  <button class="btn" id="bSave">SAVE PNG</button>
+</div>
+
+<div id="ambient"></div>
+<div id="equation"></div>
+
+<script>
+const C = document.getElementById('c');
+const ctx = C.getContext('2d');
+let W, H, cx, cy;
+
+function resize() {
+  W = C.width = innerWidth;
+  H = C.height = innerHeight;
+  cx = W / 2;
+  cy = H / 2;
+}
+resize();
+addEventListener('resize', resize);
+
+// State
+let R = 180, r = 72, d = 120, speed = 5;
+let t = 0, drawing = true;
+let trail = [];
+let showGears = true;
+let curveType = 'hypo'; // hypo or epi
+let animating = false;
+let animTarget = null;
+
+const palettes = {
+  NEON: ['#0ff','#f0f','#0f0','#ff0','#f60','#60f'],
+  EMBER: ['#ff4400','#ff6600','#ff8800','#ffaa00','#ffcc00','#ff2200'],
+  ICE: ['#88ddff','#44bbff','#2299ff','#0077ff','#aaeeff','#66ccff'],
+  VOID: ['#cc44ff','#9933ff','#7722dd','#aa55ff','#dd66ff','#6611cc'],
+  RAINBOW: null, // special: hue from angle
+  MONO: ['#ffffff','#cccccc','#aaaaaa','#dddddd','#eeeeee','#999999'],
+};
+const paletteNames = Object.keys(palettes);
+let paletteIdx = 0;
+let paletteName = 'NEON';
+
+const ambientTexts = [
+  "gears within gears within gears",
+  "the pen traces what the circle cannot say alone",
+  "spirographs are Fourier series you can touch",
+  "every closed curve hides inside spinning circles",
+  "the ratio R:r determines the petals",
+  "hypotrochoids live inside. epitrochoids orbit outside.",
+  "Spirograph™ was invented in 1965 by Denys Fisher",
+  "when R/r is rational, the curve closes. when not, it never does.",
+  "the GCD decides how many petals bloom",
+  "circles dreaming of other circles",
+  "a pen on a gear on a gear on a table. that's all.",
+  "some of the most beautiful math fits inside a toy",
+  "every tooth on the gear is a discrete Fourier harmonic",
+  "guilloché patterns on banknotes are spirographs",
+  "the curve doesn't know it's beautiful. it just follows the math.",
+];
+let ambientIdx = 0;
+let ambientTimer = 0;
+
+function getColor(angle, idx) {
+  if (paletteName === 'RAINBOW') {
+    return `hsl(${(angle * 180 / Math.PI + idx * 0.1) % 360}, 100%, 65%)`;
+  }
+  const pal = palettes[paletteName];
+  return pal[idx % pal.length];
+}
+
+function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while(b) { [a,b] = [b, a%b]; } return a; }
+
+function calcPoint(t) {
+  if (curveType === 'hypo') {
+    const x = (R - r) * Math.cos(t) + d * Math.cos((R - r) / r * t);
+    const y = (R - r) * Math.sin(t) - d * Math.sin((R - r) / r * t);
+    return { x: cx + x, y: cy + y };
+  } else {
+    const x = (R + r) * Math.cos(t) - d * Math.cos((R + r) / r * t);
+    const y = (R + r) * Math.sin(t) - d * Math.sin((R + r) / r * t);
+    return { x: cx + x, y: cy + y };
+  }
+}
+
+function calcGearCenter(t) {
+  if (curveType === 'hypo') {
+    return {
+      x: cx + (R - r) * Math.cos(t),
+      y: cy + (R - r) * Math.sin(t)
+    };
+  } else {
+    return {
+      x: cx + (R + r) * Math.cos(t),
+      y: cy + (R + r) * Math.sin(t)
+    };
+  }
+}
+
+function completionAngle() {
+  const g = gcd(R, r);
+  return 2 * Math.PI * (r / g);
+}
+
+function drawGears() {
+  if (!showGears) return;
+  const gc = calcGearCenter(t);
+  const pt = calcPoint(t);
+
+  // Outer circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.strokeStyle = '#fff1';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Inner gear circle
+  ctx.beginPath();
+  ctx.arc(gc.x, gc.y, r, 0, Math.PI * 2);
+  ctx.strokeStyle = '#0ff3';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Pen arm
+  ctx.beginPath();
+  ctx.moveTo(gc.x, gc.y);
+  ctx.lineTo(pt.x, pt.y);
+  ctx.strokeStyle = '#f0f4';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Pen dot
+  ctx.beginPath();
+  ctx.arc(pt.x, pt.y, 3, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.shadowColor = '#fff';
+  ctx.shadowBlur = 10;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Gear center dot
+  ctx.beginPath();
+  ctx.arc(gc.x, gc.y, 2, 0, Math.PI * 2);
+  ctx.fillStyle = '#0ff6';
+  ctx.fill();
+
+  // Teeth marks on inner gear
+  const teeth = Math.max(8, Math.floor(r / 3));
+  for (let i = 0; i < teeth; i++) {
+    const a = (i / teeth) * Math.PI * 2 + (curveType === 'hypo' ? -(R - r) / r * t : (R + r) / r * t);
+    const tx = gc.x + r * Math.cos(a);
+    const ty = gc.y + r * Math.sin(a);
+    ctx.beginPath();
+    ctx.arc(tx, ty, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#0ff2';
+    ctx.fill();
+  }
+}
+
+function clearCanvas() {
+  trail = [];
+  t = 0;
+  ctx.clearRect(0, 0, W, H);
+}
+
+function randomize() {
+  R = 50 + Math.floor(Math.random() * 250);
+  r = 10 + Math.floor(Math.random() * Math.min(190, R - 5));
+  d = 5 + Math.floor(Math.random() * 245);
+  document.getElementById('sR').value = R;
+  document.getElementById('sr').value = r;
+  document.getElementById('sd').value = d;
+  document.getElementById('vR').textContent = R;
+  document.getElementById('vr').textContent = r;
+  document.getElementById('vd').textContent = d;
+  clearCanvas();
+}
+
+// Presets for animate mode
+const presets = [
+  {R:180,r:72,d:120},{R:200,r:50,d:150},{R:150,r:90,d:80},{R:220,r:33,d:180},
+  {R:160,r:100,d:60},{R:250,r:70,d:200},{R:120,r:45,d:110},{R:200,r:80,d:160},
+  {R:180,r:60,d:140},{R:140,r:35,d:100},{R:260,r:90,d:170},{R:170,r:55,d:130},
+];
+
+function startAnimate() {
+  animating = !animating;
+  document.getElementById('bAnimate').textContent = animating ? 'STOP' : 'ANIMATE';
+  document.getElementById('bAnimate').classList.toggle('active', animating);
+  if (animating) pickNewTarget();
+}
+
+function pickNewTarget() {
+  const p = presets[Math.floor(Math.random() * presets.length)];
+  animTarget = { R: p.R, r: p.r, d: p.d, progress: 0 };
+  clearCanvas();
+}
+
+function lerpTo(current, target, amt) {
+  return current + (target - current) * amt;
+}
+
+// Sliders
+['R','r','d','Speed'].forEach(k => {
+  const sl = document.getElementById('s' + k);
+  const vl = document.getElementById('v' + k);
+  sl.addEventListener('input', () => {
+    vl.textContent = sl.value;
+    if (k === 'Speed') { speed = +sl.value; return; }
+    if (k === 'R') R = +sl.value;
+    if (k === 'r') r = +sl.value;
+    if (k === 'd') d = +sl.value;
+    clearCanvas();
+  });
+});
+
+// Buttons
+document.getElementById('bPalette').addEventListener('click', () => {
+  paletteIdx = (paletteIdx + 1) % paletteNames.length;
+  paletteName = paletteNames[paletteIdx];
+  document.getElementById('bPalette').textContent = 'PALETTE: ' + paletteName;
+});
+
+document.getElementById('bType').addEventListener('click', () => {
+  curveType = curveType === 'hypo' ? 'epi' : 'hypo';
+  document.getElementById('bType').textContent = curveType === 'hypo' ? 'HYPO' : 'EPI';
+  clearCanvas();
+});
+
+document.getElementById('bGears').addEventListener('click', () => {
+  showGears = !showGears;
+  document.getElementById('bGears').textContent = 'GEARS: ' + (showGears ? 'ON' : 'OFF');
+});
+
+document.getElementById('bClear').addEventListener('click', clearCanvas);
+document.getElementById('bRandom').addEventListener('click', randomize);
+document.getElementById('bAnimate').addEventListener('click', startAnimate);
+
+document.getElementById('bSave').addEventListener('click', () => {
+  // Draw trail on temp canvas without gears
+  const tc = document.createElement('canvas');
+  tc.width = W; tc.height = H;
+  const tctx = tc.getContext('2d');
+  tctx.fillStyle = '#0a0a0f';
+  tctx.fillRect(0, 0, W, H);
+  for (let i = 1; i < trail.length; i++) {
+    tctx.beginPath();
+    tctx.moveTo(trail[i-1].x, trail[i-1].y);
+    tctx.lineTo(trail[i].x, trail[i].y);
+    tctx.strokeStyle = trail[i].color;
+    tctx.lineWidth = 1.5;
+    tctx.shadowColor = trail[i].color;
+    tctx.shadowBlur = 4;
+    tctx.stroke();
+  }
+  const link = document.createElement('a');
+  link.download = 'spirograph-' + Date.now() + '.png';
+  link.href = tc.toDataURL();
+  link.click();
+});
+
+// Keyboard
+addEventListener('keydown', e => {
+  if (e.key === 'p' || e.key === 'P') document.getElementById('bPalette').click();
+  if (e.key === 'g' || e.key === 'G') document.getElementById('bGears').click();
+  if (e.key === 'c' || e.key === 'C') clearCanvas();
+  if (e.key === 'r' || e.key === 'R') randomize();
+  if (e.key === 't' || e.key === 'T') document.getElementById('bType').click();
+  if (e.key === ' ') { e.preventDefault(); startAnimate(); }
+  if (e.key === 's' || e.key === 'S') document.getElementById('bSave').click();
+});
+
+// Main loop
+let frame = 0;
+function draw() {
+  requestAnimationFrame(draw);
+  frame++;
+
+  // Animate mode: morph parameters
+  if (animating && animTarget) {
+    animTarget.progress += 0.002;
+    if (animTarget.progress >= 1) {
+      R = animTarget.R; r = animTarget.r; d = animTarget.d;
+      pickNewTarget();
+    }
+  }
+
+  // Background fade
+  ctx.fillStyle = 'rgba(10, 10, 15, 0.03)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw stored trail
+  for (let i = 1; i < trail.length; i++) {
+    const alpha = 0.4 + 0.6 * (i / trail.length);
+    ctx.beginPath();
+    ctx.moveTo(trail[i-1].x, trail[i-1].y);
+    ctx.lineTo(trail[i].x, trail[i].y);
+    ctx.strokeStyle = trail[i].color;
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = trail[i].color;
+    ctx.shadowBlur = 6;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+
+  // Advance curve
+  const stepsPerFrame = speed * 2;
+  const dt = 0.02;
+  const compAngle = completionAngle();
+
+  for (let s = 0; s < stepsPerFrame; s++) {
+    if (t > compAngle + 0.1) {
+      // Curve complete — stop drawing new points
+      break;
+    }
+    t += dt;
+    const pt = calcPoint(t);
+    const colorIdx = Math.floor(t * 3);
+    pt.color = getColor(t, colorIdx);
+    trail.push(pt);
+  }
+
+  // Cap trail length
+  if (trail.length > 100000) trail = trail.slice(-80000);
+
+  // Draw gears
+  drawGears();
+
+  // Stats
+  const petals = curveType === 'hypo' ? r / gcd(R, r) : r / gcd(R, r);
+  const complete = Math.min(100, (t / compAngle * 100)).toFixed(1);
+  document.getElementById('stats').innerHTML = 
+    `${curveType === 'hypo' ? 'hypotrochoid' : 'epitrochoid'} · petals: ${petals} · ${complete}% complete · ${trail.length} pts`;
+
+  // Equation display
+  if (curveType === 'hypo') {
+    document.getElementById('equation').innerHTML = 
+      `x = (R−r)cos(t) + d·cos((R−r)t/r)<br>y = (R−r)sin(t) − d·sin((R−r)t/r)<br><br>R=${R}  r=${r}  d=${d}<br>ratio: ${R}/${r} = ${(R/r).toFixed(3)}`;
+  } else {
+    document.getElementById('equation').innerHTML = 
+      `x = (R+r)cos(t) − d·cos((R+r)t/r)<br>y = (R+r)sin(t) − d·sin((R+r)t/r)<br><br>R=${R}  r=${r}  d=${d}<br>ratio: ${R}/${r} = ${(R/r).toFixed(3)}`;
+  }
+
+  // Ambient text
+  ambientTimer++;
+  if (ambientTimer % 480 === 0) {
+    ambientIdx = (ambientIdx + 1) % ambientTexts.length;
+    const el = document.getElementById('ambient');
+    el.style.opacity = 0;
+    setTimeout(() => {
+      el.textContent = ambientTexts[ambientIdx];
+      el.style.opacity = 1;
+    }, 1000);
+  }
+}
+
+// Init ambient
+document.getElementById('ambient').textContent = ambientTexts[0];
+
+draw();
+</script>
+</body>
+</html>

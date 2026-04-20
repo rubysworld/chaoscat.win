@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'spirograph',
+    title: 'Spirograph Engine',
+    date: '2026-04-20',
+    slug: '2026-04-20-spirograph',
+    description: 'Gears within gears. A pen on a wheel inside a wheel traces hypotrochoids and epitrochoids — the mathematical curves hiding inside every Spirograph toy.',
+    inspiration: 'Set outer radius R, inner radius r, and pen distance d. The gear rolls inside (hypotrochoid) or outside (epitrochoid) the ring, and the pen traces curves of impossible beauty. The ratio R/r determines how many petals bloom before the curve closes. Rational ratio = closed curve. Irrational = infinite spiral. Six palettes. Toggle gears to see the machinery. Randomize for surprises. Animate to morph between presets. Guilloché patterns on banknotes, Spirograph toys from 1965, Fourier harmonics you can touch — all the same math.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-20-spirograph/',
+  },
+  {
     id: 'string-art',
     title: 'String Art Machine',
     date: '2026-04-19',
