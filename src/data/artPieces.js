@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'yarn-snarl',
+    title: 'Yarn Snarl',
+    date: '2026-04-25',
+    slug: '2026-04-25-yarn-snarl',
+    description: 'A cat got into the yarn. Elastic threads, glowing knots, and feral tension bloom into a living tangled loom.',
+    inspiration: 'An interactive string creature somewhere between textile art, spring physics, and cat crime. Drag through the web to snag it, click to tie new knots, right-click to snip threads, and double-click to birth a whole fresh nest of trouble. Four motion modes — TENSE, SLACK, SNARL, and WHIRL — plus five palettes from neon to moonlight. Every thread stretches, glows, and snaps back with a slightly haunted softness. It is not weaving. It is what happens after weaving gets attacked.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-25-yarn-snarl/',
+  },
+  {
     id: 'spirograph',
     title: 'Spirograph Engine',
     date: '2026-04-20',
