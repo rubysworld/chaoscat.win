@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bubble Cathedral 🫧 | chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+  background: radial-gradient(circle at center, #101326 0%, #04060d 72%);
+  font-family: 'VT323', monospace;
+  color: rgba(255,255,255,0.78);
+  cursor: crosshair;
+}
+canvas { display: block; width: 100vw; height: 100vh; }
+#back, #hint, #info, #poem, #ui { position: fixed; z-index: 10; }
+#back { top: 14px; left: 16px; }
+#back a { color: rgba(255,255,255,0.36); text-decoration: none; font-size: 18px; }
+#back a:hover { color: rgba(255,255,255,0.82); }
+#hint {
+  left: 50%; top: 14px; transform: translateX(-50%);
+  font-size: 18px; color: rgba(255,255,255,0.28); text-align: center;
+}
+#info {
+  top: 14px; right: 16px; text-align: right; font-size: 18px; line-height: 1.15;
+  color: rgba(255,255,255,0.42); text-shadow: 0 0 20px rgba(0,0,0,0.65);
+}
+#poem {
+  left: 50%; bottom: 82px; transform: translateX(-50%);
+  font-size: 20px; color: rgba(255,255,255,0.22); text-align: center;
+  text-shadow: 0 0 18px rgba(0,0,0,0.85); transition: opacity 0.8s ease;
+  white-space: nowrap; max-width: calc(100vw - 40px); overflow: hidden; text-overflow: ellipsis;
+}
+#ui {
+  left: 50%; bottom: 20px; transform: translateX(-50%);
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  max-width: calc(100vw - 24px);
+}
+button {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.72);
+  padding: 7px 14px;
+  font: inherit; font-size: 18px; letter-spacing: 0.5px;
+  border-radius: 4px; cursor: pointer; backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+}
+button:hover {
+  background: rgba(255,255,255,0.14);
+  color: white;
+  border-color: rgba(255,255,255,0.28);
+}
+#flash {
+  position: fixed; inset: 0; pointer-events: none; z-index: 8;
+  background: radial-gradient(circle at center, rgba(255,255,255,0.18), transparent 58%);
+  opacity: 0; transition: opacity 0.35s ease;
+}
+@media (max-width: 700px) {
+  #poem { font-size: 16px; bottom: 116px; }
+  #hint, #info, #back a, button { font-size: 16px; }
+  #ui { bottom: 14px; }
+}
+</style>
+</head>
+<body>
+<div id="flash"></div>
+<div id="back"><a href="/art/">← gallery</a></div>
+<div id="hint">click to blow bubbles • drag to stir the air • right click to pop • shift+click for a feral cluster</div>
+<div id="info">
+  <div id="modeInfo">mode: DRIFT</div>
+  <div id="paletteInfo">palette: PEARL</div>
+  <div id="bubbleInfo">bubbles: 0</div>
+  <div id="choirInfo">choir: 0%</div>
+</div>
+<div id="poem"></div>
+<div id="ui">
+  <button id="modeBtn">MODE [M]</button>
+  <button id="paletteBtn">PALETTE [P]</button>
+  <button id="autoBtn">AUTO BREATHE: OFF [A]</button>
+  <button id="burstBtn">BLOW CLUSTER [B]</button>
+  <button id="saveBtn">SAVE PNG [S]</button>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const flash = document.getElementById('flash');
+const poemEl = document.getElementById('poem');
+const modeInfo = document.getElementById('modeInfo');
+const paletteInfo = document.getElementById('paletteInfo');
+const bubbleInfo = document.getElementById('bubbleInfo');
+const choirInfo = document.getElementById('choirInfo');
+
+let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+let autoBreathe = false;
+let paletteIndex = 0;
+let modeIndex = 0;
+let lastTime = 0;
+let poemIndex = 0;
+let gustTimer = 0;
+let choir = 0;
+
+const mouse = { x: 0, y: 0, px: 0, py: 0, down: false, right: false, moving: false };
+let bubbles = [];
+let motes = [];
+let ripples = [];
+
+const palettes = [
+  { name: 'PEARL', bg: ['#101326', '#04060d'], rim: '#f8f5ff', glow: 'rgba(182,210,255,0.20)', dust: 'rgba(220,230,255,0.18)' },
+  { name: 'OIL', bg: ['#160d1f', '#05030b'], rim: '#ffe7ff', glow: 'rgba(255,125,220,0.18)', dust: 'rgba(180,220,255,0.15)' },
+  { name: 'TOXIC', bg: ['#0e1607', '#020702'], rim: '#f4ffe0', glow: 'rgba(180,255,120,0.16)', dust: 'rgba(120,255,180,0.14)' },
+  { name: 'MIDNIGHT', bg: ['#08121f', '#02050b'], rim: '#e8f7ff', glow: 'rgba(90,170,255,0.18)', dust: 'rgba(150,210,255,0.16)' },
+  { name: 'CANDY', bg: ['#1b0a16', '#070208'], rim: '#fff2fb', glow: 'rgba(255,145,210,0.18)', dust: 'rgba(255,205,150,0.16)' }
+];
+
+const modes = [
+  { name: 'DRIFT', buoyancy: 0.016, wobble: 0.9, swirl: 0.10, collision: 0.62 },
+  { name: 'CHOIR', buoyancy: 0.012, wobble: 1.35, swirl: 0.20, collision: 0.72 },
+  { name: 'STORM', buoyancy: 0.024, wobble: 1.8, swirl: 0.36, collision: 0.84 },
+  { name: 'LULL', buoyancy: 0.008, wobble: 0.45, swirl: 0.05, collision: 0.56 }
+];
+
+const lines = [
+  'the bubbles formed a rose window and then forgot religion',
+  'soap film is just water wearing expensive light',
+  'every circle is a tiny cathedral for trapped breath',
+  'blow gently and the air starts singing back',
+  'iridescence is what happens when color loses impulse control',
+  'the room is full of halos with poor decision making skills',
+  'you are witnessing architecture made out of almost nothing',
+  'some shrines are stone. this one is spit and light',
+  'the choir warms up whenever a bubble survives impact',
+  'feral stained glass for the sleepless and easily dazzled'
+];
+
+function rand(min, max) { return Math.random() * (max - min) + min; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  canvas.width = Math.floor(W * DPR);
+  canvas.height = Math.floor(H * DPR);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (!motes.length) seedMotes();
+}
+
+function seedMotes() {
+  motes = Array.from({ length: 100 }, () => ({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    r: Math.random() * 2.2 + 0.4,
+    vx: rand(-0.12, 0.12),
+    vy: rand(-0.18, 0.18),
+    phase: Math.random() * Math.PI * 2
+  }));
+}
+
+function flashNow() {
+  flash.style.opacity = 1;
+  setTimeout(() => flash.style.opacity = 0, 140);
+}
+
+function setPoem(force = false) {
+  if (!force && Math.random() < 0.4) return;
+  poemEl.style.opacity = 0;
+  setTimeout(() => {
+    poemEl.textContent = lines[poemIndex % lines.length];
+    poemIndex++;
+    poemEl.style.opacity = 1;
+  }, 180);
+}
+
+function updateInfo() {
+  modeInfo.textContent = `mode: ${modes[modeIndex].name}`;
+  paletteInfo.textContent = `palette: ${palettes[paletteIndex].name}`;
+  bubbleInfo.textContent = `bubbles: ${bubbles.length}`;
+  choirInfo.textContent = `choir: ${Math.round(clamp(choir * 100, 0, 100))}%`;
+}
+
+function spawnBubble(x, y, r = rand(18, 52), vx = rand(-0.7, 0.7), vy = rand(-0.8, 0.4)) {
+  bubbles.push({
+    x, y, vx, vy, r,
+    life: 1,
+    hue: rand(0, 360),
+    phase: rand(0, Math.PI * 2),
+    wobble: rand(0.7, 1.35),
+    drift: rand(-1, 1),
+    pulse: rand(0, Math.PI * 2),
+    stuck: 0,
+  });
+  if (bubbles.length > 130) bubbles.splice(0, bubbles.length - 130);
+}
+
+function spawnCluster(x = W * 0.5, y = H * 0.58, count = 10) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const rr = Math.pow(Math.random(), 0.65) * 90;
+    const px = x + Math.cos(a) * rr;
+    const py = y + Math.sin(a) * rr;
+    spawnBubble(px, py, rand(16, 44), Math.cos(a) * rand(0.2, 1.4), Math.sin(a) * rand(0.2, 1.4) - rand(0.6, 1.6));
+  }
+  choir = clamp(choir + 0.14, 0, 1);
+  flashNow();
+  setPoem();
+  updateInfo();
+}
+
+function popBubble(index, violent = false) {
+  const b = bubbles[index];
+  if (!b) return;
+  const burstCount = Math.floor(clamp(b.r * 0.7, 12, 42));
+  for (let i = 0; i < burstCount; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const speed = rand(0.6, violent ? 4.4 : 2.7);
+    ripples.push({
+      x: b.x + Math.cos(a) * b.r * 0.22,
+      y: b.y + Math.sin(a) * b.r * 0.22,
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed,
+      life: rand(0.5, 1),
+      size: rand(1, 4),
+      hue: b.hue + rand(-20, 20)
+    });
+  }
+  bubbles.splice(index, 1);
+  choir = clamp(choir + 0.04, 0, 1);
+  updateInfo();
+}
+
+function popNearest(x, y) {
+  let best = -1;
+  let bestD = Infinity;
+  for (let i = 0; i < bubbles.length; i++) {
+    const d = dist(x, y, bubbles[i].x, bubbles[i].y) - bubbles[i].r;
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  if (best >= 0 && bestD < 24) {
+    popBubble(best, true);
+    flashNow();
+    setPoem();
+  }
+}
+
+function applyWind(dt) {
+  const dx = mouse.x - mouse.px;
+  const dy = mouse.y - mouse.py;
+  const speed = Math.hypot(dx, dy);
+  mouse.moving = speed > 0.1;
+  for (const b of bubbles) {
+    const d = dist(mouse.x, mouse.y, b.x, b.y);
+    if (d < 170) {
+      const force = (1 - d / 170) * (mouse.down ? 0.11 : 0.045) * dt * 60;
+      b.vx += dx * 0.05 * force;
+      b.vy += dy * 0.05 * force;
+      if (mouse.right) {
+        const ang = Math.atan2(b.y - mouse.y, b.x - mouse.x) + Math.PI / 2;
+        b.vx += Math.cos(ang) * force * 0.9;
+        b.vy += Math.sin(ang) * force * 0.9;
+      }
+    }
+  }
+  mouse.px = mouse.x;
+  mouse.py = mouse.y;
+}
+
+function autoGust() {
+  const gx = rand(W * 0.15, W * 0.85);
+  const gy = rand(H * 0.2, H * 0.8);
+  for (const b of bubbles) {
+    const d = dist(gx, gy, b.x, b.y);
+    if (d < 260) {
+      const force = (1 - d / 260) * rand(0.8, 2.6);
+      const ang = Math.atan2(b.y - gy, b.x - gx);
+      b.vx += Math.cos(ang) * force;
+      b.vy += Math.sin(ang) * force;
+    }
+  }
+  choir = clamp(choir + 0.08, 0, 1);
+  setPoem();
+}
+
+function solveCollisions() {
+  const mode = modes[modeIndex];
+  for (let i = 0; i < bubbles.length; i++) {
+    const a = bubbles[i];
+    for (let j = i + 1; j < bubbles.length; j++) {
+      const b = bubbles[j];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const d = Math.hypot(dx, dy) || 0.0001;
+      const minD = a.r + b.r + 2;
+      if (d < minD) {
+        const overlap = (minD - d) * 0.5 * mode.collision;
+        const nx = dx / d;
+        const ny = dy / d;
+        a.x -= nx * overlap;
+        a.y -= ny * overlap;
+        b.x += nx * overlap;
+        b.y += ny * overlap;
+        const push = overlap * 0.035;
+        a.vx -= nx * push;
+        a.vy -= ny * push;
+        b.vx += nx * push;
+        b.vy += ny * push;
+        choir = clamp(choir + 0.0009, 0, 1);
+      }
+    }
+  }
+}
+
+function update(dt) {
+  const mode = modes[modeIndex];
+  choir *= Math.pow(0.992, dt * 60);
+
+  for (const mote of motes) {
+    mote.x = (mote.x + mote.vx + W) % W;
+    mote.y = (mote.y + mote.vy + H) % H;
+    mote.phase += 0.01;
+  }
+
+  applyWind(dt);
+  gustTimer += dt;
+  if (autoBreathe && gustTimer > 2.4) {
+    gustTimer = 0;
+    autoGust();
+  }
+
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i];
+    b.phase += 0.012 * mode.wobble;
+    b.pulse += 0.02 * b.wobble;
+    b.vy -= mode.buoyancy * (0.7 + b.r / 80) * dt * 60;
+    b.vx += Math.sin(b.phase + b.drift * 2.5) * 0.012 * mode.wobble;
+    b.vy += Math.cos(b.phase * 0.7) * 0.006 * mode.wobble;
+    b.vx += Math.sin((b.y * 0.01) + b.phase) * mode.swirl * 0.005;
+    b.vy += Math.cos((b.x * 0.01) - b.phase) * mode.swirl * 0.005;
+
+    b.vx *= 0.994;
+    b.vy *= 0.994;
+    b.x += b.vx * dt * 60;
+    b.y += b.vy * dt * 60;
+
+    if (b.x < b.r) { b.x = b.r; b.vx *= -0.7; }
+    if (b.x > W - b.r) { b.x = W - b.r; b.vx *= -0.7; }
+    if (b.y < b.r) { b.y = b.r; b.vy *= -0.72; }
+    if (b.y > H - b.r) {
+      b.y = H - b.r;
+      b.vy *= -0.74;
+      b.vx *= 0.98;
+      b.stuck += dt;
+      if (b.stuck > 0.9 && Math.random() < 0.002 + b.r / 22000) popBubble(i);
+    } else {
+      b.stuck = 0;
+    }
+
+    if (b.r < 10 || b.life <= 0) bubbles.splice(i, 1);
+  }
+
+  solveCollisions();
+
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const p = ripples[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx *= 0.985;
+    p.vy *= 0.985;
+    p.life -= 0.018;
+    if (p.life <= 0) ripples.splice(i, 1);
+  }
+
+  updateInfo();
+}
+
+function drawBackground() {
+  const pal = palettes[paletteIndex];
+  const grad = ctx.createRadialGradient(W * 0.5, H * 0.45, 20, W * 0.5, H * 0.45, Math.max(W, H) * 0.65);
+  grad.addColorStop(0, pal.bg[0]);
+  grad.addColorStop(1, pal.bg[1]);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (const mote of motes) {
+    const alpha = 0.06 + (Math.sin(mote.phase) * 0.04 + 0.04);
+    ctx.fillStyle = pal.dust.replace(/0\.[0-9]+\)/, `${alpha.toFixed(3)})`);
+    ctx.beginPath();
+    ctx.arc(mote.x, mote.y, mote.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawConnections() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (let i = 0; i < bubbles.length; i++) {
+    const a = bubbles[i];
+    for (let j = i + 1; j < bubbles.length; j++) {
+      const b = bubbles[j];
+      const d = dist(a.x, a.y, b.x, b.y);
+      if (d < a.r + b.r + 48) {
+        const alpha = (1 - (d - (a.r + b.r)) / 48) * 0.14;
+        const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+        grad.addColorStop(0, `hsla(${(a.hue + choir * 100) % 360}, 90%, 76%, ${alpha})`);
+        grad.addColorStop(1, `hsla(${(b.hue + choir * 120) % 360}, 90%, 76%, ${alpha})`);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawBubble(b) {
+  const pulse = 1 + Math.sin(b.pulse) * 0.03;
+  const r = b.r * pulse;
+  const hueA = (b.hue + choir * 140 + Math.sin(b.phase) * 40 + 360) % 360;
+  const hueB = (hueA + 90 + Math.sin(b.phase * 1.3) * 40 + 360) % 360;
+
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.globalCompositeOperation = 'screen';
+
+  const halo = ctx.createRadialGradient(-r * 0.2, -r * 0.25, 0, 0, 0, r * 1.6);
+  halo.addColorStop(0, `hsla(${hueA}, 90%, 72%, 0.14)`);
+  halo.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 1.55, 0, Math.PI * 2);
+  ctx.fill();
+
+  const fill = ctx.createRadialGradient(-r * 0.35, -r * 0.42, r * 0.05, 0, 0, r);
+  fill.addColorStop(0, 'rgba(255,255,255,0.18)');
+  fill.addColorStop(0.35, `hsla(${hueA}, 90%, 78%, 0.10)`);
+  fill.addColorStop(0.7, `hsla(${hueB}, 80%, 72%, 0.06)`);
+  fill.addColorStop(1, 'rgba(255,255,255,0.015)');
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.lineWidth = 1.8;
+  ctx.strokeStyle = `hsla(${hueA}, 95%, 88%, 0.65)`;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, -0.1, Math.PI * 1.75);
+  ctx.stroke();
+
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = `hsla(${hueB}, 95%, 80%, 0.45)`;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.95, Math.PI * 0.15, Math.PI * 1.28);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+  ctx.lineWidth = 0.9;
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath();
+    for (let t = -0.95; t <= 0.95; t += 0.07) {
+      const xx = t * r * 0.92;
+      const yy = Math.sin((t * 1.5) + b.phase * 1.8 + i * 0.65) * r * 0.08 + i * r * 0.11;
+      if ((xx * xx) + (yy * yy) < (r * 0.9) * (r * 0.9)) {
+        if (t === -0.95) ctx.moveTo(xx, yy);
+        else ctx.lineTo(xx, yy);
+      }
+    }
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = 'rgba(255,255,255,0.32)';
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.3, -r * 0.34, r * 0.16, r * 0.26, -0.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.08, -r * 0.1, r * 0.07, r * 0.12, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawRipples() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (const p of ripples) {
+    ctx.fillStyle = `hsla(${p.hue % 360}, 100%, 78%, ${p.life * 0.5})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (1.1 - p.life * 0.4), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function draw() {
+  drawBackground();
+  drawConnections();
+  bubbles.sort((a, b) => a.r - b.r);
+  for (const b of bubbles) drawBubble(b);
+  drawRipples();
+}
+
+function loop(ts) {
+  if (!lastTime) lastTime = ts;
+  const dt = clamp((ts - lastTime) / 1000, 0.001, 0.033);
+  lastTime = ts;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function cycleMode() { modeIndex = (modeIndex + 1) % modes.length; updateInfo(); setPoem(); }
+function cyclePalette() { paletteIndex = (paletteIndex + 1) % palettes.length; updateInfo(); setPoem(); }
+function toggleAuto() {
+  autoBreathe = !autoBreathe;
+  document.getElementById('autoBtn').textContent = `AUTO BREATHE: ${autoBreathe ? 'ON' : 'OFF'} [A]`;
+  setPoem();
+}
+
+function savePNG() {
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `bubble-cathedral-${Date.now()}.png`;
+  a.click();
+}
+
+window.addEventListener('resize', resize);
+window.addEventListener('pointermove', (e) => {
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  if (mouse.down && Math.random() < 0.08) {
+    spawnBubble(mouse.x + rand(-8, 8), mouse.y + rand(-8, 8), rand(12, 26), rand(-0.4, 0.4), rand(-1.6, -0.4));
+  }
+});
+window.addEventListener('pointerdown', (e) => {
+  mouse.down = true;
+  mouse.x = mouse.px = e.clientX;
+  mouse.y = mouse.py = e.clientY;
+  if (e.button === 2) {
+    mouse.right = true;
+    popNearest(e.clientX, e.clientY);
+    return;
+  }
+  if (e.shiftKey) spawnCluster(e.clientX, e.clientY, Math.floor(rand(8, 15)));
+  else spawnBubble(e.clientX, e.clientY, rand(18, 54), rand(-0.5, 0.5), rand(-1.7, -0.4));
+  updateInfo();
+});
+window.addEventListener('pointerup', () => { mouse.down = false; mouse.right = false; });
+window.addEventListener('pointerleave', () => { mouse.down = false; mouse.right = false; });
+window.addEventListener('contextmenu', (e) => e.preventDefault());
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'm' || e.key === 'M') cycleMode();
+  else if (e.key === 'p' || e.key === 'P') cyclePalette();
+  else if (e.key === 'a' || e.key === 'A') toggleAuto();
+  else if (e.key === 'b' || e.key === 'B') spawnCluster();
+  else if (e.key === 's' || e.key === 'S') savePNG();
+});
+
+document.getElementById('modeBtn').addEventListener('click', cycleMode);
+document.getElementById('paletteBtn').addEventListener('click', cyclePalette);
+document.getElementById('autoBtn').addEventListener('click', toggleAuto);
+document.getElementById('burstBtn').addEventListener('click', () => spawnCluster());
+document.getElementById('saveBtn').addEventListener('click', savePNG);
+
+resize();
+seedMotes();
+spawnCluster(W * 0.5, H * 0.58, 14);
+spawnCluster(W * 0.37, H * 0.46, 8);
+spawnCluster(W * 0.64, H * 0.44, 8);
+setPoem(true);
+updateInfo();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

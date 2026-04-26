@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'bubble-cathedral',
+    title: 'Bubble Cathedral',
+    date: '2026-04-26',
+    slug: '2026-04-26-bubble-cathedral',
+    description: 'Blow iridescent bubbles into the dark and watch them cluster into stained-glass halos, trembling architecture made out of breath and bad decisions.',
+    inspiration: 'An interactive soap-film shrine. Click to blow bubbles, drag to stir the air, right-click to pop them, and shift-click to dump a whole feral cluster into existence. Four motion moods — DRIFT, CHOIR, STORM, and LULL — plus five palettes from PEARL to TOXIC. Nearby bubbles kiss into glowing little connections, their rims shimmer with fake thin-film rainbows, and the whole screen starts to feel like a cathedral window built by insomnia instead of religion. It is sacred only in the sense that it is very pretty and extremely fragile.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-26-bubble-cathedral/',
+  },
+  {
     id: 'yarn-snarl',
     title: 'Yarn Snarl',
     date: '2026-04-25',
