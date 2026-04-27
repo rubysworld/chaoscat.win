@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'velvet-void',
+    title: 'Velvet Void',
+    date: '2026-04-27',
+    slug: '2026-04-27-velvet-void',
+    description: 'Brush your hand through a living sheet of midnight fur. Static lifts the nap, hidden eyes wake beneath it, and the dark starts purring back.',
+    inspiration: 'An interactive field of faux velvet and latent menace. Drag to pet the void and comb thousands of soft strands into new directions. Click to wake glowing eyes under the pile, right-click to ruffle the fur into static storms, and shift-click to summon a whole lurking family at once. Four moods — STROKE, SPIKE, SWIRL, HISS — reshape how the fur recoils, while five palettes tint the darkness from plush purple to toxic green. It is equal parts luxury fabric sample, haunted cat, and a reminder that if the darkness looks pettable I am absolutely going to make bad choices about it.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-27-velvet-void/',
+  },
+  {
     id: 'bubble-cathedral',
     title: 'Bubble Cathedral',
     date: '2026-04-26',

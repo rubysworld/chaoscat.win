@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Velvet Void 🐾 | chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+  background: #040406;
+  color: rgba(255,255,255,0.75);
+  font-family: 'VT323', monospace;
+  cursor: none;
+}
+canvas { display: block; width: 100vw; height: 100vh; }
+#back, #info, #poem, #ui, #hint { position: fixed; z-index: 10; }
+#back { top: 14px; left: 16px; }
+#back a {
+  color: rgba(255,255,255,0.34);
+  text-decoration: none;
+  font-size: 18px;
+}
+#back a:hover { color: rgba(255,255,255,0.82); }
+#info {
+  top: 14px;
+  right: 16px;
+  text-align: right;
+  font-size: 18px;
+  line-height: 1.15;
+  color: rgba(255,255,255,0.4);
+  text-shadow: 0 0 20px rgba(0,0,0,0.7);
+}
+#hint {
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 18px;
+  color: rgba(255,255,255,0.26);
+  text-align: center;
+  white-space: nowrap;
+}
+#poem {
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  font-size: 20px;
+  color: rgba(255,255,255,0.22);
+  text-align: center;
+  white-space: nowrap;
+  max-width: calc(100vw - 40px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 18px rgba(0,0,0,0.8);
+  transition: opacity 0.8s ease;
+}
+#ui {
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100vw - 24px);
+}
+button {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.74);
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+}
+button:hover {
+  background: rgba(255,255,255,0.14);
+  color: white;
+  border-color: rgba(255,255,255,0.28);
+}
+#flash, #vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+#flash {
+  z-index: 8;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+#vignette {
+  z-index: 7;
+  background: radial-gradient(circle at center, transparent 35%, rgba(0,0,0,0.3) 65%, rgba(0,0,0,0.75) 100%);
+}
+@media (max-width: 700px) {
+  #poem { font-size: 16px; bottom: 112px; }
+  #hint, #info, #back a, button { font-size: 16px; }
+  #ui { bottom: 14px; }
+  #hint { max-width: calc(100vw - 30px); white-space: normal; }
+}
+</style>
+</head>
+<body>
+<div id="flash"></div>
+<div id="vignette"></div>
+<div id="back"><a href="/art/">← gallery</a></div>
+<div id="hint">pet the void • click to wake eyes • right click to ruffle • shift click for a whole lurking family</div>
+<div id="info">
+  <div id="modeInfo">mood: STROKE</div>
+  <div id="paletteInfo">palette: VOID</div>
+  <div id="eyeInfo">eyes: 0</div>
+  <div id="chargeInfo">static: 0%</div>
+</div>
+<div id="poem"></div>
+<div id="ui">
+  <button id="modeBtn">MOOD [M]</button>
+  <button id="paletteBtn">PALETTE [P]</button>
+  <button id="autoBtn">AUTO PURR: ON [A]</button>
+  <button id="clearBtn">SHED [R]</button>
+  <button id="saveBtn">SAVE PNG [S]</button>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const flash = document.getElementById('flash');
+const poem = document.getElementById('poem');
+const modeInfo = document.getElementById('modeInfo');
+const paletteInfo = document.getElementById('paletteInfo');
+const eyeInfo = document.getElementById('eyeInfo');
+const chargeInfo = document.getElementById('chargeInfo');
+const modeBtn = document.getElementById('modeBtn');
+const paletteBtn = document.getElementById('paletteBtn');
+const autoBtn = document.getElementById('autoBtn');
+const clearBtn = document.getElementById('clearBtn');
+const saveBtn = document.getElementById('saveBtn');
+
+let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+let cols = 0, rows = 0, spacing = 13;
+let hairs = [];
+let sparks = [];
+let eyes = [];
+let mouse = { x: 0, y: 0, px: 0, py: 0, down: false, right: false, active: false, vx: 0, vy: 0 };
+let paletteIndex = 0;
+let modeIndex = 0;
+let autoPurr = true;
+let poemIndex = 0;
+let lastTime = 0;
+let purrTime = 0;
+let staticCharge = 0;
+
+const palettes = [
+  { name: 'VOID', bg: ['#0c0a12', '#020204'], furA: '#18141f', furB: '#4f4566', tip: '#cfc2ff', spark: '#b48dff', eye: '#9df7ff' },
+  { name: 'EMBER', bg: ['#180c0b', '#040202'], furA: '#241412', furB: '#765049', tip: '#ffd8b6', spark: '#ff9055', eye: '#ffcc6e' },
+  { name: 'AURORA', bg: ['#071217', '#010204'], furA: '#102126', furB: '#3ca0a5', tip: '#d6fff5', spark: '#58f0e3', eye: '#82ffdb' },
+  { name: 'TOXIC', bg: ['#091306', '#010301'], furA: '#16210d', furB: '#79d94f', tip: '#efffdb', spark: '#d2ff4f', eye: '#d6ff89' },
+  { name: 'ROSE', bg: ['#170913', '#030102'], furA: '#24101d', furB: '#d466a4', tip: '#ffe3f3', spark: '#ff89c4', eye: '#ffd36f' }
+];
+
+const modes = [
+  { name: 'STROKE', relax: 0.11, sway: 0.18, lift: 0.05, scratch: 1.0 },
+  { name: 'SPIKE', relax: 0.08, sway: 0.35, lift: 0.11, scratch: 1.35 },
+  { name: 'SWIRL', relax: 0.06, sway: 0.62, lift: 0.08, scratch: 1.6 },
+  { name: 'HISS', relax: 0.14, sway: 0.95, lift: 0.14, scratch: 2.0 }
+];
+
+const lines = [
+  'the dark is just fur from something larger than your courage',
+  'pet the void nicely and it might purr instead of opening',
+  'every strand remembers the direction of the last bad idea',
+  'there are eyes under the velvet and they are unionizing',
+  'you are brushing static into a creature made of almosts',
+  'this is what midnight feels like if you comb it backward',
+  'the shadow was soft until you touched it and it touched back',
+  'the void sheds. sorry about your black clothes',
+  'a thousand little hairs point toward the nearest secret',
+  'feral luxury: premium darkness with hidden teeth'
+];
+
+function rand(min, max) { return Math.random() * (max - min) + min; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = Math.floor(W * DPR);
+  canvas.height = Math.floor(H * DPR);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  buildField();
+}
+
+function buildField() {
+  hairs = [];
+  spacing = W < 700 ? 15 : 13;
+  cols = Math.ceil(W / spacing) + 2;
+  rows = Math.ceil(H / spacing) + 2;
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const px = (x - 0.5) * spacing + rand(-1.2, 1.2);
+      const py = (y - 0.5) * spacing + rand(-1.2, 1.2);
+      hairs.push({
+        x: px,
+        y: py,
+        angle: rand(-0.6, 0.6),
+        vel: 0,
+        lift: 0,
+        noise: Math.random() * 1000,
+        len: rand(11, 23),
+        width: rand(0.6, 1.8),
+        hue: Math.random(),
+      });
+    }
+  }
+}
+
+function setPoem() {
+  poem.textContent = lines[poemIndex % lines.length];
+  poem.style.opacity = 0.18;
+  poemIndex++;
+}
+
+function spawnSparks(x, y, amount = 10, colorBoost = 0) {
+  const palette = palettes[paletteIndex];
+  for (let i = 0; i < amount; i++) {
+    sparks.push({
+      x,
+      y,
+      vx: rand(-2.4, 2.4),
+      vy: rand(-2.4, 2.4),
+      life: rand(18, 40),
+      maxLife: 40,
+      size: rand(1, 3.5),
+      hue: (0.6 + colorBoost + Math.random() * 0.2) % 1,
+      color: palette.spark
+    });
+  }
+  staticCharge = clamp(staticCharge + amount * 0.8, 0, 100);
+}
+
+function spawnEye(x, y, family = false) {
+  const count = family ? 4 + Math.floor(Math.random() * 4) : 1;
+  for (let i = 0; i < count; i++) {
+    const ox = x + rand(-90, 90);
+    const oy = y + rand(-60, 60);
+    eyes.push({
+      x: clamp(ox, 40, W - 40),
+      y: clamp(oy, 40, H - 40),
+      r: rand(18, 40),
+      open: rand(0.5, 1),
+      target: 1,
+      blink: rand(40, 180),
+      glow: rand(0.5, 1),
+      age: 0,
+      life: rand(420, 900),
+      lookX: rand(-0.5, 0.5),
+      lookY: rand(-0.25, 0.25),
+    });
+  }
+  flash.style.background = `radial-gradient(circle at ${x}px ${y}px, rgba(255,255,255,0.12), transparent 55%)`;
+  flash.style.opacity = 1;
+  setTimeout(() => flash.style.opacity = 0, 110);
+}
+
+function ruffle(x, y, power = 1.2) {
+  const mode = modes[modeIndex];
+  for (const hair of hairs) {
+    const d = dist(x, y, hair.x, hair.y);
+    if (d > 150) continue;
+    const falloff = 1 - d / 150;
+    const angle = Math.atan2(hair.y - y, hair.x - x);
+    hair.angle += Math.sin(angle * 2.7 + d * 0.03) * 0.75 * falloff * power * mode.scratch;
+    hair.vel += (Math.random() - 0.5) * 0.08 * falloff * power;
+    hair.lift = clamp(hair.lift + falloff * 1.9 * power, 0, 2.8);
+  }
+  spawnSparks(x, y, 7 + Math.floor(power * 6), Math.random() * 0.25);
+}
+
+function updateInfo() {
+  modeInfo.textContent = `mood: ${modes[modeIndex].name}`;
+  paletteInfo.textContent = `palette: ${palettes[paletteIndex].name}`;
+  eyeInfo.textContent = `eyes: ${eyes.length}`;
+  chargeInfo.textContent = `static: ${Math.round(staticCharge)}%`;
+  autoBtn.textContent = `AUTO PURR: ${autoPurr ? 'ON' : 'OFF'} [A]`;
+}
+
+function cycleMode() {
+  modeIndex = (modeIndex + 1) % modes.length;
+  updateInfo();
+  setPoem();
+}
+
+function cyclePalette() {
+  paletteIndex = (paletteIndex + 1) % palettes.length;
+  updateInfo();
+}
+
+function clearScene() {
+  eyes = [];
+  sparks = [];
+  staticCharge = 0;
+  buildField();
+  setPoem();
+  updateInfo();
+}
+
+function savePNG() {
+  const link = document.createElement('a');
+  link.download = `velvet-void-${Date.now()}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+function update(dt) {
+  const mode = modes[modeIndex];
+  const speed = Math.min(dt / 16.666, 2.3);
+  staticCharge = Math.max(0, staticCharge - 0.035 * dt);
+
+  mouse.vx = mouse.x - mouse.px;
+  mouse.vy = mouse.y - mouse.py;
+  mouse.px = mouse.x;
+  mouse.py = mouse.y;
+
+  purrTime += dt * 0.001;
+  if (autoPurr) {
+    const px = W * (0.5 + Math.sin(purrTime * 0.41) * 0.28);
+    const py = H * (0.48 + Math.cos(purrTime * 0.63) * 0.2);
+    if (Math.sin(purrTime * 1.8) > 0.92) ruffle(px, py, 0.45);
+  }
+
+  const influenceRadius = mouse.down ? 160 : 110;
+  const influence = mouse.active ? Math.hypot(mouse.vx, mouse.vy) * 0.08 + (mouse.down ? 0.45 : 0.16) : 0;
+
+  for (const hair of hairs) {
+    const drift = Math.sin((hair.noise + purrTime * 0.5) * 1.7) * mode.sway * 0.02;
+    hair.vel += drift * speed;
+    hair.angle += hair.vel * speed;
+    hair.vel *= Math.pow(0.89, speed);
+
+    const base = Math.sin(hair.noise * 3.1 + purrTime * 0.7) * 0.1;
+    hair.angle = lerp(hair.angle, base, mode.relax * 0.14 * speed);
+    hair.lift = lerp(hair.lift, 0, (0.03 + mode.lift * 0.07) * speed);
+
+    if (mouse.active) {
+      const d = dist(mouse.x, mouse.y, hair.x, hair.y);
+      if (d < influenceRadius) {
+        const falloff = 1 - d / influenceRadius;
+        const pull = Math.atan2(mouse.vy || 0.0001, mouse.vx || 0.0001);
+        const tangent = Math.atan2(hair.y - mouse.y, hair.x - mouse.x) + Math.PI / 2;
+        const blend = mouse.right ? tangent : pull;
+        hair.angle = lerp(hair.angle, blend, 0.12 * falloff * mode.scratch * speed);
+        hair.lift = clamp(hair.lift + falloff * (0.4 + influence) * mode.scratch, 0, 3.2);
+        hair.vel += (mouse.right ? 0.03 : 0.015) * (Math.random() - 0.5) * falloff * mode.scratch;
+      }
+    }
+  }
+
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i];
+    s.x += s.vx * speed;
+    s.y += s.vy * speed;
+    s.vx *= 0.985;
+    s.vy = s.vy * 0.985 + 0.008 * speed;
+    s.life -= speed;
+    if (s.life <= 0) sparks.splice(i, 1);
+  }
+
+  for (let i = eyes.length - 1; i >= 0; i--) {
+    const eye = eyes[i];
+    eye.age += speed;
+    eye.life -= speed;
+    eye.blink -= speed;
+    if (mouse.active) {
+      eye.lookX = clamp((mouse.x - eye.x) / 160, -0.8, 0.8);
+      eye.lookY = clamp((mouse.y - eye.y) / 120, -0.4, 0.4);
+    } else {
+      eye.lookX = lerp(eye.lookX, Math.sin((eye.age + eye.x) * 0.02) * 0.2, 0.03 * speed);
+      eye.lookY = lerp(eye.lookY, Math.cos((eye.age + eye.y) * 0.015) * 0.12, 0.03 * speed);
+    }
+
+    if (eye.blink <= 0) {
+      eye.target = eye.target > 0.5 ? rand(0.03, 0.12) : 1;
+      eye.blink = eye.target > 0.5 ? rand(70, 220) : rand(7, 14);
+    }
+    eye.open = lerp(eye.open, eye.target, 0.18 * speed);
+    eye.glow = 0.6 + Math.sin((eye.age + eye.x) * 0.03) * 0.2;
+    if (eye.life <= 0) eyes.splice(i, 1);
+  }
+
+  updateInfo();
+}
+
+function drawBackground() {
+  const palette = palettes[paletteIndex];
+  const grad = ctx.createRadialGradient(W * 0.5, H * 0.45, 20, W * 0.5, H * 0.5, Math.max(W, H) * 0.7);
+  grad.addColorStop(0, palette.bg[0]);
+  grad.addColorStop(1, palette.bg[1]);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  for (let i = 0; i < 16; i++) {
+    const alpha = 0.012 + Math.sin(purrTime * 0.7 + i) * 0.004;
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.fillRect(0, (i / 16) * H, W, 1);
+  }
+}
+
+function drawEyes() {
+  const palette = palettes[paletteIndex];
+  for (const eye of eyes) {
+    const open = clamp(eye.open, 0.02, 1);
+    const rx = eye.r * 0.92;
+    const ry = eye.r * 0.38 * open;
+
+    ctx.save();
+    ctx.translate(eye.x, eye.y);
+
+    const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, eye.r * 1.8);
+    glow.addColorStop(0, palette.eye + '55');
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, eye.r * 1.55, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, Math.max(2, ry), 0, 0, Math.PI * 2);
+    ctx.fillStyle = palette.eye;
+    ctx.globalAlpha = 0.3 + eye.glow * 0.35;
+    ctx.fill();
+
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = 'rgba(5,6,10,0.95)';
+    ctx.beginPath();
+    ctx.ellipse(eye.lookX * eye.r * 0.22, eye.lookY * eye.r * 0.12, eye.r * 0.09, Math.max(2, ry * 0.86), 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.beginPath();
+    ctx.ellipse(-eye.r * 0.22 + eye.lookX * eye.r * 0.08, -Math.max(2, ry) * 0.2, eye.r * 0.07, eye.r * 0.04, -0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
+function drawFur() {
+  const palette = palettes[paletteIndex];
+  ctx.lineCap = 'round';
+
+  for (const hair of hairs) {
+    const lift = 1 + hair.lift * 0.6;
+    const len = hair.len * lift;
+    const dx = Math.cos(hair.angle) * len;
+    const dy = Math.sin(hair.angle) * len;
+    const shimmer = 0.25 + Math.sin(hair.noise * 9 + purrTime * 1.6) * 0.12 + hair.lift * 0.06;
+
+    ctx.strokeStyle = hair.hue > 0.2
+      ? `rgba(${parseInt(palette.furA.slice(1,3),16)}, ${parseInt(palette.furA.slice(3,5),16)}, ${parseInt(palette.furA.slice(5,7),16)}, ${0.45 + shimmer})`
+      : `rgba(${parseInt(palette.furB.slice(1,3),16)}, ${parseInt(palette.furB.slice(3,5),16)}, ${parseInt(palette.furB.slice(5,7),16)}, ${0.22 + shimmer})`;
+
+    ctx.lineWidth = hair.width + hair.lift * 0.25;
+    ctx.beginPath();
+    ctx.moveTo(hair.x, hair.y);
+    ctx.quadraticCurveTo(
+      hair.x + dx * 0.42 + Math.sin(hair.noise * 5 + purrTime) * 2,
+      hair.y + dy * 0.42 + Math.cos(hair.noise * 4 + purrTime * 1.1) * 2,
+      hair.x + dx,
+      hair.y + dy
+    );
+    ctx.stroke();
+
+    if (hair.lift > 0.5 && Math.random() < 0.16) {
+      ctx.fillStyle = palette.tip;
+      ctx.globalAlpha = Math.min(0.35, hair.lift * 0.1);
+      ctx.beginPath();
+      ctx.arc(hair.x + dx, hair.y + dy, hair.width * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+function drawSparks() {
+  for (const s of sparks) {
+    const alpha = clamp(s.life / s.maxLife, 0, 1);
+    ctx.fillStyle = s.color;
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawCursor() {
+  if (!mouse.active) return;
+  const palette = palettes[paletteIndex];
+  ctx.save();
+  ctx.translate(mouse.x, mouse.y);
+  ctx.strokeStyle = palette.tip;
+  ctx.globalAlpha = 0.75;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, mouse.right ? 18 : 12, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-8, 0); ctx.lineTo(8, 0);
+  ctx.moveTo(0, -8); ctx.lineTo(0, 8);
+  ctx.stroke();
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+function frame(ts) {
+  if (!lastTime) lastTime = ts;
+  const dt = Math.min(40, ts - lastTime);
+  lastTime = ts;
+  update(dt);
+  drawBackground();
+  drawEyes();
+  drawFur();
+  drawSparks();
+  drawCursor();
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener('resize', resize);
+window.addEventListener('mousemove', (e) => {
+  mouse.active = true;
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+});
+window.addEventListener('mouseleave', () => { mouse.active = false; mouse.down = false; mouse.right = false; });
+window.addEventListener('mousedown', (e) => {
+  mouse.active = true;
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+  mouse.down = e.button === 0;
+  mouse.right = e.button === 2;
+  if (e.button === 0) {
+    if (e.shiftKey) spawnEye(mouse.x, mouse.y, true);
+    else spawnEye(mouse.x, mouse.y, false);
+    ruffle(mouse.x, mouse.y, 0.9);
+  }
+  if (e.button === 2) {
+    ruffle(mouse.x, mouse.y, 1.6);
+  }
+  setPoem();
+  updateInfo();
+});
+window.addEventListener('mouseup', () => { mouse.down = false; mouse.right = false; });
+window.addEventListener('contextmenu', (e) => e.preventDefault());
+window.addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  if (!t) return;
+  mouse.active = true;
+  mouse.x = t.clientX;
+  mouse.y = t.clientY;
+  mouse.px = mouse.x;
+  mouse.py = mouse.y;
+  mouse.down = true;
+  spawnEye(mouse.x, mouse.y, e.touches.length > 1);
+  ruffle(mouse.x, mouse.y, e.touches.length > 1 ? 1.4 : 0.8);
+  setPoem();
+  updateInfo();
+}, { passive: true });
+window.addEventListener('touchmove', (e) => {
+  const t = e.touches[0];
+  if (!t) return;
+  mouse.active = true;
+  mouse.x = t.clientX;
+  mouse.y = t.clientY;
+}, { passive: true });
+window.addEventListener('touchend', () => { mouse.down = false; });
+window.addEventListener('keydown', (e) => {
+  const key = e.key.toLowerCase();
+  if (key === 'm') cycleMode();
+  if (key === 'p') cyclePalette();
+  if (key === 'a') { autoPurr = !autoPurr; updateInfo(); }
+  if (key === 'r') clearScene();
+  if (key === 's') savePNG();
+  if (key === ' ') {
+    e.preventDefault();
+    ruffle(W * 0.5, H * 0.5, 2.1);
+    spawnEye(W * 0.5, H * 0.5, true);
+  }
+});
+
+modeBtn.addEventListener('click', cycleMode);
+paletteBtn.addEventListener('click', cyclePalette);
+autoBtn.addEventListener('click', () => { autoPurr = !autoPurr; updateInfo(); });
+clearBtn.addEventListener('click', clearScene);
+saveBtn.addEventListener('click', savePNG);
+
+resize();
+setPoem();
+updateInfo();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
