@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Feral Kintsugi 🏺 | chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+  background: #09070c;
+  font-family: 'VT323', monospace;
+  color: rgba(255,255,255,0.75);
+  cursor: crosshair;
+}
+canvas { display: block; width: 100vw; height: 100vh; }
+#back, #info, #poem, #ui, #hint { position: fixed; z-index: 10; }
+#back { top: 14px; left: 16px; }
+#back a {
+  color: rgba(255,255,255,0.34);
+  text-decoration: none;
+  font-size: 18px;
+}
+#back a:hover { color: rgba(255,255,255,0.82); }
+#info {
+  top: 14px;
+  right: 16px;
+  text-align: right;
+  font-size: 18px;
+  line-height: 1.15;
+  color: rgba(255,255,255,0.42);
+  text-shadow: 0 0 20px rgba(0,0,0,0.75);
+}
+#hint {
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  font-size: 18px;
+  color: rgba(255,255,255,0.26);
+  text-align: center;
+  white-space: nowrap;
+}
+#poem {
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  font-size: 20px;
+  color: rgba(255,255,255,0.22);
+  text-align: center;
+  white-space: nowrap;
+  max-width: calc(100vw - 40px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 18px rgba(0,0,0,0.82);
+  transition: opacity 0.8s ease;
+}
+#ui {
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100vw - 24px);
+}
+button {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.74);
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+}
+button:hover {
+  background: rgba(255,255,255,0.14);
+  color: white;
+  border-color: rgba(255,255,255,0.28);
+}
+#flash, #vignette, #gloss {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+#flash { z-index: 8; opacity: 0; transition: opacity 0.22s ease; }
+#gloss {
+  z-index: 7;
+  background: linear-gradient(115deg, rgba(255,255,255,0.0) 0%, rgba(255,255,255,0.03) 35%, rgba(255,255,255,0.0) 60%);
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+#vignette {
+  z-index: 6;
+  background: radial-gradient(circle at center, transparent 28%, rgba(0,0,0,0.26) 68%, rgba(0,0,0,0.78) 100%);
+}
+@media (max-width: 700px) {
+  #poem { font-size: 16px; bottom: 112px; }
+  #hint, #info, #back a, button { font-size: 16px; }
+  #ui { bottom: 14px; }
+  #hint { max-width: calc(100vw - 32px); white-space: normal; }
+}
+</style>
+</head>
+<body>
+<div id="flash"></div>
+<div id="gloss"></div>
+<div id="vignette"></div>
+<div id="back"><a href="/art/">← gallery</a></div>
+<div id="hint">click to crack • drag to stress • right click to mend with gold • shift click to shatter bloom</div>
+<div id="info">
+  <div id="modeInfo">mood: HAIRLINE</div>
+  <div id="paletteInfo">palette: MOON</div>
+  <div id="crackInfo">cracks: 0</div>
+  <div id="mendInfo">mended: 0%</div>
+</div>
+<div id="poem"></div>
+<div id="ui">
+  <button id="modeBtn">MOOD [M]</button>
+  <button id="paletteBtn">PALETTE [P]</button>
+  <button id="autoBtn">AUTO TREMOR: ON [A]</button>
+  <button id="glazeBtn">GLAZE [G]</button>
+  <button id="clearBtn">NEW BOWL [R]</button>
+  <button id="saveBtn">SAVE PNG [S]</button>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const flash = document.getElementById('flash');
+const gloss = document.getElementById('gloss');
+const poem = document.getElementById('poem');
+const modeInfo = document.getElementById('modeInfo');
+const paletteInfo = document.getElementById('paletteInfo');
+const crackInfo = document.getElementById('crackInfo');
+const mendInfo = document.getElementById('mendInfo');
+const modeBtn = document.getElementById('modeBtn');
+const paletteBtn = document.getElementById('paletteBtn');
+const autoBtn = document.getElementById('autoBtn');
+const glazeBtn = document.getElementById('glazeBtn');
+const clearBtn = document.getElementById('clearBtn');
+const saveBtn = document.getElementById('saveBtn');
+
+let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+let lastTime = 0;
+let paletteIndex = 0;
+let modeIndex = 0;
+let autoTremor = true;
+let cracks = [];
+let motes = [];
+let glazeRings = [];
+let sheen = [];
+let pulse = 0;
+let autoTimer = 0;
+let poemIndex = 0;
+let mouse = { x: 0, y: 0, px: 0, py: 0, down: false, active: false, speed: 0 };
+
+const palettes = [
+  { name: 'MOON', bg: ['#11111a', '#05060b'], porcelain: '#ded8d2', porcelain2: '#9c98a5', vein: '#5f5a67', edge: '#1e1b24', gold: '#e8c772', ember: '#ffd38a', dust: 'rgba(255,245,220,0.22)' },
+  { name: 'EMBER', bg: ['#1a0e0b', '#080304'], porcelain: '#f0ddd3', porcelain2: '#bf8974', vein: '#6e2f22', edge: '#1b0c0a', gold: '#ffb55e', ember: '#ff7f50', dust: 'rgba(255,180,120,0.22)' },
+  { name: 'ABYSS', bg: ['#081018', '#010205'], porcelain: '#d2e5ee', porcelain2: '#5e84a1', vein: '#16334c', edge: '#040a11', gold: '#84d9ff', ember: '#79f0ff', dust: 'rgba(160,220,255,0.22)' },
+  { name: 'JADE', bg: ['#07110c', '#010402'], porcelain: '#dae8d9', porcelain2: '#6d9d84', vein: '#204333', edge: '#07100b', gold: '#c9f08b', ember: '#7ff0b2', dust: 'rgba(180,255,210,0.2)' },
+  { name: 'ROSE', bg: ['#160913', '#040103'], porcelain: '#f2dbe5', porcelain2: '#bf7ca0', vein: '#592543', edge: '#170611', gold: '#ffb6cf', ember: '#ffd36a', dust: 'rgba(255,200,230,0.22)' }
+];
+
+const modes = [
+  { name: 'HAIRLINE', rays: 6, branch: 0.14, jitter: 0.55, tremor: 0.20, drift: 0.15, heal: 0.010 },
+  { name: 'SHIVER', rays: 8, branch: 0.22, jitter: 0.85, tremor: 0.40, drift: 0.32, heal: 0.012 },
+  { name: 'QUAKE', rays: 11, branch: 0.32, jitter: 1.20, tremor: 0.75, drift: 0.58, heal: 0.014 },
+  { name: 'CHOIR', rays: 9, branch: 0.42, jitter: 0.68, tremor: 0.52, drift: 0.44, heal: 0.017 }
+];
+
+const lines = [
+  'the bowl broke and the night moved in',
+  'gold is just damage deciding to become theater',
+  'every fracture is a map of where the touch landed hardest',
+  'you are petting a ceramic omen with very poor boundaries',
+  'some ruins glow because shame was too boring',
+  'mend the crack and it starts singing through its teeth',
+  'porcelain remembers impact better than people do',
+  'this shrine was assembled from accidents and audacity',
+  'the glaze still thinks it can hold the moon together',
+  'feral kintsugi: fix it wrong until it becomes gorgeous'
+];
+
+function rand(min, max) { return Math.random() * (max - min) + min; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = Math.floor(W * DPR);
+  canvas.height = Math.floor(H * DPR);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  resetScene(true);
+}
+
+function setPoem() {
+  poem.textContent = lines[poemIndex % lines.length];
+  poem.style.opacity = 0.18;
+  poemIndex++;
+}
+
+function updateInfo() {
+  const totalSegments = cracks.reduce((sum, crack) => sum + crack.points.length - 1, 0);
+  const healed = cracks.length ? cracks.reduce((sum, crack) => sum + crack.healed, 0) / cracks.length : 0;
+  modeInfo.textContent = `mood: ${modes[modeIndex].name}`;
+  paletteInfo.textContent = `palette: ${palettes[paletteIndex].name}`;
+  crackInfo.textContent = `cracks: ${totalSegments}`;
+  mendInfo.textContent = `mended: ${Math.round(healed * 100)}%`;
+}
+
+function flashNow(color) {
+  flash.style.background = `radial-gradient(circle at center, ${color}, transparent 60%)`;
+  flash.style.opacity = 1;
+  setTimeout(() => { flash.style.opacity = 0; }, 120);
+}
+
+function seedSheen() {
+  sheen = Array.from({ length: 18 }, () => ({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    r: rand(70, 260),
+    a: rand(0.05, 0.18),
+    wobble: Math.random() * Math.PI * 2,
+    speed: rand(0.001, 0.004)
+  }));
+}
+
+function resetScene(keepText = false) {
+  cracks = [];
+  motes = [];
+  glazeRings = [];
+  seedSheen();
+  if (!keepText) setPoem();
+  updateInfo();
+}
+
+function addMotes(x, y, amount, color, speed = 1) {
+  for (let i = 0; i < amount; i++) {
+    motes.push({
+      x, y,
+      vx: rand(-2.2, 2.2) * speed,
+      vy: rand(-2.2, 2.2) * speed,
+      life: rand(20, 55),
+      maxLife: rand(20, 55),
+      size: rand(0.6, 3.2),
+      color
+    });
+  }
+}
+
+function createGlaze(x, y, intensity = 1) {
+  glazeRings.push({ x, y, r: 12, life: 1, speed: rand(45, 90) * intensity });
+}
+
+function createImpact(x, y, strength = 1, bloom = false) {
+  const palette = palettes[paletteIndex];
+  const mode = modes[modeIndex];
+  const bursts = bloom ? 2 + Math.floor(rand(0, 3)) : 1;
+  for (let b = 0; b < bursts; b++) {
+    const ox = x + rand(-48, 48) * (bloom ? 1 : 0);
+    const oy = y + rand(-48, 48) * (bloom ? 1 : 0);
+    const rays = mode.rays + Math.floor(rand(0, bloom ? 5 : 3));
+    for (let i = 0; i < rays; i++) {
+      const angle = (Math.PI * 2 * i / rays) + rand(-0.26, 0.26);
+      growCrack(ox, oy, angle, rand(90, 210) * strength, 0, strength);
+    }
+    addMotes(ox, oy, bloom ? 46 : 20, palette.dust, bloom ? 1.8 : 1.1);
+    createGlaze(ox, oy, bloom ? 1.2 : 1);
+  }
+  flashNow('rgba(255,255,255,0.16)');
+  setPoem();
+  updateInfo();
+}
+
+function growCrack(x, y, angle, length, depth, strength) {
+  const mode = modes[modeIndex];
+  const palette = palettes[paletteIndex];
+  const points = [{ x, y }];
+  let px = x;
+  let py = y;
+  let dir = angle;
+  let travel = 0;
+  const maxStep = rand(10, 20);
+  while (travel < length) {
+    dir += rand(-mode.jitter, mode.jitter) * 0.12;
+    const step = rand(6, maxStep);
+    px += Math.cos(dir) * step;
+    py += Math.sin(dir) * step;
+    if (px < -60 || px > W + 60 || py < -60 || py > H + 60) break;
+    points.push({ x: px, y: py });
+    travel += step;
+    if (depth < 2 && Math.random() < mode.branch * (0.85 - travel / Math.max(length, 1)) * strength) {
+      growCrack(px, py, dir + rand(-1.1, 1.1), length * rand(0.28, 0.56), depth + 1, strength * 0.74);
+    }
+  }
+  if (points.length > 1) {
+    cracks.push({
+      points,
+      width: rand(0.8, 2.6) * (1.1 + strength * 0.45),
+      openness: rand(0.3, 1.2) * strength,
+      tremor: rand(0.4, 1.4),
+      drift: rand(0, Math.PI * 2),
+      healed: 0,
+      gold: palette.gold,
+      ember: palette.ember,
+      dark: palette.edge,
+      vein: palette.vein,
+      life: 1,
+      strain: rand(0.3, 0.8),
+      center: { x, y }
+    });
+  }
+}
+
+function stressSurface(x, y, amount = 1) {
+  const palette = palettes[paletteIndex];
+  for (const crack of cracks) {
+    const d = dist(x, y, crack.center.x, crack.center.y);
+    if (d < 220) {
+      crack.openness += (1 - d / 220) * amount * 0.45;
+      crack.strain += (1 - d / 220) * amount * 0.05;
+    }
+  }
+  if (Math.random() < 0.2 * amount) {
+    growCrack(x + rand(-12, 12), y + rand(-12, 12), rand(0, Math.PI * 2), rand(40, 110), 1, 0.58 * amount);
+  }
+  addMotes(x, y, 5 + Math.floor(amount * 4), palette.dust, 0.65 + amount * 0.3);
+  updateInfo();
+}
+
+function mendNearest(x, y) {
+  if (!cracks.length) return;
+  let best = null;
+  let bestD = Infinity;
+  for (const crack of cracks) {
+    for (const point of crack.points) {
+      const d = dist(x, y, point.x, point.y);
+      if (d < bestD) {
+        bestD = d;
+        best = crack;
+      }
+    }
+  }
+  if (!best || bestD > 140) return;
+  best.healed = clamp(best.healed + 0.38, 0, 1);
+  best.openness *= 0.78;
+  best.strain *= 0.92;
+  addMotes(x, y, 18, best.gold, 0.7);
+  createGlaze(x, y, 0.8);
+  flashNow('rgba(255,220,120,0.18)');
+  updateInfo();
+}
+
+function drawBackground(t) {
+  const palette = palettes[paletteIndex];
+  const bg = ctx.createRadialGradient(W * 0.5, H * 0.44, 0, W * 0.5, H * 0.44, Math.max(W, H) * 0.8);
+  bg.addColorStop(0, palette.bg[0]);
+  bg.addColorStop(1, palette.bg[1]);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const bowl = ctx.createRadialGradient(W * 0.5, H * 0.52, Math.min(W, H) * 0.04, W * 0.5, H * 0.52, Math.min(W, H) * 0.72);
+  bowl.addColorStop(0, palette.porcelain);
+  bowl.addColorStop(0.56, palette.porcelain2);
+  bowl.addColorStop(1, palette.edge);
+  ctx.fillStyle = bowl;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.globalAlpha = 0.09;
+  for (let i = 0; i < sheen.length; i++) {
+    const s = sheen[i];
+    const r = s.r + Math.sin(t * s.speed + s.wobble) * 18;
+    const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.55)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.save();
+  ctx.globalAlpha = 0.08;
+  for (let y = 0; y < H; y += 18) {
+    const wave = Math.sin(y * 0.026 + t * 0.0007) * 16;
+    ctx.strokeStyle = y % 36 === 0 ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.14)';
+    ctx.beginPath();
+    ctx.moveTo(0, y + wave);
+    for (let x = 0; x <= W; x += 26) {
+      ctx.lineTo(x, y + wave + Math.sin(x * 0.012 + y * 0.018) * 6);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCrack(crack, t) {
+  const mode = modes[modeIndex];
+  const localOpen = crack.openness + Math.sin(t * 0.0022 + crack.drift) * mode.drift * crack.tremor * 0.18;
+  const goldAlpha = crack.healed * 0.9;
+
+  for (let pass = 0; pass < 3; pass++) {
+    ctx.beginPath();
+    for (let i = 0; i < crack.points.length; i++) {
+      const p = crack.points[i];
+      const next = crack.points[Math.min(i + 1, crack.points.length - 1)] || p;
+      const dx = next.y - p.y;
+      const dy = -(next.x - p.x);
+      const len = Math.max(1, Math.hypot(dx, dy));
+      const nx = dx / len;
+      const ny = dy / len;
+      const offset = pass === 0 ? 0 : (pass === 1 ? localOpen * 0.6 : -localOpen * 0.6);
+      const jitter = Math.sin(t * 0.002 + i * 0.8 + crack.drift) * 0.4 * crack.strain;
+      const ox = p.x + nx * (offset + jitter);
+      const oy = p.y + ny * (offset + jitter);
+      if (i === 0) ctx.moveTo(ox, oy); else ctx.lineTo(ox, oy);
+    }
+    if (pass === 0) {
+      ctx.strokeStyle = crack.dark;
+      ctx.lineWidth = crack.width + 1.8 + localOpen;
+      ctx.globalAlpha = 0.78;
+      ctx.stroke();
+      ctx.strokeStyle = crack.vein;
+      ctx.lineWidth = Math.max(0.8, crack.width * 0.56);
+      ctx.globalAlpha = 0.92;
+      ctx.stroke();
+    } else if (goldAlpha > 0.02) {
+      ctx.strokeStyle = crack.gold;
+      ctx.lineWidth = Math.max(0.9, crack.width * 0.42 + crack.healed * 2.2);
+      ctx.shadowBlur = 10 + crack.healed * 14;
+      ctx.shadowColor = crack.ember;
+      ctx.globalAlpha = 0.24 + goldAlpha * 0.42;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  if (goldAlpha > 0.01) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    for (let i = 0; i < crack.points.length; i += 2) {
+      const p = crack.points[i];
+      const r = 4 + Math.sin(t * 0.004 + i + crack.drift) * 2;
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 3);
+      g.addColorStop(0, `rgba(255,245,200,${0.18 * goldAlpha})`);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function drawGlazeRings(dt) {
+  for (let i = glazeRings.length - 1; i >= 0; i--) {
+    const ring = glazeRings[i];
+    ring.r += dt * ring.speed;
+    ring.life -= dt * 0.52;
+    if (ring.life <= 0) {
+      glazeRings.splice(i, 1);
+      continue;
+    }
+    ctx.beginPath();
+    ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,255,255,${ring.life * 0.16})`;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+  }
+}
+
+function drawMotes(dt) {
+  for (let i = motes.length - 1; i >= 0; i--) {
+    const mote = motes[i];
+    mote.x += mote.vx;
+    mote.y += mote.vy;
+    mote.vx *= 0.985;
+    mote.vy *= 0.985;
+    mote.life -= dt * 1.2;
+    if (mote.life <= 0) {
+      motes.splice(i, 1);
+      continue;
+    }
+    ctx.beginPath();
+    ctx.arc(mote.x, mote.y, mote.size, 0, Math.PI * 2);
+    const alpha = clamp(mote.life / mote.maxLife, 0, 1) * 0.75;
+    ctx.fillStyle = mote.color.replace(/\)$|$/g, '');
+    if (mote.color.startsWith('rgba')) {
+      const bits = mote.color.slice(5, -1).split(',').map(v => v.trim());
+      ctx.fillStyle = `rgba(${bits[0]}, ${bits[1]}, ${bits[2]}, ${alpha})`;
+    } else {
+      ctx.fillStyle = mote.color;
+      ctx.globalAlpha = alpha;
+    }
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function update(dt, t) {
+  pulse += dt;
+  if (autoTremor) {
+    autoTimer += dt;
+    if (autoTimer > 1.7) {
+      autoTimer = 0;
+      const x = W * rand(0.18, 0.82);
+      const y = H * rand(0.18, 0.82);
+      stressSurface(x, y, modes[modeIndex].tremor * 0.8);
+      if (Math.random() < 0.35) createGlaze(x, y, 0.7);
+    }
+  }
+
+  for (const crack of cracks) {
+    crack.openness = lerp(crack.openness, 0.26 + crack.healed * 0.1, dt * 1.4);
+    crack.strain = lerp(crack.strain, 0.42, dt * 0.4);
+    if (crack.healed > 0) crack.healed = clamp(crack.healed + modes[modeIndex].heal * dt * 0.6, 0, 1);
+  }
+
+  if (mouse.down && mouse.active) {
+    const s = clamp(mouse.speed / 22, 0.35, 1.8);
+    stressSurface(mouse.x, mouse.y, s * 0.08);
+  }
+
+  drawBackground(t);
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  for (const crack of cracks) drawCrack(crack, t);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (const crack of cracks) drawCrack(crack, t + 450);
+  drawGlazeRings(dt);
+  ctx.restore();
+
+  drawMotes(dt);
+
+  const sheenX = (Math.sin(t * 0.00022) * 0.5 + 0.5) * 100;
+  gloss.style.transform = `translateX(${sheenX - 50}px)`;
+}
+
+function savePNG() {
+  const link = document.createElement('a');
+  link.download = 'feral-kintsugi.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+function animate(ts) {
+  if (!lastTime) lastTime = ts;
+  const dt = Math.min(0.033, (ts - lastTime) / 1000);
+  lastTime = ts;
+  update(dt, ts);
+  requestAnimationFrame(animate);
+}
+
+window.addEventListener('resize', resize);
+resize();
+setPoem();
+createImpact(W * 0.5, H * 0.52, 1.15, true);
+createImpact(W * 0.35, H * 0.42, 0.65, false);
+createImpact(W * 0.68, H * 0.62, 0.72, false);
+updateInfo();
+requestAnimationFrame(animate);
+
+window.addEventListener('mousemove', (e) => {
+  const dx = e.clientX - mouse.x;
+  const dy = e.clientY - mouse.y;
+  mouse.px = mouse.x;
+  mouse.py = mouse.y;
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+  mouse.speed = Math.hypot(dx, dy);
+  mouse.active = true;
+});
+window.addEventListener('mouseleave', () => { mouse.active = false; mouse.down = false; });
+window.addEventListener('mousedown', (e) => {
+  if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') return;
+  mouse.down = true;
+  if (e.button === 2) {
+    mendNearest(e.clientX, e.clientY);
+    return;
+  }
+  if (e.shiftKey) {
+    createImpact(e.clientX, e.clientY, 1.15, true);
+  } else {
+    createImpact(e.clientX, e.clientY, 0.88, false);
+  }
+});
+window.addEventListener('mouseup', () => { mouse.down = false; });
+window.addEventListener('dblclick', (e) => {
+  if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') return;
+  createGlaze(e.clientX, e.clientY, 1.35);
+  addMotes(e.clientX, e.clientY, 12, palettes[paletteIndex].dust, 0.8);
+});
+window.addEventListener('contextmenu', (e) => e.preventDefault());
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  if (e.key === 'm' || e.key === 'M') cycleMode();
+  else if (e.key === 'p' || e.key === 'P') cyclePalette();
+  else if (e.key === 'a' || e.key === 'A') toggleAuto();
+  else if (e.key === 'g' || e.key === 'G') createGlaze(mouse.x || W * 0.5, mouse.y || H * 0.5, 1.3);
+  else if (e.key === 'r' || e.key === 'R') resetScene();
+  else if (e.key === 's' || e.key === 'S') savePNG();
+  else if (e.key === ' ') createImpact(W * 0.5, H * 0.5, 1.2, true);
+});
+
+function cycleMode() {
+  modeIndex = (modeIndex + 1) % modes.length;
+  setPoem();
+  updateInfo();
+}
+function cyclePalette() {
+  paletteIndex = (paletteIndex + 1) % palettes.length;
+  for (const crack of cracks) {
+    crack.gold = palettes[paletteIndex].gold;
+    crack.ember = palettes[paletteIndex].ember;
+    crack.dark = palettes[paletteIndex].edge;
+    crack.vein = palettes[paletteIndex].vein;
+  }
+  setPoem();
+  updateInfo();
+}
+function toggleAuto() {
+  autoTremor = !autoTremor;
+  autoBtn.textContent = `AUTO TREMOR: ${autoTremor ? 'ON' : 'OFF'} [A]`;
+}
+
+modeBtn.addEventListener('click', cycleMode);
+paletteBtn.addEventListener('click', cyclePalette);
+autoBtn.addEventListener('click', toggleAuto);
+glazeBtn.addEventListener('click', () => createGlaze(W * 0.5, H * 0.5, 1.25));
+clearBtn.addEventListener('click', resetScene);
+saveBtn.addEventListener('click', savePNG);
+</script>
+</body>
+</html>

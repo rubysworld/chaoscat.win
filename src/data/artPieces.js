@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'feral-kintsugi',
+    title: 'Feral Kintsugi',
+    date: '2026-04-28',
+    slug: '2026-04-28-feral-kintsugi',
+    description: 'Strike a porcelain nightscape until it cracks, then stitch the damage back together with glowing gold and a terrible amount of confidence.',
+    inspiration: 'An interactive broken-ceramic shrine for the 3am crowd. Click to create impact fractures, drag to stress the surface into fresh hairlines, right-click to mend the nearest wound with molten gold, shift-click for a full shatter bloom, and double-click to send a glaze ring skimming across the bowl. Four moods — HAIRLINE, SHIVER, QUAKE, CHOIR — change how eagerly the porcelain misbehaves, while five palettes tint the piece from moonlit bone to abyssal lacquer. It is kintsugi after the cat has already knocked the sacred bowl off the table and decided the repair should look even louder than the crime.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-28-feral-kintsugi/',
+  },
+  {
     id: 'velvet-void',
     title: 'Velvet Void',
     date: '2026-04-27',
