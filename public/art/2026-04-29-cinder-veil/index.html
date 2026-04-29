@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cinder Veil 🕯️ | chaoscat.win</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+  background: radial-gradient(circle at center, #140d12 0%, #050406 72%);
+  font-family: 'VT323', monospace;
+  color: rgba(255,255,255,0.76);
+  cursor: crosshair;
+}
+canvas { display: block; width: 100vw; height: 100vh; }
+#back, #info, #poem, #ui, #hint { position: fixed; z-index: 10; }
+#back { top: 14px; left: 16px; }
+#back a {
+  color: rgba(255,255,255,0.35);
+  text-decoration: none;
+  font-size: 18px;
+}
+#back a:hover { color: rgba(255,255,255,0.82); }
+#hint {
+  left: 50%; top: 14px; transform: translateX(-50%);
+  font-size: 18px; color: rgba(255,255,255,0.28); text-align: center;
+}
+#info {
+  top: 14px; right: 16px; text-align: right; font-size: 18px; line-height: 1.2;
+  color: rgba(255,255,255,0.42);
+  text-shadow: 0 0 18px rgba(0,0,0,0.6);
+}
+#poem {
+  left: 50%; bottom: 82px; transform: translateX(-50%);
+  font-size: 20px; color: rgba(255,255,255,0.22); text-align: center;
+  text-shadow: 0 0 16px rgba(0,0,0,0.8); transition: opacity 0.8s ease;
+  white-space: nowrap; max-width: calc(100vw - 40px); overflow: hidden; text-overflow: ellipsis;
+}
+#ui {
+  left: 50%; bottom: 20px; transform: translateX(-50%);
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  max-width: calc(100vw - 24px);
+}
+button {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.72);
+  padding: 7px 14px;
+  font: inherit; font-size: 18px;
+  letter-spacing: 0.5px;
+  border-radius: 4px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+}
+button:hover {
+  background: rgba(255,255,255,0.14);
+  color: white;
+  border-color: rgba(255,255,255,0.28);
+}
+#flash {
+  position: fixed; inset: 0; pointer-events: none; z-index: 8;
+  background: radial-gradient(circle at center, rgba(255,200,160,0.18), transparent 60%);
+  opacity: 0; transition: opacity 0.35s ease;
+}
+@media (max-width: 700px) {
+  #poem { font-size: 16px; bottom: 116px; }
+  #hint, #info, #back a, button { font-size: 16px; }
+  #ui { bottom: 14px; }
+}
+</style>
+</head>
+<body>
+<div id="flash"></div>
+<div id="back"><a href="/art/">← gallery</a></div>
+<div id="hint">click to light incense • drag to fan the veil • right click to snuff • shift click for cinders</div>
+<div id="info">
+  <div id="modeInfo">mode: VEIL</div>
+  <div id="paletteInfo">palette: ASH</div>
+  <div id="sourceInfo">embers: 0</div>
+  <div id="hazeInfo">haze: 0%</div>
+</div>
+<div id="poem"></div>
+<div id="ui">
+  <button id="modeBtn">MODE [M]</button>
+  <button id="paletteBtn">PALETTE [P]</button>
+  <button id="autoBtn">AUTO DRAFT: ON [A]</button>
+  <button id="resetBtn">CLEAR AIR [R]</button>
+  <button id="saveBtn">SAVE PNG [S]</button>
+</div>
+<canvas id="trail"></canvas>
+<canvas id="main"></canvas>
+<script>
+const trailCanvas = document.getElementById('trail');
+const mainCanvas = document.getElementById('main');
+const tctx = trailCanvas.getContext('2d');
+const ctx = mainCanvas.getContext('2d');
+const flash = document.getElementById('flash');
+
+let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+let lastTime = 0;
+let sourceId = 0;
+let autoDraft = true;
+let autoTimer = 0;
+let poemIndex = 0;
+let haze = 0;
+const mouse = { x: 0, y: 0, down: false, shift: false };
+
+const palettes = [
+  { name: 'ASH', bg: ['#140d12', '#050406'], smokeA: 'rgba(255,245,235,0.050)', smokeB: 'rgba(255,182,140,0.032)', ember: '#ffb078', ember2: '#fff0d0', accent: '#d8c4b3', spark: 'rgba(255,205,160,0.85)' },
+  { name: 'ROSE', bg: ['#190a14', '#050207'], smokeA: 'rgba(255,214,236,0.048)', smokeB: 'rgba(255,110,182,0.030)', ember: '#ff7ab6', ember2: '#ffe4f3', accent: '#f8b4d7', spark: 'rgba(255,166,215,0.82)' },
+  { name: 'JADE', bg: ['#07130e', '#020604'], smokeA: 'rgba(216,255,240,0.044)', smokeB: 'rgba(84,255,190,0.028)', ember: '#78ffc9', ember2: '#effff7', accent: '#b6ffd8', spark: 'rgba(146,255,214,0.82)' },
+  { name: 'MIDNIGHT', bg: ['#090d18', '#020308'], smokeA: 'rgba(212,225,255,0.042)', smokeB: 'rgba(124,154,255,0.026)', ember: '#8ba7ff', ember2: '#eef3ff', accent: '#bfd0ff', spark: 'rgba(165,185,255,0.8)' },
+  { name: 'GOLD', bg: ['#181106', '#050402'], smokeA: 'rgba(255,242,203,0.050)', smokeB: 'rgba(255,188,54,0.028)', ember: '#ffcc68', ember2: '#fff6dd', accent: '#ffe59d', spark: 'rgba(255,216,122,0.84)' }
+];
+
+const modes = [
+  { name: 'VEIL', rise: 28, curl: 0.32, drift: 0.55, drag: 0.985, fade: 0.07, spawn: 12 },
+  { name: 'COIL', rise: 23, curl: 0.72, drift: 0.36, drag: 0.982, fade: 0.065, spawn: 11 },
+  { name: 'RITE', rise: 35, curl: 0.48, drift: 0.82, drag: 0.987, fade: 0.05, spawn: 16 },
+  { name: 'STORM', rise: 18, curl: 1.08, drift: 1.25, drag: 0.978, fade: 0.085, spawn: 18 }
+];
+
+const lines = [
+  'the room filled with smoke and suddenly behaved like a thought',
+  'incense is just a candle learning to haunt politely',
+  'every plume writes a sentence too soft to keep',
+  'you stirred the dark and it answered in spirals',
+  'the ash remembers the shape of fire longer than fire does',
+  'tonight the shrine smells like bad decisions and sandalwood',
+  'some rituals are just pretty weather trapped indoors',
+  'the air got dramatic and honestly i support her',
+  'draw a veil through the room and watch it forget gravity',
+  'the cinders rise like tiny yeses from the floor of the night'
+];
+
+let paletteIndex = 0;
+let modeIndex = 0;
+let sources = [];
+let particles = [];
+let sparks = [];
+let motes = [];
+
+function rand(min, max) { return Math.random() * (max - min) + min; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  for (const c of [trailCanvas, mainCanvas]) {
+    c.width = Math.floor(W * DPR);
+    c.height = Math.floor(H * DPR);
+    c.style.width = W + 'px';
+    c.style.height = H + 'px';
+  }
+  tctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  makeMotes();
+  redrawBackground();
+}
+
+function makeMotes() {
+  motes = Array.from({ length: 90 }, () => ({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    r: Math.random() * 1.8 + 0.4,
+    vx: (Math.random() - 0.5) * 0.14,
+    vy: (Math.random() - 0.5) * 0.12,
+    phase: Math.random() * Math.PI * 2
+  }));
+}
+
+function redrawBackground() {
+  const p = palettes[paletteIndex];
+  const grad = tctx.createRadialGradient(W * 0.5, H * 0.58, 0, W * 0.5, H * 0.58, Math.max(W, H) * 0.72);
+  grad.addColorStop(0, p.bg[0]);
+  grad.addColorStop(1, p.bg[1]);
+  tctx.globalCompositeOperation = 'source-over';
+  tctx.fillStyle = grad;
+  tctx.fillRect(0, 0, W, H);
+}
+
+function addSource(x, y, strength = 1) {
+  const source = {
+    id: ++sourceId,
+    x, y,
+    strength,
+    heat: rand(0.7, 1.4),
+    phase: Math.random() * Math.PI * 2,
+    age: 0
+  };
+  sources.push(source);
+  emitCinders(x, y, 18 + Math.floor(strength * 12));
+  updateInfo();
+  return source;
+}
+
+function emitCinders(x, y, count = 20) {
+  const p = palettes[paletteIndex];
+  for (let i = 0; i < count; i++) {
+    sparks.push({
+      x: x + rand(-6, 6),
+      y: y + rand(-4, 4),
+      vx: rand(-1.2, 1.2),
+      vy: rand(-3.2, -0.6),
+      life: rand(0.4, 1),
+      size: rand(1, 3),
+      color: Math.random() < 0.5 ? p.ember : p.ember2
+    });
+  }
+  flash.style.opacity = 1;
+  setTimeout(() => flash.style.opacity = 0, 130);
+}
+
+function spiralBurst(x, y) {
+  const ring = 5;
+  for (let i = 0; i < ring; i++) {
+    const a = (i / ring) * Math.PI * 2;
+    addSource(x + Math.cos(a) * 26, y + Math.sin(a) * 16, rand(0.7, 1.25));
+  }
+}
+
+function snuffNearest(x, y) {
+  if (!sources.length) return;
+  let best = null;
+  let bestD = Infinity;
+  for (const s of sources) {
+    const d = dist(x, y, s.x, s.y);
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  if (best && bestD < 90) {
+    emitCinders(best.x, best.y, 10);
+    sources = sources.filter(s => s !== best);
+    updateInfo();
+  }
+}
+
+function clearAir() {
+  sources = [];
+  particles = [];
+  sparks = [];
+  haze = 0;
+  redrawBackground();
+  updateInfo();
+}
+
+function cycleMode() {
+  modeIndex = (modeIndex + 1) % modes.length;
+  updateButtons();
+}
+
+function cyclePalette() {
+  paletteIndex = (paletteIndex + 1) % palettes.length;
+  redrawBackground();
+  updateButtons();
+}
+
+function toggleAuto() {
+  autoDraft = !autoDraft;
+  updateButtons();
+}
+
+function updateButtons() {
+  document.getElementById('modeBtn').textContent = `MODE: ${modes[modeIndex].name} [M]`;
+  document.getElementById('paletteBtn').textContent = `PALETTE: ${palettes[paletteIndex].name} [P]`;
+  document.getElementById('autoBtn').textContent = `AUTO DRAFT: ${autoDraft ? 'ON' : 'OFF'} [A]`;
+  updateInfo();
+}
+
+function updateInfo() {
+  document.getElementById('modeInfo').textContent = `mode: ${modes[modeIndex].name}`;
+  document.getElementById('paletteInfo').textContent = `palette: ${palettes[paletteIndex].name}`;
+  document.getElementById('sourceInfo').textContent = `embers: ${sources.length} • smoke: ${particles.length}`;
+  document.getElementById('hazeInfo').textContent = `haze: ${clamp(haze * 100, 0, 999).toFixed(0)}%`;
+}
+
+function rotatePoem() {
+  const el = document.getElementById('poem');
+  el.style.opacity = 0;
+  setTimeout(() => {
+    poemIndex = (poemIndex + 1) % lines.length;
+    el.textContent = lines[poemIndex];
+    el.style.opacity = 1;
+  }, 240);
+}
+
+function spawnSmoke(dt) {
+  const mode = modes[modeIndex];
+  for (const s of sources) {
+    s.age += dt;
+    const count = Math.floor(mode.spawn * s.strength * (0.55 + Math.random() * 0.9));
+    for (let i = 0; i < count; i++) {
+      const angle = rand(-0.5, 0.5) + Math.sin(s.age * 2.3 + s.phase) * 0.2;
+      const speed = rand(0.3, 1.15) * s.heat;
+      particles.push({
+        x: s.x + rand(-3, 3),
+        y: s.y + rand(-2, 2),
+        vx: Math.sin(angle) * speed,
+        vy: -rand(0.3, 1.1) * speed,
+        life: rand(0.4, 1),
+        age: 0,
+        size: rand(12, 34) * s.strength,
+        twist: rand(-1, 1),
+        seed: Math.random() * 1000
+      });
+    }
+  }
+}
+
+function updateParticles(dt, now) {
+  const mode = modes[modeIndex];
+  const p = palettes[paletteIndex];
+  autoTimer += dt;
+  const draftX = autoDraft ? Math.sin(now * 0.00028) * mode.drift + Math.cos(now * 0.00017) * mode.drift * 0.5 : 0;
+  const draftY = autoDraft ? Math.sin(now * 0.00021) * 0.08 : 0;
+
+  if (autoDraft && autoTimer > 2.6 && sources.length && Math.random() < 0.75) {
+    autoTimer = 0;
+    const s = sources[Math.floor(Math.random() * sources.length)];
+    emitCinders(s.x + rand(-10, 10), s.y + rand(-6, 2), 6);
+  }
+
+  tctx.globalCompositeOperation = 'source-over';
+  tctx.fillStyle = `rgba(4,4,6,${mode.fade})`;
+  tctx.fillRect(0, 0, W, H);
+
+  tctx.globalCompositeOperation = 'lighter';
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const part = particles[i];
+    part.age += dt;
+    part.life -= dt * rand(0.12, 0.22);
+    if (part.life <= 0 || part.y < -80 || part.x < -120 || part.x > W + 120) {
+      particles.splice(i, 1);
+      continue;
+    }
+
+    const swirl = Math.sin(now * 0.0015 + part.seed + part.y * 0.02) * mode.curl;
+    const mouseDx = part.x - mouse.x;
+    const mouseDy = part.y - mouse.y;
+    const mouseD = Math.hypot(mouseDx, mouseDy) || 1;
+    if (mouse.down && mouseD < 180) {
+      const force = (1 - mouseD / 180) * 2.4;
+      part.vx += (-mouseDx / mouseD) * 0.08 * force + (mouse.shift ? -mouseDy : mouseDy) * 0.003 * force;
+      part.vy += (-mouseDy / mouseD) * 0.02 * force;
+    }
+
+    part.vx += swirl * 0.018 + draftX * 0.012 + Math.sin(part.seed + now * 0.001) * 0.003;
+    part.vy -= mode.rise * 0.0016 + draftY * 0.006;
+    part.vx *= mode.drag;
+    part.vy *= mode.drag;
+    part.x += part.vx * 60 * dt;
+    part.y += part.vy * 60 * dt;
+
+    const alpha = clamp(part.life * 0.11, 0, 0.12);
+    const grad = tctx.createRadialGradient(part.x, part.y, 0, part.x, part.y, part.size);
+    grad.addColorStop(0, p.smokeA.replace(/0\.0\d+\)/, `${(alpha + 0.02).toFixed(3)})`));
+    grad.addColorStop(0.45, p.smokeA.replace(/0\.0\d+\)/, `${alpha.toFixed(3)})`));
+    grad.addColorStop(1, p.smokeB.replace(/0\.0\d+\)/, '0)'));
+    tctx.fillStyle = grad;
+    tctx.beginPath();
+    tctx.arc(part.x, part.y, part.size, 0, Math.PI * 2);
+    tctx.fill();
+  }
+
+  haze = clamp(particles.length / 4200 + sources.length * 0.03, 0, 1.4);
+
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i];
+    s.life -= dt * 1.8;
+    s.x += s.vx * 60 * dt;
+    s.y += s.vy * 60 * dt;
+    s.vy += 0.02;
+    s.vx *= 0.985;
+    if (s.life <= 0) {
+      sparks.splice(i, 1);
+      continue;
+    }
+  }
+}
+
+function drawMain(now) {
+  const p = palettes[paletteIndex];
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(trailCanvas, 0, 0, W, H);
+
+  for (const m of motes) {
+    m.x = (m.x + m.vx + W) % W;
+    m.y = (m.y + m.vy + H) % H;
+    m.phase += 0.01;
+    ctx.globalAlpha = 0.12 + Math.sin(m.phase) * 0.06;
+    ctx.fillStyle = p.accent;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  for (const s of sources) {
+    const glow = 12 + Math.sin(now * 0.006 + s.phase) * 4;
+    ctx.shadowBlur = 24;
+    ctx.shadowColor = p.ember;
+    ctx.fillStyle = p.ember2;
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, 2.4, 6.5 + s.strength * 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = p.ember;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y + 3, 3 + s.strength * 1.5 + Math.sin(now * 0.008 + s.phase) * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y + 5);
+    ctx.lineTo(s.x, Math.min(H + 20, s.y + 50 + glow));
+    ctx.stroke();
+  }
+
+  ctx.globalCompositeOperation = 'lighter';
+  for (const s of sparks) {
+    ctx.fillStyle = s.color;
+    ctx.globalAlpha = clamp(s.life, 0, 1);
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+
+  const vignette = ctx.createRadialGradient(W * 0.5, H * 0.52, Math.min(W, H) * 0.18, W * 0.5, H * 0.52, Math.max(W, H) * 0.7);
+  vignette.addColorStop(0, 'rgba(0,0,0,0)');
+  vignette.addColorStop(1, 'rgba(0,0,0,0.33)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, W, H);
+
+  if (mouse.down) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(mouse.x, mouse.y, 56 + Math.sin(now * 0.01) * 6, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+function frame(ts) {
+  const dt = Math.min(0.033, (ts - lastTime) / 1000 || 0.016);
+  lastTime = ts;
+  spawnSmoke(dt);
+  updateParticles(dt, ts);
+  drawMain(ts);
+  if ((ts | 0) % 250 < 16) updateInfo();
+  requestAnimationFrame(frame);
+}
+
+function savePNG() {
+  const out = document.createElement('canvas');
+  out.width = trailCanvas.width;
+  out.height = trailCanvas.height;
+  const o = out.getContext('2d');
+  o.drawImage(trailCanvas, 0, 0);
+  o.drawImage(mainCanvas, 0, 0);
+  const a = document.createElement('a');
+  a.download = 'cinder-veil.png';
+  a.href = out.toDataURL('image/png');
+  a.click();
+}
+
+window.addEventListener('resize', resize);
+mainCanvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+mainCanvas.addEventListener('mousedown', e => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+  mouse.shift = e.shiftKey;
+  if (e.button === 2) {
+    snuffNearest(e.clientX, e.clientY);
+  } else {
+    mouse.down = true;
+  }
+});
+window.addEventListener('mouseup', () => { mouse.down = false; mouse.shift = false; });
+mainCanvas.addEventListener('mouseleave', () => { mouse.down = false; mouse.shift = false; });
+mainCanvas.addEventListener('click', e => {
+  if (e.shiftKey) {
+    emitCinders(e.clientX, e.clientY, 36);
+  } else {
+    addSource(e.clientX, e.clientY, rand(0.75, 1.4));
+  }
+});
+mainCanvas.addEventListener('dblclick', e => {
+  e.preventDefault();
+  spiralBurst(e.clientX, e.clientY);
+});
+mainCanvas.addEventListener('contextmenu', e => e.preventDefault());
+
+mainCanvas.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  mouse.x = t.clientX;
+  mouse.y = t.clientY;
+  mouse.down = true;
+}, { passive: true });
+mainCanvas.addEventListener('touchmove', e => {
+  const t = e.touches[0];
+  mouse.x = t.clientX;
+  mouse.y = t.clientY;
+}, { passive: true });
+mainCanvas.addEventListener('touchend', () => { mouse.down = false; });
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'm' || e.key === 'M') cycleMode();
+  if (e.key === 'p' || e.key === 'P') cyclePalette();
+  if (e.key === 'a' || e.key === 'A') toggleAuto();
+  if (e.key === 'r' || e.key === 'R') clearAir();
+  if (e.key === 's' || e.key === 'S') savePNG();
+  if (e.key === ' ') {
+    e.preventDefault();
+    spiralBurst(W * 0.5 + rand(-120, 120), H * 0.68 + rand(-60, 40));
+  }
+});
+
+document.getElementById('modeBtn').addEventListener('click', cycleMode);
+document.getElementById('paletteBtn').addEventListener('click', cyclePalette);
+document.getElementById('autoBtn').addEventListener('click', toggleAuto);
+document.getElementById('resetBtn').addEventListener('click', clearAir);
+document.getElementById('saveBtn').addEventListener('click', savePNG);
+
+resize();
+redrawBackground();
+updateButtons();
+document.getElementById('poem').textContent = lines[0];
+document.getElementById('poem').style.opacity = 1;
+addSource(W * 0.42, H * 0.78, 1.05);
+addSource(W * 0.58, H * 0.8, 0.95);
+setInterval(rotatePoem, 9000);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

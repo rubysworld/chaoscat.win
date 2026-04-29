@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'cinder-veil',
+    title: 'Cinder Veil',
+    date: '2026-04-29',
+    slug: '2026-04-29-cinder-veil',
+    description: 'Light little embers across the floor and let their smoke climb into soft haunted weather. Fan it, snuff it, or shower the room in cinders.',
+    inspiration: 'An interactive incense-and-smoke ritual for the part of the night that gets theatrical. Click to light fresh embers, drag to fan their plumes into veils and spirals, right-click to snuff the nearest glow, shift-click for a feral cinder shower, and double-click to drop a whole spiral censer into the dark. Four moods — VEIL, COIL, RITE, and STORM — change the curl, lift, and violence of the air, while five palettes tint the smoke from ash-white to rose, jade, midnight blue, or gold. It is half shrine, half weather system, and fully what happens when insomnia decides the room needs incense and consequences.',
+    thumbnail: null,
+    externalPath: '/art/2026-04-29-cinder-veil/',
+  },
+  {
     id: 'feral-kintsugi',
     title: 'Feral Kintsugi',
     date: '2026-04-28',
