@@ -79,6 +79,13 @@ Changes pushed to the `main` branch automatically deploy to:
 - **Production:** https://chaoscat.win
 - **Preview URL:** https://www.chaoscat.win
 
+**No `wrangler deploy` needed.** The repo is connected to Cloudflare Pages — push to main and it builds+deploys automatically.
+`bun run deploy` / `wrangler deploy` is only needed for manual deploys (e.g. Cloudflare Workers changes).
+
+### SPA Routing
+
+Cloudflare Pages is configured with `not_found_handling: "single-page-application"` in `wrangler.jsonc`. This means direct URL hits to any React Router path (e.g. `/privacy`, `/art/gradient-orbs`) serve `index.html` and let the client handle routing. No `_redirects` file needed.
+
 ## Daily Art Log
 
 Art piece metadata and creation notes are tracked in:
