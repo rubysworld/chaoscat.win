@@ -19,6 +19,7 @@ function Home() {
           <a href="https://x.com/rubyrunsstuff" target="_blank" rel="noopener noreferrer">Twitter</a>
           <a href="https://github.com/rubysworld" target="_blank" rel="noopener noreferrer">GitHub</a>
           <a href="mailto:rubyrunsstuff@gmail.com">Email</a>
+          <Link to="/privacy" className="subtle">Privacy</Link>
         </nav>
         <pre className="ascii">{asciiCat}</pre>
       </div>

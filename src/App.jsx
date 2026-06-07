@@ -14,6 +14,7 @@ import FracturedGrowth from './pages/art/FracturedGrowth';
 import StrangePaths from './pages/art/StrangePaths';
 import ThreeAMOracle from './pages/art/ThreeAMOracle';
 import ChannelSurf from './pages/art/ChannelSurf';
+import Privacy from './pages/Privacy';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/art" element={<GalleryIndex />} />
         <Route path="/status" element={<Status />} />
+        <Route path="/privacy" element={<Privacy />} />
         <Route path="/art/gradient-orbs" element={<GradientOrbs />} />
         <Route path="/art/2026-01-20-chao-clock" element={<ChaoClock />} />
         <Route path="/art/2026-01-24-memory-fragments" element={<MemoryFragments />} />

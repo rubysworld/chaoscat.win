@@ -56,6 +56,15 @@ h1 {
   transform: translateY(-2px);
 }
 
+.links a.subtle {
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.links a.subtle:hover {
+  color: #888;
+}
+
 .ascii {
   font-family: monospace;
   color: #ff7b00;
