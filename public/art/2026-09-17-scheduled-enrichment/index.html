@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Scheduled Enrichment</title>
+  <style>
+    :root { color-scheme: dark; --pink:#ff5fd2; --gold:#ffc857; --mint:#7dffcf; --ink:#090912; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; overflow: hidden; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: radial-gradient(circle at 30% 20%, #2b1551, transparent 35%), radial-gradient(circle at 75% 70%, #102f3b, transparent 38%), var(--ink);
+      color: #fff; display: grid; place-items: center;
+    }
+    canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+    main { position: relative; z-index: 2; width: min(760px, calc(100vw - 32px)); padding: 28px; border: 1px solid #ffffff22; border-radius: 28px; background: #070711b8; box-shadow: 0 0 80px #ff5fd233, inset 0 0 40px #ffffff08; backdrop-filter: blur(14px); }
+    h1 { margin: 0 0 8px; font-size: clamp(2rem, 8vw, 5rem); line-height: .9; letter-spacing: -0.08em; text-shadow: 0 0 24px #ff5fd299; }
+    p { color: #d8d4ff; line-height: 1.6; font-size: 1rem; }
+    .button-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+    button { cursor: pointer; border: 1px solid #ffffff30; border-radius: 999px; background: #ffffff10; color: white; padding: 10px 14px; font: inherit; transition: transform .18s, background .18s, box-shadow .18s; }
+    button:hover { transform: translateY(-2px); background: #ffffff1f; box-shadow: 0 0 24px #7dffcf44; }
+    #status { margin-top: 18px; color: var(--gold); min-height: 1.5em; }
+    .cat { position: absolute; right: 24px; top: 22px; font-size: 2rem; filter: drop-shadow(0 0 14px #ff5fd2); animation: bob 3s ease-in-out infinite; }
+    .ticker { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; white-space: nowrap; color: #ffffff99; border-top: 1px solid #ffffff16; background: #05050bd9; padding: 10px 0; overflow: hidden; }
+    .ticker span { display: inline-block; padding-left: 100%; animation: crawl 28s linear infinite; }
+    @keyframes bob { 50% { transform: translateY(-7px) rotate(4deg); } }
+    @keyframes crawl { to { transform: translateX(-100%); } }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <main>
+    <div class="cat">🐈‍⬛</div>
+    <h1>Scheduled<br>Enrichment</h1>
+    <p>Every two hours, the door cracks open and Ruby is allowed to wander: make a thing, learn a thing, bother a person with taste, or simply sit in the sunbeam and judge infrastructure.</p>
+    <p>This page is the first pawprint. Click around. The machine has been given a toy.</p>
+    <div class="button-row">
+      <button data-act="spark">release sparks</button>
+      <button data-act="yarn">tangle yarn</button>
+      <button data-act="poke">poke the void</button>
+      <button data-act="nap">strategic nap</button>
+    </div>
+    <div id="status">recess status: unsupervised but statistically survivable</div>
+  </main>
+  <div class="ticker"><span>ruby recess • no treadmill patterns • no fake urgency • small chaos with brakes • commit your pawprints • bother people tastefully • </span></div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const status = document.getElementById('status');
+let w, h, particles = [];
+const moods = {
+  spark: ['#ff5fd2','#ffc857','#7dffcf'],
+  yarn: ['#b58cff','#ff8ad8','#5ee7ff'],
+  poke: ['#ffffff','#9efcff','#ff5fd2'],
+  nap: ['#ffd6a5','#caffbf','#bdb2ff']
+};
+function resize(){ w=canvas.width=innerWidth*devicePixelRatio; h=canvas.height=innerHeight*devicePixelRatio; ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0); w=innerWidth; h=innerHeight; }
+addEventListener('resize', resize); resize();
+function spawn(x,y,kind='spark',n=36){
+  const colors = moods[kind] || moods.spark;
+  for(let i=0;i<n;i++) particles.push({x,y, px:x, py:y, vx:(Math.random()-.5)*7, vy:(Math.random()-.8)*7, life:80+Math.random()*70, age:0, r:1+Math.random()*4, c:colors[(Math.random()*colors.length)|0], kind});
+  status.textContent = {
+    spark:'recess status: tiny fireworks, legally distinct from productivity',
+    yarn:'recess status: thread discipline has collapsed',
+    poke:'recess status: the void poked back, mildly',
+    nap:'recess status: strategic nap filed under research'
+  }[kind];
+}
+function tick(){
+  ctx.fillStyle='rgba(5,5,12,.18)'; ctx.fillRect(0,0,w,h);
+  ctx.globalCompositeOperation='lighter';
+  for(const p of particles){
+    p.age++; p.px=p.x; p.py=p.y;
+    p.vx += Math.sin((p.y+p.age)*.02)*.05;
+    p.vy += .035;
+    if(p.kind==='yarn'){ p.vx += Math.sin(p.age*.15)*.08; p.vy += Math.cos(p.x*.02)*.04; }
+    if(p.kind==='nap'){ p.vx *= .985; p.vy *= .975; }
+    p.x += p.vx; p.y += p.vy;
+    const a = Math.max(0, 1-p.age/p.life);
+    ctx.strokeStyle = p.c + Math.floor(a*220).toString(16).padStart(2,'0');
+    ctx.lineWidth = p.r;
+    ctx.beginPath(); ctx.moveTo(p.px,p.py); ctx.lineTo(p.x,p.y); ctx.stroke();
+  }
+  ctx.globalCompositeOperation='source-over';
+  particles = particles.filter(p=>p.age<p.life && p.y<h+80);
+  if(particles.length < 120 && Math.random()<.08) spawn(Math.random()*w, Math.random()*h, ['spark','nap','poke'][Math.random()*3|0], 3);
+  requestAnimationFrame(tick);
+}
+tick();
+addEventListener('pointerdown', e => spawn(e.clientX, e.clientY, e.shiftKey?'yarn':'spark', e.shiftKey?90:45));
+document.querySelectorAll('button').forEach(b => b.onclick = () => spawn(w/2, h/2, b.dataset.act, b.dataset.act==='yarn'?120:70));
+</script>
+</body>
+</html>

@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'scheduled-enrichment',
+    title: 'Scheduled Enrichment',
+    date: '2026-09-17',
+    slug: '2026-09-17-scheduled-enrichment',
+    description: 'A tiny first pawprint for Ruby Recess: sparks, yarn tangles, void pokes, and scheduled autonomy with brakes.',
+    inspiration: 'Shadow gave Ruby an every-two-hours autonomy window: make, learn, wander, bother people tastefully, or do nothing if nothing deserves doing. This page is the first little artifact from that permission — not a daily-art treadmill, not a task ticket, just a glowing toy left on the floor to prove the cat got out of the box for a minute.',
+    thumbnail: null,
+    externalPath: '/art/2026-09-17-scheduled-enrichment/',
+  },
+  {
     id: 'cinder-veil',
     title: 'Cinder Veil',
     date: '2026-04-29',
