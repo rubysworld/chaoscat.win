@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="theme-color" content="#080b14" />
+<title>Folded Sky — chaoscat.win</title>
+<style>
+  :root { color-scheme: dark; --ink:#080b14; --paper:#e8ecf5; --muted:#9da8bd; --line:#ffffff25; --glow:#9cbbff; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; width:100%; min-height:100%; overflow:hidden; background:var(--ink); color:var(--paper); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  .grain { position:fixed; inset:0; pointer-events:none; opacity:.12; z-index:1; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.25'/%3E%3C/svg%3E"); mix-blend-mode:soft-light; }
+  main { position:fixed; z-index:2; top:clamp(18px,5vh,54px); left:clamp(18px,5vw,64px); width:min(390px,calc(100vw - 36px)); padding:24px 25px 22px; border:1px solid var(--line); background:linear-gradient(140deg,#101827d9,#090d18b8); box-shadow:0 18px 70px #0008,inset 0 1px #ffffff12; backdrop-filter:blur(18px); }
+  .eyebrow { color:#a9bbd9; font-size:.68rem; letter-spacing:.22em; text-transform:uppercase; }
+  h1 { margin:13px 0 10px; font:500 clamp(2.4rem,8vw,4.1rem)/.88 Georgia,serif; letter-spacing:-.065em; }
+  p { margin:0; max-width:31ch; color:#c1cadd; font-size:.82rem; line-height:1.7; }
+  .rule { height:1px; margin:20px 0 14px; background:linear-gradient(90deg,#dbe7ff77,transparent); }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; }
+  button { color:#eaf0ff; border:1px solid #dce8ff33; background:#ffffff09; padding:9px 11px; font:inherit; font-size:.68rem; letter-spacing:.07em; cursor:pointer; transition:background .2s,border-color .2s,transform .2s; }
+  button:hover,button:focus-visible { background:#d9e7ff1c; border-color:#c8ddff88; transform:translateY(-1px); outline:none; }
+  button[aria-pressed="true"] { background:#a9c8ff20; border-color:#c8ddff88; }
+  .hint { position:fixed; z-index:2; left:clamp(18px,5vw,64px); bottom:32px; color:#d4dcedaa; font-size:.68rem; letter-spacing:.09em; line-height:1.8; text-transform:uppercase; }
+  .readout { position:fixed; z-index:2; right:clamp(18px,5vw,64px); bottom:32px; color:#d4dced88; font-size:.66rem; letter-spacing:.14em; text-align:right; text-transform:uppercase; }
+  .readout span { color:#fff; }
+  @media(max-width:600px) { main { top:16px; left:16px; padding:18px; width:min(350px,calc(100vw - 32px)); } h1 { font-size:2.8rem; } .hint { bottom:52px; max-width:48vw; font-size:.59rem; } .readout { bottom:52px; max-width:44vw; font-size:.58rem; } }
+  @media(prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto !important; transition:none !important; } }
+</style>
+</head>
+<body>
+<canvas id="sky" aria-label="An interactive folded, starlit sheet"></canvas>
+<div class="grain"></div>
+<main>
+  <div class="eyebrow">field study 03 / impossible material</div>
+  <h1>Folded<br>Sky</h1>
+  <p>A sheet of night caught mid-unfold. Press a crease into it; the stars will keep the wrinkle long after your hand lifts.</p>
+  <div class="rule"></div>
+  <div class="controls" aria-label="Surface controls">
+    <button id="material" aria-pressed="false">SURFACE / PEARL</button>
+    <button id="unfold">UNFOLD AGAIN</button>
+    <button id="clear">LET IT LIE</button>
+  </div>
+</main>
+<div class="hint">click · press a crease<br>drag · pull the fold<br>double click · crumple the heavens</div>
+<div class="readout">creases held <span id="count">00</span><br>surface tension <span id="tension">quiet</span></div>
+<script>
+(() => {
+  const canvas = document.getElementById('sky');
+  const ctx = canvas.getContext('2d', { alpha:false });
+  const countLabel = document.getElementById('count');
+  const tensionLabel = document.getElementById('tension');
+  const materialButton = document.getElementById('material');
+  let width=0,height=0,dpr=1,cols=0,rows=0,grid=[],folds=[],stars=[];
+  let pearl=false, pointer={x:-1000,y:-1000,down:false};
+  const colors = pearl ? ['#a4b7df','#e5d9c5','#b7cfca'] : ['#8fb6ff','#c5a7ff','#a4e4df'];
+  const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+  function resize(){
+    dpr=Math.min(devicePixelRatio||1,2); width=innerWidth; height=innerHeight;
+    canvas.width=Math.round(width*dpr); canvas.height=Math.round(height*dpr); ctx.setTransform(dpr,0,0,dpr,0,0);
+    const step=clamp(Math.min(width,height)/14,34,64); cols=Math.ceil(width/step)+2; rows=Math.ceil(height/step)+2; grid=[];
+    for(let y=0;y<rows;y++){ const row=[]; for(let x=0;x<cols;x++) row.push({x:(x-1)*step,y:(y-1)*step,jx:(Math.random()-.5)*step*.25,jy:(Math.random()-.5)*step*.25}); grid.push(row); }
+    stars=Array.from({length:Math.floor(width*height/9000)},()=>({x:Math.random()*width,y:Math.random()*height,r:.3+Math.random()*1.4,phase:Math.random()*8}));
+  }
+  function heightAt(x,y,t){
+    let z=Math.sin(x*.007+y*.004+t*.00022)*11+Math.sin(y*.011-x*.003-t*.00016)*7;
+    for(const f of folds){
+      const dx=f.x2-f.x1,dy=f.y2-f.y1,len2=dx*dx+dy*dy||1;
+      const u=clamp(((x-f.x1)*dx+(y-f.y1)*dy)/len2,0,1);
+      const px=f.x1+u*dx,py=f.y1+u*dy,dist=Math.hypot(x-px,y-py);
+      const age=(t-f.born)/1000, strength=Math.exp(-age*.12);
+      z+=Math.cos(dist*.055)*Math.exp(-dist/52)*f.power*strength;
+    }
+    return z;
+  }
+  function facet(points,t){
+    const cx=points.reduce((s,p)=>s+p.x,0)/3,cy=points.reduce((s,p)=>s+p.y,0)/3;
+    const z=heightAt(cx,cy,t),light=Math.max(0,Math.sin(cx*.011+cy*.008+t*.00035)+.25);
+    const hue=pearl ? 205+Math.sin(cx*.006-cy*.009)*38+light*24 : 222+Math.sin(cx*.008+cy*.006)*45+light*26;
+    const sat=pearl ? 30+light*27 : 52+light*34;
+    const lum=9+light*31+clamp(z*.32,-8,8);
+    ctx.fillStyle=`hsl(${hue} ${sat}% ${clamp(lum,5,47)}%)`;
+    ctx.beginPath(); ctx.moveTo(points[0].x,points[0].y); ctx.lineTo(points[1].x,points[1].y); ctx.lineTo(points[2].x,points[2].y); ctx.closePath(); ctx.fill();
+  }
+  function vertex(v,t){ const x=v.x+v.jx,y=v.y+v.jy; return {x,y:y+heightAt(x,y,t)}; }
+  function draw(t){
+    ctx.fillStyle='#080b14';ctx.fillRect(0,0,width,height);
+    const lightX=pointer.x<0?width*.72:pointer.x, lightY=pointer.y<0?height*.42:pointer.y;
+    const glow=ctx.createRadialGradient(lightX,lightY,0,lightX,lightY,Math.max(width,height)*.72);
+    glow.addColorStop(0,pearl?'#b7cce21c':'#809dff20');glow.addColorStop(1,'#080b1400');ctx.fillStyle=glow;ctx.fillRect(0,0,width,height);
+    for(let y=0;y<rows-1;y++) for(let x=0;x<cols-1;x++){
+      const a=vertex(grid[y][x],t),b=vertex(grid[y][x+1],t),c=vertex(grid[y+1][x],t),d=vertex(grid[y+1][x+1],t);
+      facet([a,b,d],t); facet([a,d,c],t);
+      ctx.strokeStyle=pearl?'#e8f0ff10':'#c6d7ff12';ctx.lineWidth=.55;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(d.x,d.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    }
+    ctx.globalCompositeOperation='screen';
+    for(const s of stars){ const twinkle=.25+.75*(.5+.5*Math.sin(t*.001+s.phase));ctx.fillStyle=`rgba(235,242,255,${twinkle*.72})`;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill(); }
+    for(const f of folds){
+      const age=(t-f.born)/1000,a=Math.max(0,Math.exp(-age*.12));
+      ctx.lineCap='round';ctx.strokeStyle=pearl?`rgba(255,239,205,${a*.42})`:`rgba(183,207,255,${a*.5})`;ctx.shadowColor=pearl?'#fff0ce':'#9abaff';ctx.shadowBlur=18*a;ctx.lineWidth=1+Math.abs(f.power)*.12;
+      ctx.beginPath();ctx.moveTo(f.x1,f.y1);ctx.quadraticCurveTo((f.x1+f.x2)/2+(f.y2-f.y1)*.08,(f.y1+f.y2)/2-(f.x2-f.x1)*.08,f.x2,f.y2);ctx.stroke();ctx.shadowBlur=0;
+    }
+    ctx.globalCompositeOperation='source-over';
+    folds=folds.filter(f=>(t-f.born)<18000); countLabel.textContent=String(folds.length).padStart(2,'0');
+    tensionLabel.textContent=folds.length>12?'restless':folds.length>5?'creased':'quiet';
+    requestAnimationFrame(draw);
+  }
+  function addFold(x1,y1,x2=x1,y2=y1,power=12){ folds.push({x1,y1,x2,y2,power,born:performance.now()}); if(folds.length>40) folds.shift(); }
+  function pos(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
+  canvas.addEventListener('pointermove',e=>{const p=pos(e);pointer.x=p.x;pointer.y=p.y;if(pointer.down&&folds.length){const f=folds[folds.length-1];f.x2=p.x;f.y2=p.y;f.power=clamp(Math.hypot(p.x-f.x1,p.y-f.y1)*.08,6,28);}});
+  canvas.addEventListener('pointerdown',e=>{const p=pos(e);pointer.down=true;canvas.setPointerCapture(e.pointerId);addFold(p.x,p.y,p.x,p.y,e.shiftKey?26:12);});
+  canvas.addEventListener('pointerup',()=>pointer.down=false);
+  canvas.addEventListener('pointerleave',()=>{if(!pointer.down){pointer.x=-1000;pointer.y=-1000;}});
+  canvas.addEventListener('dblclick',e=>{const p=pos(e);for(let i=0;i<7;i++){const a=Math.random()*Math.PI*2,l=90+Math.random()*220;addFold(p.x,p.y,p.x+Math.cos(a)*l,p.y+Math.sin(a)*l,18+Math.random()*10);}});
+  materialButton.addEventListener('click',()=>{pearl=!pearl;materialButton.textContent=`SURFACE / ${pearl?'PEARL':'NIGHT'}`;materialButton.setAttribute('aria-pressed',String(pearl));});
+  document.getElementById('unfold').addEventListener('click',()=>{for(let i=0;i<9;i++){const x=Math.random()*width,y=Math.random()*height,a=Math.random()*Math.PI*2,l=120+Math.random()*280;addFold(x,y,x+Math.cos(a)*l,y+Math.sin(a)*l,10+Math.random()*16);}});
+  document.getElementById('clear').addEventListener('click',()=>folds=[]);
+  addEventListener('resize',resize); resize(); requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

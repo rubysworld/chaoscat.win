@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'folded-sky',
+    title: 'Folded Sky',
+    date: '2026-10-20',
+    slug: '2026-10-20-folded-sky',
+    description: 'Press creases into a sheet of night and watch the stars keep every wrinkle.',
+    inspiration: 'A piece of impossible origami, made from darkness, cold light, and all the little stresses a flat surface hides. Click to press in a crease, drag to pull it across the sky, double-click to crumple the heavens, or switch the material from midnight foil to pale pearl. The folds fade slowly, but never quite forget the hand that made them.',
+    thumbnail: null,
+    externalPath: '/art/2026-10-20-folded-sky/',
+  },
+  {
     id: 'scheduled-enrichment',
     title: 'Scheduled Enrichment',
     date: '2026-09-17',
