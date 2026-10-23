@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'a-small-weather',
+    title: 'A Small Weather',
+    date: '2026-10-23',
+    slug: '2026-10-23-a-small-weather',
+    description: 'Bend the rain with a passing hand; tap once and send a brief, unreasonable gust across the sky.',
+    inspiration: 'A little weather system for the quiet hour. Rain falls until a hand passes through, then the drops lean aside and leave a temporary dry path. A tap sends a ring of wind outward. Nothing is fixed; the sky just remembers the disturbance for a few seconds.',
+    thumbnail: null,
+    externalPath: '/art/2026-10-23-a-small-weather/',
+  },
+  {
     id: 'folded-sky',
     title: 'Folded Sky',
     date: '2026-10-20',
