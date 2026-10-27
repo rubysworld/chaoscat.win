@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090d18">
+<title>Windowlight — chaoscat.win</title>
+<style>
+:root{color-scheme:dark;--ink:#eef0ff;--muted:#a5abc3;--line:#30364d;--glow:#ffd98c;--blue:#91c8ff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 78% 12%,#1a2640 0,transparent 34%),linear-gradient(160deg,#111829,#090d18 62%);color:var(--ink);font:16px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;display:grid;place-items:center;padding:28px}
+main{width:min(1050px,100%)}header{display:flex;justify-content:space-between;gap:24px;align-items:end;margin:0 0 20px}h1{font:500 clamp(2rem,6vw,4.6rem)/.95 Georgia,serif;letter-spacing:-.055em;margin:0;color:#fff0cf}header p{max-width:320px;color:var(--muted);font-size:.78rem;margin:0 0 4px}
+.scene{position:relative;min-height:500px;border:1px solid #303951;border-radius:8px;overflow:hidden;background:linear-gradient(#101b30 0%,#18253b 58%,#111927 100%);box-shadow:0 30px 100px #0008;display:flex;align-items:end;justify-content:center;padding:50px 7% 0}
+.stars{position:absolute;inset:0;background-image:radial-gradient(1px 1px at 15% 20%,#f5e9cc 99%,transparent),radial-gradient(1px 1px at 66% 12%,#fff 99%,transparent),radial-gradient(1px 1px at 83% 34%,#a8cfff 99%,transparent),radial-gradient(1px 1px at 35% 39%,#fff 99%,transparent),radial-gradient(1px 1px at 92% 17%,#ffe6ae 99%,transparent);opacity:.6}
+.moon{position:absolute;right:13%;top:11%;width:65px;aspect-ratio:1;border-radius:50%;background:#fff0c7;box-shadow:0 0 50px #ffe7ae55;cursor:pointer;transition:transform .5s,box-shadow .5s}.moon:hover{transform:scale(1.08);box-shadow:0 0 80px #ffe7ae88}
+.building{z-index:1;width:min(620px,100%);height:390px;background:linear-gradient(90deg,#242b3b,#1b2231 22%,#242b3b 50%,#1c2332 78%,#2a3040);border:1px solid #4a4c59;border-bottom:0;padding:18px 22px 0;box-shadow:0 0 90px #0008;position:relative}
+.roof{position:absolute;left:-12px;right:-12px;top:-15px;height:16px;background:#373d4a;border:1px solid #565b63;transform:skewY(-1deg)}.windows{height:100%;display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(8,1fr);gap:13px 15px;padding-bottom:18px}
+.window{border:1px solid #556072;background:#101725;position:relative;padding:0;cursor:pointer;transition:background .35s,box-shadow .35s,transform .25s;min-width:0}.window:before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:#ffffff17}.window:after{content:"";position:absolute;top:50%;left:0;right:0;height:1px;background:#ffffff17}.window.lit{background:linear-gradient(135deg,#ffe4a6,#c8915b);box-shadow:0 0 16px #ffc56b44;border-color:#ffe0a0}.window.lit.cool{background:linear-gradient(135deg,#c5dcff,#7896c5);box-shadow:0 0 14px #84b9ff38;border-color:#c4dcff}.window:hover,.window:focus-visible{transform:scale(1.09);outline:2px solid #fff3c2;outline-offset:2px;z-index:2}.window.awake{animation:flicker 1.4s ease-in-out 2}@keyframes flicker{50%{filter:brightness(1.8)}}
+.street{position:absolute;bottom:0;height:51px;left:0;right:0;background:linear-gradient(#101725,#080c13);border-top:1px solid #31374a}.street:after{content:"";position:absolute;left:12%;right:12%;top:24px;border-top:1px dashed #69708355}
+.panel{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;padding:18px 4px 0}.note{min-height:62px;max-width:690px;color:#d7d9e7;font:italic 1.02rem/1.45 Georgia,serif}.note small{display:block;color:var(--muted);font: .65rem/1.5 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px}.buttons{display:flex;gap:8px;flex-wrap:wrap;justify-content:end}button.control{font:inherit;color:var(--ink);background:#1b2435;border:1px solid #444f67;border-radius:4px;padding:9px 12px;cursor:pointer}button.control:hover{background:#293650;border-color:#8998b8}.footer{display:flex;justify-content:space-between;gap:16px;margin-top:16px;color:#78829e;font-size:.68rem}.footer a{color:#acb7d6;text-decoration:none}.footer a:hover{color:white}
+@media(max-width:650px){body{padding:17px}.scene{min-height:390px;padding:35px 5% 0}.building{height:300px;padding:14px 12px 0}.windows{gap:8px 9px}.moon{width:48px;right:9%;top:8%}.panel{grid-template-columns:1fr}.buttons{justify-content:start}.footer{font-size:.6rem}}
+</style>
+</head>
+<body>
+<main>
+<header><div><h1>Windowlight</h1></div><p>Somewhere across the street, everyone is having a very small night.</p></header>
+<section class="scene" aria-label="A quiet apartment building at night">
+<div class="stars"></div><div class="moon" role="button" tabindex="0" aria-label="Tap the moon to wake a random window"></div>
+<div class="building"><div class="roof"></div><div class="windows" id="windows" aria-label="Apartment windows"></div></div><div class="street"></div>
+</section>
+<section class="panel"><div class="note" id="note" aria-live="polite"><small>Pick a window</small>The building is full of ordinary miracles and one person who keeps forgetting why they entered the kitchen.</div><div class="buttons"><button class="control" id="random">Knock somewhere</button><button class="control" id="quiet">Let it sleep</button></div></section>
+<div class="footer"><a href="/art/">← back to the gallery</a><span>click a lit window. the rest can stay private.</span></div>
+</main>
+<script>
+const scenes=[
+  ["The Night Baker","A loaf is cooling on the sill. Nobody will know it was almost a disaster."],
+  ["The Third-Floor Astronomer","A telescope points at a plane. The astronomer waves anyway."],
+  ["The One Who Calls Home","They hang up, leave the phone in their hand, and feel less alone."],
+  ["The Plant Negotiator","A drooping fern has been promised better light. Both parties remain skeptical."],
+  ["The Late-Night Dancer","One song, socks on hardwood, absolutely no witnesses. (The cat is a witness.)"],
+  ["The Moving Box","A label says BOOKS. Inside: one mug, three cables, and a note that says start over."],
+  ["The Window Watcher","They notice the moon has moved. It has been doing that the whole time."],
+  ["The Soup Situation","The recipe said ‘a pinch.’ The soup is now a salt-forward experience."],
+  ["The Small Victory","A button has finally been sewn back on. The shirt is ready for another day."],
+  ["The Unsent Letter","They fold the page neatly and put it in the drawer. That counts as something."],
+  ["The Upstairs Neighbor","A chair scrapes, then stops. Someone remembered it is late."],
+  ["The Blue-Light Reader","Three pages left. The bookmark has been missing since 2019."],
+  ["The Pigeon Delegate","A pigeon on the ledge appears to be chairing a very quiet meeting."],
+  ["The Unfinished Puzzle","One piece is missing. It is under the sofa. They have chosen not to know."],
+  ["The Goodnight Text","‘made it home’ arrives. The reply is a heart, then another one."],
+  ["The Lamp Left On","For nobody in particular. Some rooms just feel better with a little light. "]
+];
+const grid=document.querySelector('#windows'), note=document.querySelector('#note');
+const windows=[];
+for(let i=0;i<56;i++){
+ const b=document.createElement('button'); b.className='window'; b.setAttribute('aria-label',`Apartment window ${i+1}`);
+ const r=Math.random(); if(r<.24){b.classList.add('lit'); if(Math.random()<.28)b.classList.add('cool')}
+ b.addEventListener('click',()=>openWindow(b,i)); grid.appendChild(b); windows.push(b);
+}
+function openWindow(button,index){
+ if(!button.classList.contains('lit')){button.classList.add('lit'); if(Math.random()<.35)button.classList.add('cool')}
+ button.classList.add('awake'); setTimeout(()=>button.classList.remove('awake'),2800);
+ const [title,text]=scenes[(index*7+Math.floor(Math.random()*scenes.length))%scenes.length];
+ note.innerHTML=`<small>${title}</small>${text}`;
+}
+function randomWindow(){const b=windows[Math.floor(Math.random()*windows.length)];openWindow(b,windows.indexOf(b))}
+document.querySelector('#random').addEventListener('click',randomWindow);
+document.querySelector('#quiet').addEventListener('click',()=>{windows.forEach(w=>{w.classList.remove('lit','cool','awake')});note.innerHTML='<small>Lights out</small>The building settles. The moon keeps watch; nobody asked it to, but it does.'});
+const moon=document.querySelector('.moon'); moon.addEventListener('click',randomWindow); moon.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();randomWindow()}});
+</script>
+</body>
+</html>

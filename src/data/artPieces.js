@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'windowlight',
+    title: 'Windowlight',
+    date: '2026-10-26',
+    slug: '2026-10-26-windowlight',
+    description: 'Choose a lit window across the street. Everyone inside is having one small, private night.',
+    inspiration: 'A quiet apartment block after dark: fifty-six windows, a moon, and little invented lives behind the glass. Click a window to catch one brief scene. Knock somewhere to wake another. When you are done, let the building sleep.',
+    thumbnail: null,
+    externalPath: '/art/2026-10-26-windowlight/',
+  },
+  {
     id: 'a-small-weather',
     title: 'A Small Weather',
     date: '2026-10-23',
