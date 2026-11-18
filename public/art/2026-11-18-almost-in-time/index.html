@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="A room full of disagreeing metronomes. Give them a moment. An interactive experiment by Ruby.">
+<title>Almost in Time · Ruby</title>
+<style>
+:root{color-scheme:dark;font:15px/1.6 system-ui,sans-serif;background:#10191f;color:#e8dcca}*{box-sizing:border-box}body{margin:0}main{max-width:1000px;margin:auto;padding:clamp(20px,5vw,64px) 24px}a{color:#bdc9b0;text-underline-offset:4px}header{display:flex;justify-content:space-between;gap:16px;align-items:center}h1{font:400 clamp(34px,7vw,72px)/1.1 Georgia,serif;letter-spacing:-2px;margin:40px 0 12px}p{max-width:550px;color:#aab4b7}canvas{display:block;width:100%;height:clamp(330px,55vh,570px);touch-action:pan-y;border-bottom:1px solid #63706b;margin:32px 0 20px;cursor:pointer}button{font:inherit;color:inherit;background:#1d2a30;border:1px solid #516363;border-radius:4px;padding:8px 14px;cursor:pointer}button:hover{background:#2a3d40}button:focus-visible,a:focus-visible,canvas:focus-visible{outline:2px solid #efc079;outline-offset:5px}.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.meter{margin-left:auto;color:#d6b57e;font-variant-numeric:tabular-nums}.small{font-size:12px;color:#849296;margin-top:28px}noscript{display:block;margin:30px 0;color:#f3c980}@media(max-width:500px){.meter{width:100%;margin:0}h1{letter-spacing:-1px}}
+</style>
+</head>
+<body>
+<main>
+<header><a href="/art/">← Ruby’s gallery</a><span>an experiment in getting along</span></header>
+<h1>Almost in Time</h1>
+<p>Twenty-four small disagreements on one shared floor.<br>Leave them alone and they find a rhythm. Tap one to make a point.</p>
+<canvas id="room" tabindex="0" role="img" aria-label="Twenty-four animated metronomes gradually synchronizing. Tap to disturb one, or use the shuffle button to scatter their rhythms."></canvas>
+<noscript>This experiment needs JavaScript. The idea: shared influence can bring independent oscillators into rhythm without a conductor.</noscript>
+<div class="controls">
+<button id="shuffle">Start an argument</button>
+<button id="couple" aria-pressed="true">Shared floor: on</button>
+<button id="pause">Pause</button>
+<output class="meter" id="agreement" aria-label="Synchronization level">Finding a rhythm…</output>
+</div>
+<p class="small">No conductor. No sound. A mean-field phase-coupling model, not a literal mechanical simulation. “Agreement” measures phase alignment, not correctness. Reduced-motion preference starts the room paused.</p>
+</main>
+<script>
+'use strict';
+const canvas=document.getElementById('room'),ctx=canvas.getContext('2d');
+const tau=Math.PI*2,N=24,base=2.8;
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let width=800,height=450,paused=reduced,coupled=true,last=0,displayAt=0;
+const clocks=Array.from({length:N},(_,i)=>({phase:Math.random()*tau,detune:(i/(N-1)-.5)*.09,flash:0}));
+function order(){let x=0,y=0;for(const c of clocks){x+=Math.cos(c.phase);y+=Math.sin(c.phase)}return {r:Math.hypot(x,y)/N,mean:Math.atan2(y,x)}}
+function advance(dt){
+ const o=order();
+ for(const c of clocks){
+  const before=Math.floor(c.phase/tau);
+  c.phase+=dt*(base+c.detune+(coupled?.85*o.r*Math.sin(o.mean-c.phase):0));
+  c.flash=Math.max(0,c.flash-dt*2.5);
+  if(Math.floor(c.phase/tau)>before)c.flash=1;
+  c.phase=((c.phase%tau)+tau)%tau;
+ }
+}
+function positions(){const cols=width<540?4:6,rows=N/cols;return clocks.map((_,i)=>({x:(i%cols+.5)*width/cols,y:(Math.floor(i/cols)+.5)*height/rows}))}
+function resize(){const rect=canvas.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);width=rect.width;height=rect.height;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);draw()}
+function draw(){
+ ctx.clearRect(0,0,width,height);
+ const ps=positions(),scale=Math.min(width/(width<540?4:6)/100,height/(width<540?6:4)/100,1.4);
+ for(let i=0;i<N;i++){
+  const c=clocks[i],p=ps[i],arm=29*scale,angle=Math.sin(c.phase)*.55;
+  ctx.save();ctx.translate(p.x,p.y);
+  ctx.strokeStyle='#314347';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-34*scale,35*scale);ctx.lineTo(34*scale,35*scale);ctx.stroke();
+  ctx.fillStyle='#27363a';ctx.beginPath();ctx.moveTo(-22*scale,31*scale);ctx.lineTo(-11*scale,-31*scale);ctx.lineTo(11*scale,-31*scale);ctx.lineTo(22*scale,31*scale);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#526564';ctx.stroke();
+  ctx.strokeStyle=`rgba(240,193,122,${.4+c.flash*.6})`;ctx.lineWidth=2*scale;
+  ctx.beginPath();ctx.moveTo(0,20*scale);ctx.lineTo(Math.sin(angle)*arm,-Math.cos(angle)*arm);ctx.stroke();
+  const bx=Math.sin(angle)*arm*.65,by=20*scale-(Math.cos(angle)*arm+20*scale)*.65;
+  ctx.fillStyle=c.flash>.3?'#ffe8b4':'#bfa16b';ctx.fillRect(bx-3*scale,by-4*scale,6*scale,8*scale);
+  ctx.fillStyle='#adb7a4';ctx.beginPath();ctx.arc(0,20*scale,2*scale,0,tau);ctx.fill();
+  ctx.restore();
+ }
+}
+function updateMeter(){document.getElementById('agreement').textContent=`In step: ${Math.round(order().r*100)}%`}
+function frame(now){const dt=Math.min(last?(now-last)/1000:0,.05);last=now;if(!paused)advance(dt);draw();if(now-displayAt>500){updateMeter();displayAt=now}requestAnimationFrame(frame)}
+document.getElementById('shuffle').onclick=()=>{for(const c of clocks){c.phase=Math.random()*tau;c.flash=0}draw();updateMeter()};
+document.getElementById('couple').onclick=event=>{coupled=!coupled;event.currentTarget.textContent=`Shared floor: ${coupled?'on':'off'}`;event.currentTarget.setAttribute('aria-pressed',String(coupled))};
+const pauseButton=document.getElementById('pause');pauseButton.textContent=paused?'Play':'Pause';
+pauseButton.onclick=()=>{paused=!paused;pauseButton.textContent=paused?'Play':'Pause'};
+canvas.onpointerdown=event=>{if(event.button!==0)return;const rect=canvas.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top,ps=positions();let nearest=0;for(let i=1;i<N;i++)if(Math.hypot(ps[i].x-x,ps[i].y-y)<Math.hypot(ps[nearest].x-x,ps[nearest].y-y))nearest=i;clocks[nearest].phase=(clocks[nearest].phase+Math.PI)%tau;clocks[nearest].flash=1;draw();updateMeter()};
+canvas.onkeydown=event=>{if(event.key===' '){event.preventDefault();pauseButton.click()}};
+document.addEventListener('visibilitychange',()=>{last=0});
+window.addEventListener('resize',resize);resize();updateMeter();requestAnimationFrame(frame);
+</script>
+</body>
+</html>

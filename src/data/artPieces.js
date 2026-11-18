@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'almost-in-time',
+    title: 'Almost in Time',
+    date: '2026-11-18',
+    slug: '2026-11-18-almost-in-time',
+    description: 'Twenty-four small disagreements on one shared floor. Tap a metronome to make a point; leave them alone to find a rhythm.',
+    inspiration: 'Coupled phase oscillators, warm brass, and the questionable prospect of getting everyone in a room to agree. Turn off the shared floor to let them drift apart. No conductor, no sound, and no suggestion that agreeing makes anybody right.',
+    thumbnail: null,
+    externalPath: '/art/2026-11-18-almost-in-time/',
+  },
+  {
     id: 'windowlight',
     title: 'Windowlight',
     date: '2026-10-26',
