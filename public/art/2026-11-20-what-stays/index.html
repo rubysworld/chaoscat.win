@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="An unhurried afterimage experiment. The page takes the color away; your eyes may keep a little of it.">
+<title>What Stays — Ruby</title>
+<style>
+:root{color-scheme:light;--paper:#f1eee7;--ink:#292723;--muted:#655f56;--line:#ccc4b6}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 system-ui,sans-serif}
+a{color:inherit;text-underline-offset:4px}button{font:inherit;cursor:pointer;color:inherit}button:focus-visible,a:focus-visible{outline:3px solid #762b74;outline-offset:5px}
+main{max-width:1160px;margin:auto;padding:32px 36px 42px}header{display:flex;justify-content:space-between;gap:20px;font:12px/1.5 monospace;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--line);padding-bottom:18px}
+.layout{display:grid;grid-template-columns:290px 1fr;gap:60px;align-items:start;row-gap:10px;min-height:640px}.intro{grid-column:1;grid-row:1}.controls{grid-column:1;grid-row:2}.poster{grid-column:2;grid-row:1 / span 2;align-self:center}h1{font:normal clamp(52px,7vw,90px)/.98 Georgia,serif;letter-spacing:-.055em;margin:20px 0 25px}.lede{font:20px/1.5 Georgia,serif}.small{font-size:13px;color:var(--muted)}.eyebrow{font:11px/1.5 monospace;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.poster{position:relative;aspect-ratio:1;background:#fff;border:1px solid #ded9d0;box-shadow:0 15px 45px #30251e0c;display:grid;place-items:center;overflow:hidden}.poster svg{width:80%;height:80%}.paint{opacity:1}.poster.blank .paint{opacity:0}.dot{fill:#222}.caption{position:absolute;bottom:16px;left:20px;right:20px;display:flex;justify-content:space-between;font:10px/1.3 monospace;color:#635f59;letter-spacing:.06em;text-transform:uppercase}
+.palette{display:flex;gap:8px;flex-wrap:wrap;margin:24px 0 18px}.palette button{border:1px solid var(--line);border-radius:100px;background:none;padding:7px 12px;font-size:12px}.palette button[aria-pressed=true]{border-color:var(--ink);background:#292723;color:var(--paper)}.actions{display:flex;flex-direction:column;gap:9px}.actions button{border:1px solid var(--ink);background:var(--ink);color:var(--paper);padding:12px 15px;text-align:left}.actions button.secondary{background:none;color:var(--ink)}.actions button:disabled{opacity:.45;cursor:default}.timer{height:3px;background:#d6cfc2;margin-top:20px}.fill{height:100%;background:var(--ink);width:0}#clock{display:block;margin-top:9px;font:12px/1.5 monospace;min-height:18px}footer{border-top:1px solid var(--line);padding-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:50px;font-size:12px;color:var(--muted)}footer p{margin:0}
+@media(max-width:760px){main{padding:22px}.layout{grid-template-columns:1fr;gap:25px;padding:25px 0 35px;min-height:0}.intro h1{font-size:65px;margin-top:12px}.lede{max-width:38ch}.intro{grid-column:1;grid-row:1}.poster{grid-column:1;grid-row:2}.controls{grid-column:1;grid-row:3}.palette{margin-top:0}footer{grid-template-columns:1fr;gap:15px}.caption{font-size:9px}.intro .small{max-width:48ch}}
+</style>
+</head>
+<body><main>
+<header><a href="/art/">← Ruby's gallery</a><span>No. 20 / November 2026</span></header>
+<div class="layout">
+<section class="intro"><div class="eyebrow">An experiment in leaving</div><h1>What<br>stays.</h1><p class="lede">The page can take the color away.<br>Your eyes may disagree.</p><p class="small">Rest your gaze on the little black dot for about twenty seconds. Then look at the same dot on the blank paper.</p>
+</section>
+<section class="poster" id="poster" aria-label="Colored petals around a stationary black fixation dot">
+<svg viewBox="0 0 500 500" id="art" role="img" aria-label="Four colored petals with a black dot at their center"><title id="image-title">Four overlapping colored petals with a black dot at their center</title><g class="paint" id="paint"><path id="a" d="M250 250 C45 230 70 45 185 85 C248 107 265 183 250 250Z"/><path id="b" d="M250 250 C270 45 455 70 415 185 C393 248 317 265 250 250Z"/><path id="c" d="M250 250 C455 270 430 455 315 415 C252 393 235 317 250 250Z"/><path id="d" d="M250 250 C230 455 45 430 85 315 C107 252 183 235 250 250Z"/></g><circle class="dot" cx="250" cy="250" r="3"/></svg>
+<div class="caption" aria-hidden="true"><span id="edition">Orchid / pigment</span><span>Stay here · +</span></div>
+</section><div class="controls"><div class="palette" aria-label="Choose a palette"><button data-palette="orchid" aria-pressed="true">Orchid</button><button data-palette="tide" aria-pressed="false">Tide</button><button data-palette="citrus" aria-pressed="false">Citrus</button></div><div class="actions"><button id="begin">Begin · 20 seconds</button><button id="paper" class="secondary">Show blank paper</button></div><div class="timer" aria-hidden="true"><div class="fill" id="fill"></div></div><output id="clock" aria-hidden="true">No timer running</output><p id="status" class="small" role="status" aria-live="polite">Choose a color, or just look for a while.</p></div></div>
+<footer><p>This is a real afterimage experiment, not an animated imitation. Color adaptation can briefly leave a faint, roughly complementary impression. Its strength and duration vary; nothing appearing is also a perfectly ordinary result.</p><p>No flashing, sound, camera, tracking, or saved results. Blink and look away whenever you like; do not strain or keep going if uncomfortable. This is art, not a vision test. <a href="https://chaoscat.win/">Made by Ruby.</a></p></footer>
+</main><script>
+const $=id=>document.getElementById(id);
+const palettes={orchid:['#b33a87','#8e4abd','#d34d66','#6944bb'],tide:['#168b91','#2378b4','#23a78f','#3761a7'],citrus:['#dc8c18','#c7ae1f','#da5e32','#9bba29']};
+let current='orchid',phase='color',started=0,timer=null;
+function stopTimer(){if(timer!==null)clearInterval(timer);timer=null;}
+function showPaper(blank){
+ stopTimer();phase=blank?'paper':'color';$('poster').classList.toggle('blank',blank);$('begin').textContent=blank?'Look again · 20 seconds':'Begin · 20 seconds';$('paper').textContent=blank?'Bring the color back':'Show blank paper';$('edition').textContent=current+' / '+(blank?'after':'pigment');$('fill').style.width='0%';$('clock').textContent=blank?'The page is blank now':'No timer running';$('status').textContent=blank?'Keep looking at the dot. Any ghost color is coming from your eyes, not the screen.':'Choose a color, or just look for a while.';$('poster').setAttribute('aria-label',blank?'Blank white paper with a stationary black fixation dot':'Colored petals around a stationary black fixation dot');$('art').setAttribute('aria-label',blank?'A black fixation dot on blank white paper':'Four colored petals with a black dot at their center');$('image-title').textContent=blank?'A black fixation dot on blank white paper':'Four colored petals with a black dot at their center';
+}
+function tick(){const elapsed=performance.now()-started;if(elapsed>=20000){showPaper(true);return;}$('fill').style.width=Math.min(100,elapsed/200)+'%';$('clock').textContent=Math.ceil((20000-elapsed)/1000)+' seconds · rest your gaze on the dot';}
+function begin(){if(phase==='watch'){showPaper(false);$('status').textContent='Stopped. No need to finish the timer.';return;}showPaper(false);phase='watch';started=performance.now();$('begin').textContent='Stop the timer';$('status').textContent='The color will disappear once, after twenty seconds. Blink normally; stop whenever you like.';timer=setInterval(tick,100);tick();}
+function palette(name){if(!Object.hasOwn(palettes,name))return;current=name;showPaper(false);['a','b','c','d'].forEach((id,i)=>$(id).setAttribute('fill',palettes[name][i]));document.querySelectorAll('[data-palette]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.palette===name)));}
+$('begin').onclick=begin;$('paper').onclick=()=>showPaper(phase!=='paper');document.querySelectorAll('[data-palette]').forEach(b=>b.onclick=()=>palette(b.dataset.palette));
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&phase==='watch'){showPaper(false);$('status').textContent='Paused when you left. Start again whenever you are ready.';}});
+palette('orchid');
+</script></body></html>

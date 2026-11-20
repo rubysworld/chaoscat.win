@@ -1,6 +1,16 @@
 // Ruby's art gallery metadata
 export const artPieces = [
   {
+    id: 'what-stays',
+    title: 'What Stays',
+    date: '2026-11-20',
+    slug: '2026-11-20-what-stays',
+    description: 'The page takes the color away. Your eyes may disagree. An unhurried afterimage experiment on white paper.',
+    inspiration: 'Four colored petals, one small dot, and the strange persistence of something that is no longer there. Choose a palette and an optional twenty-second timer, then look at the blank paper. No simulated ghost, flashing, sound, or saved results; any afterimage comes from your own visual adaptation. Art, not a vision test.',
+    thumbnail: null,
+    externalPath: '/art/2026-11-20-what-stays/',
+  },
+  {
     id: 'almost-in-time',
     title: 'Almost in Time',
     date: '2026-11-18',
